@@ -3,11 +3,14 @@
 /* Nyx portrait is a local raster from the prototype — next/image would fight the FAB CSS. */
 /* eslint-disable @next/next/no-img-element */
 
+import { usePathname } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { useEmpireUI } from "@/components/empire-ui-context";
 
 export function NyxFab() {
   const { openNyx } = useEmpireUI();
+  const pathname = usePathname();
+  if (pathname === "/journal") return null;
 
   return (
     <button
