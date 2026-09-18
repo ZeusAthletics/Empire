@@ -1,21 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BarChart3, Calendar, Star, Sun } from "lucide-react";
+import { ArrowRight, BarChart3, Calendar, MapPin, Star, Sun, Users, Zap } from "lucide-react";
 import { Bar } from "@/components/ui/Bar";
 import { HeroArt } from "@/components/ui/HeroArt";
+import { Pill } from "@/components/ui/Pill";
 import { Plate } from "@/components/ui/Plate";
 import { useEmpireUI } from "@/components/empire-ui-context";
 import { CORE_STAT_KEYS, STAT_META, formatEuro, formatXp } from "@/lib/stats";
+import { TRACK_LABEL, firstSentence } from "@/lib/missions";
 import type { PublicCampaign } from "@/server/domain/campaign/types";
+import { doneCount, featuredMission, requiredCount, type PublicMission } from "@/server/domain/mission/types";
 import type { PublicPlayer } from "@/server/domain/player/types";
 
 export function HomeScreen({
   player,
   campaign,
+  missions,
 }: {
   player: PublicPlayer;
   campaign: PublicCampaign | null;
+  missions: PublicMission[];
 }) {
   const { openNyx } = useEmpireUI();
   const xpPct = player.xpToNext > 0 ? (player.xp / player.xpToNext) * 100 : 0;
@@ -28,6 +33,13 @@ export function HomeScreen({
     const value = player.stats.find((stat) => stat.key === key)?.value ?? 0;
     return { key, value, meta };
   });
+  const featured = featuredMission(missions);
+  const featuredRequired = featured ? requiredCount(featured) : 0;
+  const featuredDone = featured ? doneCount(featured) : 0;
+  const upcoming =
+    missions.find((mission) => mission.seedKey === "m-voka") ??
+    missions.find((mission) => mission.kind === "EVENT" && mission.status === "ACTIVE") ??
+    null;
 
   return (
     <>
@@ -93,31 +105,75 @@ export function HomeScreen({
       </div>
 
       <div className="section">
-        <div className="card">
-          <div style={{ display: "flex", gap: 12 }}>
-            <Plate kind="mission" className="sq" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className="eyebrow">Current mission</span>
-                <span
-                  className="eyebrow muted"
-                  style={{ display: "flex", gap: 5, alignItems: "center", color: "var(--gold-soft)" }}
-                >
-                  <Star size={12} strokeWidth={2} /> Main story
-                </span>
+        {featured ? (
+          <div className="card">
+            <div style={{ display: "flex", gap: 12 }}>
+              <Plate kind="mission" className="sq" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="eyebrow">Current mission</span>
+                  <span
+                    className="eyebrow muted"
+                    style={{ display: "flex", gap: 5, alignItems: "center", color: "var(--gold-soft)" }}
+                  >
+                    <Star size={12} strokeWidth={2} /> {TRACK_LABEL[featured.track]}
+                  </span>
+                </div>
+                <h2 className="display d-lg" style={{ margin: "6px 0 2px" }}>
+                  {featured.title}
+                </h2>
+                <p className="body" style={{ margin: "0 0 10px" }}>
+                  {firstSentence(featured.why)}
+                </p>
               </div>
-              <h2 className="display d-lg" style={{ margin: "6px 0 2px" }}>
-                Nog geen missie
-              </h2>
-              <p className="body" style={{ margin: "0 0 10px" }}>
-                Nyx zet hier later een opdracht klaar. Niets verzinnen tot de database die levert.
-              </p>
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "2px 0 12px" }}>
+              <div style={{ flex: 1 }}>
+                <Bar pct={featuredRequired ? (featuredDone / featuredRequired) * 100 : 0} className="thin" />
+              </div>
+              <span style={{ fontSize: 11, color: "var(--ink-2)" }}>
+                {featuredDone} / {featuredRequired} objectives
+              </span>
+            </div>
+            <div className="grid-2" style={{ marginBottom: 10 }}>
+              <Pill icon={<Zap size={14} strokeWidth={2} />} val={`+${featured.xpReward} XP`} lab="Reward" />
+              <Pill
+                icon={<Users size={14} strokeWidth={2} />}
+                val={`${featured.statReward.key.toUpperCase()} +${featured.statReward.amount}`}
+                lab="Stat increase"
+              />
+            </div>
+            <Link href={`/missions/${featured.id}`} className="btn btn-gold btn-block">
+              Continue mission <ArrowRight size={15} strokeWidth={2.4} />
+            </Link>
           </div>
-          <button className="btn btn-gold btn-block" type="button" onClick={openNyx}>
-            Vraag het aan Nyx <ArrowRight size={15} strokeWidth={2.4} />
-          </button>
-        </div>
+        ) : (
+          <div className="card">
+            <div style={{ display: "flex", gap: 12 }}>
+              <Plate kind="mission" className="sq" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="eyebrow">Current mission</span>
+                  <span
+                    className="eyebrow muted"
+                    style={{ display: "flex", gap: 5, alignItems: "center", color: "var(--gold-soft)" }}
+                  >
+                    <Star size={12} strokeWidth={2} /> Main story
+                  </span>
+                </div>
+                <h2 className="display d-lg" style={{ margin: "6px 0 2px" }}>
+                  Nog geen missie
+                </h2>
+                <p className="body" style={{ margin: "0 0 10px" }}>
+                  Nyx zet hier later een opdracht klaar. Niets verzinnen tot de database die levert.
+                </p>
+              </div>
+            </div>
+            <button className="btn btn-gold btn-block" type="button" onClick={openNyx}>
+              Vraag het aan Nyx <ArrowRight size={15} strokeWidth={2.4} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="section grid-2">
@@ -193,15 +249,49 @@ export function HomeScreen({
           </p>
         </div>
         <div className="card">
-          <div className="card-head">
-            <span className="t eyebrow">
-              <Calendar size={13} strokeWidth={2} /> Upcoming event
-            </span>
-          </div>
-          <Plate kind="city" className="wide" />
-          <p className="body" style={{ margin: "10px 0 0" }}>
-            Geen events in de database.
-          </p>
+          {upcoming ? (
+            <Link href={`/missions/${upcoming.id}`} className="tap" style={{ display: "block" }}>
+              <div className="card-head">
+                <span className="t eyebrow">
+                  <Calendar size={13} strokeWidth={2} /> Upcoming event
+                </span>
+                <span className="eyebrow muted">
+                  Bekijk <ArrowRight size={11} strokeWidth={2.4} />
+                </span>
+              </div>
+              <Plate kind="city" className="wide" label={upcoming.locationName ?? undefined} />
+              <h3 className="display d-sm" style={{ margin: "10px 0 6px" }}>
+                {upcoming.title}
+              </h3>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 12px", fontSize: 11, color: "var(--ink-2)" }}>
+                {upcoming.whenLabel ? (
+                  <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    <Calendar size={12} strokeWidth={2} /> {upcoming.whenLabel}
+                  </span>
+                ) : null}
+                {upcoming.locationName ? (
+                  <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    <MapPin size={12} strokeWidth={2} /> {upcoming.locationName}
+                  </span>
+                ) : null}
+              </div>
+              <p className="meta" style={{ margin: "10px 0 0", fontStyle: "italic" }}>
+                “Goede gesprekken openen grotere deuren.”
+              </p>
+            </Link>
+          ) : (
+            <>
+              <div className="card-head">
+                <span className="t eyebrow">
+                  <Calendar size={13} strokeWidth={2} /> Upcoming event
+                </span>
+              </div>
+              <Plate kind="city" className="wide" />
+              <p className="body" style={{ margin: "10px 0 0" }}>
+                Geen events in de database.
+              </p>
+            </>
+          )}
         </div>
       </div>
 

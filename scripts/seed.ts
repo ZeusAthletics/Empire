@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema } from "./apply-schema";
+import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema } from "./apply-schema";
+import { SEED_CONTACTS, SEED_MISSIONS } from "./seed-missions";
 import { STAT_KEYS, type Role, type StatKey } from "../src/server/domain/player/types";
 
 function loadEnvFile(filename: string, override: boolean) {
@@ -247,6 +248,119 @@ async function snapshotStats(
   if (error && error.code !== "23505" && !/duplicate|unique/i.test(error.message)) throw error;
 }
 
+async function seedContactsAndMissions(admin: Admin, playerId: string, chapterId: string) {
+  const contactIds = new Map<string, string>();
+  for (const contact of SEED_CONTACTS) {
+    const { data: existing, error: lookupError } = await admin
+      .from("contacts")
+      .select("id")
+      .eq("player_id", playerId)
+      .eq("seed_key", contact.seedKey)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    const fields = {
+      player_id: playerId,
+      seed_key: contact.seedKey,
+      name: contact.name,
+      role: contact.role,
+      tier: contact.tier,
+      lat: contact.lat,
+      lng: contact.lng,
+      note: contact.note,
+      restricted: contact.restricted,
+      source: "ADMIN",
+      deleted_at: null,
+    };
+    const { data, error } = existing
+      ? await admin.from("contacts").update(fields as never).eq("id", existing.id).select("id").single()
+      : await admin.from("contacts").insert(fields as never).select("id").single();
+    if (error || !data) throw error ?? new Error(`Contact ${contact.seedKey} failed.`);
+    contactIds.set(contact.seedKey, data.id as string);
+  }
+
+  for (const mission of SEED_MISSIONS) {
+    const { data: existing, error: lookupError } = await admin
+      .from("missions")
+      .select("id")
+      .eq("player_id", playerId)
+      .eq("seed_key", mission.seedKey)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    const fields = {
+      player_id: playerId,
+      chapter_id: chapterId,
+      seed_key: mission.seedKey,
+      kind: mission.kind,
+      track: mission.track,
+      title: mission.title,
+      why: mission.why,
+      main_objective: mission.mainObjective,
+      status: mission.status,
+      difficulty: mission.difficulty,
+      estimate_label: mission.estimateLabel,
+      impact: mission.impact,
+      xp_reward: mission.xpReward,
+      xp_granted: mission.xpGranted,
+      stat_reward_key: mission.statReward.key,
+      stat_reward_amount: mission.statReward.amount,
+      evidence_requirement: mission.evidenceRequirement,
+      location_name: mission.locationName,
+      location_address: mission.locationAddress ?? null,
+      when_label: mission.whenLabel ?? null,
+      lat: mission.lat,
+      lng: mission.lng,
+      featured: Boolean(mission.featured),
+      source: "ADMIN",
+      locked_by_admin: mission.status === "LOCKED",
+      completed_at: mission.status === "COMPLETED" ? new Date().toISOString() : null,
+      deleted_at: null,
+    };
+    const { data: row, error } = existing
+      ? await admin.from("missions").update(fields as never).eq("id", existing.id).select("id").single()
+      : await admin.from("missions").insert(fields as never).select("id").single();
+    if (error || !row) throw error ?? new Error(`Mission ${mission.seedKey} failed.`);
+    const missionId = row.id as string;
+
+    await admin.from("mission_contacts").delete().eq("mission_id", missionId);
+    const people = mission.people
+      .map((key) => contactIds.get(key))
+      .filter((id): id is string => Boolean(id));
+    if (people.length) {
+      const { error: linkError } = await admin.from("mission_contacts").insert(
+        people.map((contactId) => ({ mission_id: missionId, contact_id: contactId })) as never,
+      );
+      if (linkError) throw linkError;
+    }
+
+    for (const [index, objective] of mission.objectives.entries()) {
+      const { data: existingObj, error: objLookupError } = await admin
+        .from("mission_objectives")
+        .select("id")
+        .eq("mission_id", missionId)
+        .eq("seed_key", objective.seedKey)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (objLookupError) throw objLookupError;
+      const objFields = {
+        mission_id: missionId,
+        seed_key: objective.seedKey,
+        label: objective.label,
+        sort_order: index,
+        optional: Boolean(objective.optional),
+        status: objective.done ? "COMPLETED" : "OPEN",
+        completed_at: objective.done ? new Date().toISOString() : null,
+        deleted_at: null,
+      };
+      const { error: objError } = existingObj
+        ? await admin.from("mission_objectives").update(objFields as never).eq("id", existingObj.id)
+        : await admin.from("mission_objectives").insert(objFields as never);
+      if (objError) throw objError;
+    }
+  }
+}
+
 async function main() {
   const url = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -270,6 +384,12 @@ async function main() {
     "campaigns",
     applyPhase3Schema,
     "supabase/migrations/20260918210000_phase3_campaign.sql",
+  );
+  await ensureTable(
+    admin,
+    "missions",
+    applyPhase4Schema,
+    "supabase/migrations/20260918220000_phase4_missions.sql",
   );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
@@ -313,10 +433,13 @@ async function main() {
     exitCriteria: ["De eerste €10.000-maand is een feit."],
   });
   await snapshotStats(admin, player.id, PLAYER_STATS);
+  const { chapterId } = chapter;
+  await seedContactsAndMissions(admin, player.id, chapterId);
 
   console.log(`Seeded player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
   console.log(`Seeded chapter I ${chapter.chapterId}`);
+  console.log(`Seeded ${SEED_CONTACTS.length} contacts and ${SEED_MISSIONS.length} missions`);
 }
 
 main().catch((error) => {
