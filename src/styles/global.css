@@ -383,6 +383,101 @@
   height: clamp(340px, 52dvh, 520px);
   background: #0e0c0a;
   overflow: hidden;
+  touch-action: none;
+}
+.leaflet-host,
+.leaflet-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #0e0c0a;
+  font: inherit;
+  z-index: 1;
+}
+.leaflet-div-icon {
+  background: none;
+  border: none;
+}
+.map-film,
+.map-film-2,
+.map-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 350;
+}
+.map-film {
+  background: rgba(70, 45, 22, 0.55);
+  mix-blend-mode: multiply;
+}
+.map-film-2 { background: rgba(11, 9, 7, 0.34); }
+.map-vignette {
+  z-index: 450;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(6, 5, 4, 0.62) 95%);
+}
+.mk {
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7));
+}
+.mk svg { width: 38px; height: 44px; overflow: visible; display: block; }
+.mk.sel { filter: drop-shadow(0 0 10px rgba(201, 163, 78, 0.75)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7)); }
+.mk.done { opacity: 0.45; }
+.mk.locked { opacity: 0.5; }
+.mk .glow { animation: pulseGlow 2.8s ease-in-out infinite; transform-origin: center; }
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.6; }
+}
+.map-ctl {
+  position: absolute;
+  right: 12px;
+  display: grid;
+  gap: 8px;
+  z-index: 6;
+}
+.map-btn {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(14, 12, 10, 0.86);
+  border: 1px solid var(--line);
+  color: var(--ivory);
+  backdrop-filter: blur(6px);
+}
+.map-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: rgba(14, 12, 10, 0.86);
+  border: 1px solid var(--line);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.map-scale {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  font-size: 10px;
+  color: var(--ink-2);
+  text-align: right;
+}
+.map-scale .rule {
+  height: 6px;
+  border: 1px solid var(--ink-3);
+  border-top: 0;
+  margin-top: 3px;
+  margin-left: auto;
 }
 .map-hint {
   position: absolute;
@@ -396,6 +491,28 @@
   padding: 5px 9px;
   border-radius: 8px;
 }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.seg button.is-on {
+  background: var(--gold-grad);
+  color: #1a1206;
+  border-color: transparent;
+  font-weight: 800;
+}
+textarea.input {
+  resize: vertical;
+  min-height: 76px;
+  line-height: 1.5;
+}
+select.input { appearance: auto; }
 
 .composer {
   position: fixed;

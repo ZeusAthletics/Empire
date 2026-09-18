@@ -278,3 +278,23 @@ export const SEED_MISSIONS: SeedMission[] = [
     ],
   },
 ];
+
+export const SEED_COMPANIES = [
+  { seedKey: "co-verheyen", name: "Werken Verheyen", sector: "Grondwerken", lat: 51.0472, lng: 4.791 },
+  { seedKey: "co-carbon", name: "Carbonherstelling", sector: "Industrie", lat: 51.0505, lng: 4.63 },
+  { seedKey: "co-unizo", name: "UNIZO Heist", sector: "Ondernemersorganisatie", lat: 51.0745, lng: 4.726 },
+  { seedKey: "co-voka", name: "VOKA Kempen", sector: "Ondernemersorganisatie", lat: 51.1656, lng: 4.9906 },
+];
+
+export const SEED_MAP_PINS = [
+  {
+    seedKey: "p-home",
+    title: "Home Base",
+    type: "home" as const,
+    lat: 51.0764,
+    lng: 4.7283,
+    note: "Heist-op-den-Berg",
+    custom: false,
+    locked: true,
+  },
+];

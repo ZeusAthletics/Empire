@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema } from "./apply-schema";
-import { SEED_CONTACTS, SEED_MISSIONS } from "./seed-missions";
+import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema } from "./apply-schema";
+import { SEED_COMPANIES, SEED_CONTACTS, SEED_MAP_PINS, SEED_MISSIONS } from "./seed-missions";
 import { STAT_KEYS, type Role, type StatKey } from "../src/server/domain/player/types";
 
 function loadEnvFile(filename: string, override: boolean) {
@@ -361,6 +361,61 @@ async function seedContactsAndMissions(admin: Admin, playerId: string, chapterId
   }
 }
 
+async function seedCompaniesAndPins(admin: Admin, playerId: string) {
+  for (const company of SEED_COMPANIES) {
+    const { data: existing, error: lookupError } = await admin
+      .from("companies")
+      .select("id")
+      .eq("player_id", playerId)
+      .eq("seed_key", company.seedKey)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    const fields = {
+      player_id: playerId,
+      seed_key: company.seedKey,
+      name: company.name,
+      sector: company.sector,
+      lat: company.lat,
+      lng: company.lng,
+      source: "ADMIN",
+      deleted_at: null,
+    };
+    const { error } = existing
+      ? await admin.from("companies").update(fields as never).eq("id", existing.id)
+      : await admin.from("companies").insert(fields as never);
+    if (error) throw error;
+  }
+
+  for (const pin of SEED_MAP_PINS) {
+    const { data: existing, error: lookupError } = await admin
+      .from("map_pins")
+      .select("id")
+      .eq("player_id", playerId)
+      .eq("seed_key", pin.seedKey)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    const fields = {
+      player_id: playerId,
+      seed_key: pin.seedKey,
+      title: pin.title,
+      pin_type: pin.type,
+      lat: pin.lat,
+      lng: pin.lng,
+      note: pin.note,
+      custom: pin.custom,
+      source: "ADMIN",
+      locked_by_admin: pin.locked,
+      deleted_at: null,
+    };
+    const { error } = existing
+      ? await admin.from("map_pins").update(fields as never).eq("id", existing.id)
+      : await admin.from("map_pins").insert(fields as never);
+    if (error) throw error;
+  }
+}
+
 async function main() {
   const url = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -390,6 +445,12 @@ async function main() {
     "missions",
     applyPhase4Schema,
     "supabase/migrations/20260918220000_phase4_missions.sql",
+  );
+  await ensureTable(
+    admin,
+    "map_pins",
+    applyPhase5Schema,
+    "supabase/migrations/20260918230000_phase5_map.sql",
   );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
@@ -435,11 +496,13 @@ async function main() {
   await snapshotStats(admin, player.id, PLAYER_STATS);
   const { chapterId } = chapter;
   await seedContactsAndMissions(admin, player.id, chapterId);
+  await seedCompaniesAndPins(admin, player.id);
 
   console.log(`Seeded player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
   console.log(`Seeded chapter I ${chapter.chapterId}`);
   console.log(`Seeded ${SEED_CONTACTS.length} contacts and ${SEED_MISSIONS.length} missions`);
+  console.log(`Seeded ${SEED_COMPANIES.length} companies and ${SEED_MAP_PINS.length} map pins`);
 }
 
 main().catch((error) => {

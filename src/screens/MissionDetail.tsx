@@ -223,7 +223,7 @@ export function MissionDetail({ mission }: { mission: PublicMission }) {
                     {contact.role}
                   </span>
                 </span>
-                <Link href="/map" className="btn btn-quiet btn-sm">
+                <Link href={`/map?contact=${contact.id}`} className="btn btn-quiet btn-sm">
                   Op kaart
                 </Link>
               </div>
@@ -287,7 +287,7 @@ export function MissionDetail({ mission }: { mission: PublicMission }) {
             </button>
           )}
           <div className="grid-2">
-            <Link href="/map" className="btn btn-ghost">
+            <Link href={`/map?mission=${mission.id}`} className="btn btn-ghost">
               <Navigation size={15} strokeWidth={2.2} /> Open map
             </Link>
             <button className="btn btn-ghost" type="button" onClick={openNyx}>
