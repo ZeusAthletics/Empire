@@ -2,20 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BookOpen, Star } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, Calendar, Check, ChevronRight, Star, Users } from "lucide-react";
 import { Bar } from "@/components/ui/Bar";
 import { EmptyInvite } from "@/components/ui/EmptyInvite";
 import { HeroArt } from "@/components/ui/HeroArt";
+import { Plate } from "@/components/ui/Plate";
+import { Tag } from "@/components/ui/Tag";
 import { STAT_META, formatXp } from "@/lib/stats";
 import type { PublicCampaign } from "@/server/domain/campaign/types";
+import type { MonthlyWrap } from "@/server/domain/journal/types";
 import type { PublicPlayer } from "@/server/domain/player/types";
 
 export function ProfileScreen({
   player,
   campaign,
+  wraps,
 }: {
   player: PublicPlayer;
   campaign: PublicCampaign | null;
+  wraps: MonthlyWrap[];
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -128,7 +134,56 @@ export function ProfileScreen({
           <h2 className="display d-sm">Campaign highlights</h2>
           <span className="eyebrow muted">Momenten stapelen</span>
         </div>
-        <EmptyInvite body="Nog geen monthly wrap. Journal maakt die later." />
+        {wraps.length ? (
+          <div className="stack">
+            {wraps.map((wrap) => (
+              <Link key={wrap.id} href={`/journal/wrap/${wrap.id}`} className="card tap" style={{ padding: 0, overflow: "hidden", textAlign: "left" }}>
+                <span style={{ display: "block", height: 76, position: "relative" }}>
+                  <Plate kind="city" className="fill" />
+                  <span
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "linear-gradient(180deg, transparent, rgba(11, 9, 7, 0.92))",
+                    }}
+                  />
+                  <span className="display d-md" style={{ position: "absolute", left: 13, bottom: 9 }}>
+                    {wrap.label}
+                  </span>
+                </span>
+                <span style={{ display: "block", padding: "11px 13px" }}>
+                  <span style={{ display: "flex", flexWrap: "wrap", gap: "8px 14px", fontSize: 11.5, color: "var(--ink-2)" }}>
+                    <span>
+                      <Calendar size={12} strokeWidth={2} /> {wrap.events} events
+                    </span>
+                    <span>
+                      <Users size={12} strokeWidth={2} /> {wrap.newContacts} nieuwe contacten
+                    </span>
+                    <span>
+                      <Check size={12} strokeWidth={2} /> {wrap.missionsCompleted} missies
+                    </span>
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 11 }}>
+                    <span style={{ display: "flex", gap: 6 }}>
+                      {Object.entries(wrap.deltas)
+                        .slice(0, 2)
+                        .map(([key, value]) => (
+                          <Tag key={key} className="alt">
+                            {`${key} +${value}`}
+                          </Tag>
+                        ))}
+                    </span>
+                    <span className="btn btn-ghost btn-sm">
+                      View wrap <ChevronRight size={13} strokeWidth={2.4} />
+                    </span>
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <EmptyInvite body="Nog geen monthly wrap. Maak er een in Journal." />
+        )}
       </div>
 
       <div className="section" style={{ marginBottom: 14 }}>

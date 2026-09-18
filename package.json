@@ -11,7 +11,8 @@
     "test": "tsx --test src/server/validation/rewardEngine.test.ts src/server/validation/missionRuleEngine.test.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:verify": "tsx scripts/verify-phase4.ts",
-    "db:verify:map": "tsx scripts/verify-phase5.ts"
+    "db:verify:map": "tsx scripts/verify-phase5.ts",
+    "db:verify:journal": "tsx scripts/verify-phase6.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

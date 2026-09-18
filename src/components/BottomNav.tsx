@@ -20,9 +20,13 @@ export function BottomNav() {
       {NAV.map(({ href, label, icon: Icon }) => {
         const current = pathname === href || pathname.startsWith(`${href}/`);
         return (
-          <Link key={href} href={href} aria-current={current ? "page" : undefined}>
+          <Link
+            key={href}
+            href={href}
+            aria-label={label}
+            aria-current={current ? "page" : undefined}
+          >
             <Icon size={22} strokeWidth={current ? 2.1 : 1.7} />
-            <span>{label}</span>
           </Link>
         );
       })}

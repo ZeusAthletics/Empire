@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema } from "./apply-schema";
+import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema } from "./apply-schema";
+import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
 import { SEED_COMPANIES, SEED_CONTACTS, SEED_MAP_PINS, SEED_MISSIONS } from "./seed-missions";
 import { STAT_KEYS, type Role, type StatKey } from "../src/server/domain/player/types";
 
@@ -416,6 +417,85 @@ async function seedCompaniesAndPins(admin: Admin, playerId: string) {
   }
 }
 
+async function seedJournalAndWraps(admin: Admin, playerId: string) {
+  const [{ data: contacts, error: contactError }, { data: missions, error: missionError }] = await Promise.all([
+    admin.from("contacts").select("id, seed_key").eq("player_id", playerId).is("deleted_at", null),
+    admin.from("missions").select("id, seed_key").eq("player_id", playerId).is("deleted_at", null),
+  ]);
+  if (contactError) throw contactError;
+  if (missionError) throw missionError;
+  const contactIds = new Map((contacts ?? []).map((row) => [row.seed_key as string, row.id as string]));
+  const missionIds = new Map((missions ?? []).map((row) => [row.seed_key as string, row.id as string]));
+
+  for (const entry of SEED_JOURNAL) {
+    const { data: existing, error: lookupError } = await admin
+      .from("journal_entries")
+      .select("id")
+      .eq("player_id", playerId)
+      .eq("seed_key", entry.seedKey)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    const fields = {
+      player_id: playerId,
+      seed_key: entry.seedKey,
+      occurred_at: entry.occurredAt(),
+      title: entry.title,
+      body: entry.body,
+      icon: entry.icon,
+      tags: entry.tags,
+      contact_ids: entry.contactKeys.map((key) => contactIds.get(key)).filter((id): id is string => Boolean(id)),
+      mission_id: entry.missionKey ? (missionIds.get(entry.missionKey) ?? null) : null,
+      location_name: entry.locationName ?? null,
+      media: entry.media,
+      extra_media: entry.extraMedia,
+      extraction_status: "DONE",
+      source: "ADMIN",
+      deleted_at: null,
+    };
+    const { error } = existing
+      ? await admin.from("journal_entries").update(fields as never).eq("id", existing.id)
+      : await admin.from("journal_entries").insert(fields as never);
+    if (error) throw error;
+  }
+
+  const { data: existingWrap, error: wrapLookupError } = await admin
+    .from("monthly_wraps")
+    .select("id")
+    .eq("player_id", playerId)
+    .eq("month_id", SEED_WRAP_AUGUST.monthId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (wrapLookupError) throw wrapLookupError;
+  const wrapFields = {
+    player_id: playerId,
+    month_id: SEED_WRAP_AUGUST.monthId,
+    label: SEED_WRAP_AUGUST.label,
+    year: SEED_WRAP_AUGUST.year,
+    events: SEED_WRAP_AUGUST.events,
+    new_contacts: SEED_WRAP_AUGUST.newContacts,
+    missions_completed: SEED_WRAP_AUGUST.missionsCompleted,
+    empire_delta: SEED_WRAP_AUGUST.empireDelta,
+    deltas: SEED_WRAP_AUGUST.deltas,
+    biggest_win: SEED_WRAP_AUGUST.biggestWin,
+    biggest_mistake: SEED_WRAP_AUGUST.biggestMistake,
+    best_relationship: SEED_WRAP_AUGUST.bestRelationship,
+    key_decision: SEED_WRAP_AUGUST.keyDecision,
+    best_mission: SEED_WRAP_AUGUST.bestMission,
+    time_sink: SEED_WRAP_AUGUST.timeSink,
+    what_changed: SEED_WRAP_AUGUST.whatChanged,
+    nyx: SEED_WRAP_AUGUST.nyx,
+    generated_at: null,
+    entry_ids: [],
+    source: "ADMIN",
+    deleted_at: null,
+  };
+  const { error: wrapError } = existingWrap
+    ? await admin.from("monthly_wraps").update(wrapFields as never).eq("id", existingWrap.id)
+    : await admin.from("monthly_wraps").insert(wrapFields as never);
+  if (wrapError) throw wrapError;
+}
+
 async function main() {
   const url = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -451,6 +531,12 @@ async function main() {
     "map_pins",
     applyPhase5Schema,
     "supabase/migrations/20260918230000_phase5_map.sql",
+  );
+  await ensureTable(
+    admin,
+    "journal_entries",
+    applyPhase6Schema,
+    "supabase/migrations/20260919010000_phase6_journal.sql",
   );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
@@ -497,12 +583,14 @@ async function main() {
   const { chapterId } = chapter;
   await seedContactsAndMissions(admin, player.id, chapterId);
   await seedCompaniesAndPins(admin, player.id);
+  await seedJournalAndWraps(admin, player.id);
 
   console.log(`Seeded player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
   console.log(`Seeded chapter I ${chapter.chapterId}`);
   console.log(`Seeded ${SEED_CONTACTS.length} contacts and ${SEED_MISSIONS.length} missions`);
   console.log(`Seeded ${SEED_COMPANIES.length} companies and ${SEED_MAP_PINS.length} map pins`);
+  console.log(`Seeded ${SEED_JOURNAL.length} journal entries and wrap ${SEED_WRAP_AUGUST.label}`);
 }
 
 main().catch((error) => {

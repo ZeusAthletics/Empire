@@ -70,10 +70,30 @@ export function MapScreen({
       pin.title,
       <MarkerSheet
         pin={pin}
-        onNote={(title) => toast(`Notitie voor “${title}” volgt in het journal.`)}
+        onNote={(title) => void saveMapNote(title, pin)}
         onDelete={pin.custom ? () => void removePin(pin.id) : undefined}
       />,
     );
+  }
+
+  async function saveMapNote(title: string, pin: MapPin) {
+    const response = await fetch("/api/journal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        body: pin.note ? `${title}. ${pin.note}` : title,
+        locationName: pin.mission?.locationName ?? pin.title,
+        missionId: pin.mission?.id,
+        tags: ["MAP", "QUICK NOTE"],
+      }),
+    });
+    const data = (await response.json()) as { ok: boolean; error?: string };
+    if (!response.ok || !data.ok) {
+      toast(data.error ?? "Notitie kon niet worden bewaard.");
+      return;
+    }
+    closeSheet();
+    toast("Entry opgeslagen");
   }
 
   async function removePin(id: string) {

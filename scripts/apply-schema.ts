@@ -82,3 +82,7 @@ export async function applyPhase4Schema() {
 export async function applyPhase5Schema() {
   await applySqlFile("supabase/migrations/20260918230000_phase5_map.sql", "phase 5 schema");
 }
+
+export async function applyPhase6Schema() {
+  await applySqlFile("supabase/migrations/20260919010000_phase6_journal.sql", "phase 6 schema");
+}
