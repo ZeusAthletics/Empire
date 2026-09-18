@@ -1,0 +1,133 @@
+import { randomUUID } from "node:crypto";
+import { callOpenAIResponses, openaiConfigured } from "@/server/ai/client/openai";
+import { buildNyxContext } from "@/server/ai/context/NyxContextBuilder";
+import { writeNyxRun } from "@/server/ai/orchestrator/nyxRuns";
+import { NYX_CORE, NYX_CORE_VERSION } from "@/server/ai/prompts/nyx-core";
+import { routeIntelligenceTask, type ModelRoutingDecision } from "@/server/ai/routing/AIModelRouter";
+import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
+import type { IntelligenceTask } from "@/server/ai/routing/IntelligenceTask";
+import { classifyIntelligenceTask } from "@/server/ai/routing/TaskClassifier";
+
+export class StrategicPendingError extends Error {
+  constructor(message = "Strategische taak staat in wacht. Sol wordt niet vervangen door Luna.") {
+    super(message);
+    this.name = "StrategicPendingError";
+  }
+}
+
+export type OrchestratorInput = {
+  playerId: string;
+  task?: IntelligenceTask;
+  text?: string;
+  risk?: Partial<IntelligenceRiskProfile>;
+  invokeModel?: boolean;
+};
+
+export type OrchestratorResult = {
+  requestId: string;
+  task: IntelligenceTask;
+  decision: ModelRoutingDecision;
+  context: Awaited<ReturnType<typeof buildNyxContext>>;
+  text: string | null;
+  runId: string | null;
+  fallbackUsed: boolean;
+};
+
+function canRetry(tier: ModelRoutingDecision["modelTier"]) {
+  return tier === "ECONOMY" || tier === "BALANCED";
+}
+
+export function planNyxTask(input: Pick<OrchestratorInput, "task" | "text" | "risk">): {
+  task: IntelligenceTask;
+  decision: ModelRoutingDecision;
+} {
+  const task = classifyIntelligenceTask({ task: input.task, text: input.text });
+  return { task, decision: routeIntelligenceTask(task, input.risk) };
+}
+
+export async function runNyxTask(input: OrchestratorInput): Promise<OrchestratorResult> {
+  const requestId = randomUUID();
+  const { task, decision } = planNyxTask(input);
+  const context = await buildNyxContext(input.playerId, task);
+  const started = Date.now();
+  let fallbackUsed = false;
+  let text: string | null = null;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let structuredOutputValid: boolean | null = null;
+  let success = true;
+  let errorMessage: string | undefined;
+
+  if (input.invokeModel) {
+    if (!openaiConfigured()) {
+      success = false;
+      errorMessage = "OPENAI_API_KEY ontbreekt.";
+    } else {
+      const prompt = `${NYX_CORE}\n\n${NYX_CORE_VERSION}\nTaak: ${task}\nContext: ${JSON.stringify(context)}\n\n${input.text ?? ""}`;
+      const attempt = async () =>
+        callOpenAIResponses({
+          model: decision.model,
+          input: prompt,
+          reasoningEffort: decision.reasoningEffort,
+        });
+      try {
+        const first = await attempt();
+        text = first.text;
+        inputTokens = first.inputTokens;
+        outputTokens = first.outputTokens;
+        structuredOutputValid = first.structuredOutputValid;
+      } catch (error) {
+        if (canRetry(decision.modelTier)) {
+          fallbackUsed = true;
+          try {
+            const second = await attempt();
+            text = second.text;
+            inputTokens = second.inputTokens;
+            outputTokens = second.outputTokens;
+            structuredOutputValid = second.structuredOutputValid;
+          } catch (retryError) {
+            success = false;
+            errorMessage = retryError instanceof Error ? retryError.message : "Modelcall mislukt.";
+          }
+        } else {
+          success = false;
+          errorMessage = error instanceof Error ? error.message : "Sol-call mislukt.";
+        }
+      }
+    }
+  }
+
+  let runId: string | null = null;
+  try {
+    runId = await writeNyxRun({
+      playerId: input.playerId,
+      requestId,
+      decision,
+      latencyMs: Date.now() - started,
+      inputTokens,
+      outputTokens,
+      success,
+      fallbackUsed,
+      structuredOutputValid,
+      error: errorMessage,
+    });
+  } catch {
+    runId = null;
+  }
+
+  if (input.invokeModel && !success && decision.modelTier === "STRATEGIC") {
+    throw new StrategicPendingError(errorMessage);
+  }
+
+  return { requestId, task, decision, context, text, runId, fallbackUsed };
+}
+
+export class NyxOrchestrator {
+  plan(input: Pick<OrchestratorInput, "task" | "text" | "risk">) {
+    return planNyxTask(input);
+  }
+
+  run(input: OrchestratorInput) {
+    return runNyxTask(input);
+  }
+}
