@@ -1,15 +1,9 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
+@import "../styles/global.css";
 
-* {
-  -webkit-tap-highlight-color: transparent;
-}
-
-html,
-body {
-  height: 100%;
-}
-
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
 body {
   margin: 0;
   background: var(--night);
@@ -20,7 +14,6 @@ body {
   overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
 }
-
 body::before {
   content: "";
   position: fixed;
@@ -32,42 +25,8 @@ body::before {
     radial-gradient(80% 50% at 50% 100%, rgba(104, 28, 53, 0.18), transparent 70%),
     var(--night);
 }
-
-a {
-  color: inherit;
-}
-
-:focus-visible {
-  outline: 2px solid var(--gold-soft);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-.app-shell {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: var(--col);
-  margin: 0 auto;
-  min-height: 100dvh;
-  background: var(--night);
-  box-shadow:
-    0 0 0 1px rgba(201, 163, 78, 0.12),
-    0 30px 120px rgba(0, 0, 0, 0.8);
-}
-
-.display {
-  font-family: var(--font-anton), Anton, Impact, sans-serif;
-  font-weight: 400;
-  letter-spacing: 0.01em;
-  line-height: 0.94;
-  text-transform: uppercase;
-}
-
-.eyebrow {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--gold);
-}
+button, input, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; }
+a { color: inherit; }
+ul { margin: 0; padding: 0; list-style: none; }
+:focus-visible { outline: 2px solid var(--gold-soft); outline-offset: 2px; border-radius: 6px; }

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Anton, Montserrat } from "next/font/google";
+import { Anton, Caveat, Montserrat } from "next/font/google";
 import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
 
@@ -15,6 +15,13 @@ const montserrat = Montserrat({
   weight: ["400", "600", "700", "800"],
   subsets: ["latin"],
   variable: "--font-montserrat",
+  display: "swap",
+});
+
+const caveat = Caveat({
+  weight: ["500", "600"],
+  subsets: ["latin"],
+  variable: "--font-caveat",
   display: "swap",
 });
 
@@ -40,8 +47,8 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="nl" data-theme="dark">
-      <body className={`${anton.variable} ${montserrat.variable}`}>
-        <div className="app-shell">{children}</div>
+      <body className={`${anton.variable} ${montserrat.variable} ${caveat.variable}`}>
+        {children}
         <PwaRegister />
       </body>
     </html>

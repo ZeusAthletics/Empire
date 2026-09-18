@@ -1,20 +1,60 @@
 :root {
   color-scheme: dark;
 
+  /* Kern */
   --night: #0b0907;
   --charcoal: #171411;
   --charcoal-2: #1f1b16;
   --gold: #c9a34e;
   --gold-soft: #e4c782;
+  --gold-deep: #8a6c2a;
   --ivory: #f6ecdf;
-  --jade: #4fbf8b;
-  --coral: #f05252;
 
+  /* Accenten */
+  --amber: #ff9a3c;
+  --coral: #f05252;
+  --burgundy: #681c35;
+  --jade: #4fbf8b;
+
+  /* Afgeleid */
   --ink-1: var(--ivory);
   --ink-2: rgba(246, 236, 223, 0.72);
   --ink-3: rgba(246, 236, 223, 0.48);
+  --ink-4: rgba(246, 236, 223, 0.3);
   --line: rgba(201, 163, 78, 0.2);
+  --line-soft: rgba(246, 236, 223, 0.1);
+  --surface: linear-gradient(180deg, #191511 0%, #131010 100%);
+  --surface-raised: linear-gradient(180deg, #221d17 0%, #171411 100%);
   --gold-grad: linear-gradient(180deg, #e9ce8c 0%, #c9a34e 52%, #a8813a 100%);
+  --sunset: linear-gradient(180deg, #2a1a10 0%, #6b3a18 46%, #c9702b 78%, #ff9a3c 100%);
+
+  /* Ruimte (4pt) */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+  --s10: 40px;
+
+  /* Radius */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* Layout */
   --col: 430px;
+  --nav-h: 72px;
   --safe-b: env(safe-area-inset-bottom, 0px);
+
+  /* Elevatie */
+  --glow-gold: 0 0 0 1px rgba(201, 163, 78, 0.35), 0 8px 28px rgba(201, 163, 78, 0.14);
+  --shadow-sheet: 0 -18px 50px rgba(0, 0, 0, 0.65);
+
+  /* Motion */
+  --t-fast: 140ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  --t-mid: 260ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }

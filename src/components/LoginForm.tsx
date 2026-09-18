@@ -25,6 +25,7 @@ export function LoginForm() {
         setError(payload.error ?? "Aanmelden mislukt.");
         return;
       }
+      router.push("/home");
       router.refresh();
     } catch {
       setError("Geen verbinding. Probeer het opnieuw.");
@@ -34,48 +35,44 @@ export function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-dvh flex-col justify-between px-4 pb-[calc(24px+var(--safe-b))] pt-10">
-      <header>
+    <main className="view" style={{ paddingBottom: "calc(24px + var(--safe-b))" }}>
+      <header className="hero" style={{ paddingBottom: 8 }}>
         <p className="eyebrow">Kempen Vice</p>
-        <h1 className="display mt-3 text-[34px] text-[var(--ivory)]">Empire Mode</h1>
-        <p className="mt-3 max-w-[18rem] text-[13.5px] leading-relaxed text-[var(--ink-2)]">
+        <h1 className="display d-xl" style={{ margin: "12px 0 8px" }}>
+          Empire Mode
+        </h1>
+        <p className="body" style={{ maxWidth: "18rem", margin: 0 }}>
           Meld u aan. De sessie praat met de echte database.
         </p>
       </header>
 
-      <form onSubmit={onSubmit} className="grid gap-3">
-        <label className="grid gap-1.5">
-          <span className="text-[10px] font-bold tracking-[0.18em] text-[var(--ink-3)] uppercase">
-            E-mail
-          </span>
+      <form onSubmit={onSubmit} className="section" style={{ marginTop: 28 }}>
+        <div className="field">
+          <label htmlFor="email">E-mail</label>
           <input
+            id="email"
+            className="input"
             type="email"
             autoComplete="username"
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="h-12 rounded-xl border border-[var(--line)] bg-[var(--charcoal)] px-3.5 text-[var(--ivory)]"
           />
-        </label>
-        <label className="grid gap-1.5">
-          <span className="text-[10px] font-bold tracking-[0.18em] text-[var(--ink-3)] uppercase">
-            Wachtwoord
-          </span>
+        </div>
+        <div className="field">
+          <label htmlFor="password">Wachtwoord</label>
           <input
+            id="password"
+            className="input"
             type="password"
             autoComplete="current-password"
             required
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="h-12 rounded-xl border border-[var(--line)] bg-[var(--charcoal)] px-3.5 text-[var(--ivory)]"
           />
-        </label>
-        {error ? <p className="text-[13px] text-[var(--coral)]">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={pending}
-          className="mt-2 h-12 rounded-xl bg-[image:var(--gold-grad)] text-[13px] font-extrabold tracking-[0.08em] text-[#1a1206] uppercase disabled:opacity-50"
-        >
+        </div>
+        {error ? <p className="body" style={{ color: "var(--coral)", margin: "0 0 12px" }}>{error}</p> : null}
+        <button className="btn btn-gold btn-block" type="submit" disabled={pending}>
           {pending ? "Bezig…" : "Aanmelden"}
         </button>
       </form>

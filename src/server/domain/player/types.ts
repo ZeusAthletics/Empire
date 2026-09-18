@@ -46,17 +46,20 @@ export type StatValueRow = {
   deleted_at: string | null;
 };
 
-export type SessionPlayer = {
+export type PublicPlayer = {
   id: string;
-  authUserId: string;
-  role: Role;
   displayName: string;
   title: string;
+  role: Role;
   level: number;
   xp: number;
   xpToNext: number;
   lifetimeXp: number;
   stats: { key: StatKey; value: number }[];
+};
+
+export type SessionPlayer = PublicPlayer & {
+  authUserId: string;
 };
 
 export function mapPlayer(row: PlayerRow, stats: StatValueRow[]): SessionPlayer {

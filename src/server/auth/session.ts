@@ -1,8 +1,8 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findPlayerByAuthUserId } from "@/server/domain/player/repository";
-import type { SessionPlayer } from "@/server/domain/player/types";
+import type { PublicPlayer, SessionPlayer } from "@/server/domain/player/types";
 
-export type { SessionPlayer };
+export type { PublicPlayer, SessionPlayer };
 
 export async function getSessionPlayer(): Promise<SessionPlayer | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -18,7 +18,7 @@ export async function getSessionPlayer(): Promise<SessionPlayer | null> {
   return findPlayerByAuthUserId(user.id);
 }
 
-export function toPublicPlayer(player: SessionPlayer) {
+export function toPublicPlayer(player: SessionPlayer): PublicPlayer {
   return {
     id: player.id,
     displayName: player.displayName,
