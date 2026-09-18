@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema } from "./apply-schema";
+import { applyPhase1Schema, applyPhase3Schema } from "./apply-schema";
 import { STAT_KEYS, type Role, type StatKey } from "../src/server/domain/player/types";
 
 function loadEnvFile(filename: string, override: boolean) {
@@ -121,9 +121,130 @@ async function upsertPlayer(
   return player;
 }
 
-async function tablesReady(admin: Admin) {
-  const { error } = await admin.from("players").select("id").limit(1);
+async function tableReady(admin: Admin, table: string) {
+  const { error } = await admin.from(table).select("id").limit(1);
   return !error;
+}
+
+async function ensureTable(admin: Admin, table: string, apply: () => Promise<void>, sqlFile: string) {
+  if (await tableReady(admin, table)) return;
+  console.log(`${table} table missing — applying SQL…`);
+  try {
+    await apply();
+  } catch (error) {
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}\n\nOpen the Supabase SQL Editor, paste ${sqlFile}, run it, then retry npm run db:seed.`,
+    );
+  }
+  await new Promise((resolveWait) => setTimeout(resolveWait, 1500));
+  if (!(await tableReady(admin, table))) {
+    throw new Error(
+      `Table public.${table} is still missing. Open the Supabase SQL Editor, paste ${sqlFile}, run it, then retry npm run db:seed.`,
+    );
+  }
+}
+
+async function upsertChapterOne(
+  admin: Admin,
+  playerId: string,
+  input: {
+    title: string;
+    northStar: string;
+    bottleneckStat: StatKey;
+    bottleneckReason: string;
+    roman: string;
+    name: string;
+    tagline: string;
+    economicFrom: number;
+    economicTo: number;
+    economicCurrent: number;
+    exitCriteria: string[];
+  },
+) {
+  const { data: existingCampaign, error: campaignLookupError } = await admin
+    .from("campaigns")
+    .select("id")
+    .eq("player_id", playerId)
+    .eq("status", "ACTIVE")
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (campaignLookupError) throw campaignLookupError;
+
+  const campaignFields = {
+    player_id: playerId,
+    title: input.title,
+    north_star: input.northStar,
+    bottleneck_stat: input.bottleneckStat,
+    bottleneck_reason: input.bottleneckReason,
+    status: "ACTIVE",
+    source: "ADMIN",
+    locked_by_admin: false,
+    deleted_at: null,
+  };
+
+  const { data: campaign, error: campaignError } = existingCampaign
+    ? await admin.from("campaigns").update(campaignFields as never).eq("id", existingCampaign.id).select("id").single()
+    : await admin.from("campaigns").insert(campaignFields as never).select("id").single();
+
+  if (campaignError || !campaign) throw campaignError ?? new Error("Campaign upsert returned no row.");
+
+  const { data: existingChapter, error: chapterLookupError } = await admin
+    .from("chapters")
+    .select("id, opened_at")
+    .eq("campaign_id", campaign.id)
+    .eq("index", 1)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (chapterLookupError) throw chapterLookupError;
+
+  const chapterFields = {
+    campaign_id: campaign.id,
+    player_id: playerId,
+    index: 1,
+    roman: input.roman,
+    name: input.name,
+    tagline: input.tagline,
+    economic_from: input.economicFrom,
+    economic_to: input.economicTo,
+    economic_current: input.economicCurrent,
+    exit_criteria: input.exitCriteria,
+    status: "ACTIVE",
+    opened_at: existingChapter?.opened_at ?? new Date().toISOString(),
+    source: "ADMIN",
+    locked_by_admin: false,
+    deleted_at: null,
+  };
+
+  const { data: chapter, error: chapterError } = existingChapter
+    ? await admin.from("chapters").update(chapterFields as never).eq("id", existingChapter.id).select("id").single()
+    : await admin.from("chapters").insert(chapterFields as never).select("id").single();
+
+  if (chapterError || !chapter) throw chapterError ?? new Error("Chapter upsert returned no row.");
+
+  const { error: linkError } = await admin
+    .from("campaigns")
+    .update({ current_chapter_id: chapter.id } as never)
+    .eq("id", campaign.id);
+  if (linkError) throw linkError;
+
+  return { campaignId: campaign.id as string, chapterId: chapter.id as string };
+}
+
+async function snapshotStats(
+  admin: Admin,
+  playerId: string,
+  stats: { key: StatKey; value: number }[],
+) {
+  const at = new Date().toISOString();
+  const { error } = await admin.from("stat_snapshots").insert(
+    stats.map((stat) => ({
+      player_id: playerId,
+      key: stat.key,
+      value: stat.value,
+      at,
+    })) as never,
+  );
+  if (error && error.code !== "23505" && !/duplicate|unique/i.test(error.message)) throw error;
 }
 
 async function main() {
@@ -138,22 +259,18 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  if (!(await tablesReady(admin))) {
-    console.log("players table missing — applying phase 1 SQL…");
-    try {
-      await applyPhase1Schema();
-    } catch (error) {
-      throw new Error(
-        `${error instanceof Error ? error.message : String(error)}\n\nOpen the Supabase SQL Editor, paste supabase/migrations/20260918120000_phase1_player.sql, run it, then retry npm run db:seed.`,
-      );
-    }
-    await new Promise((resolveWait) => setTimeout(resolveWait, 1500));
-    if (!(await tablesReady(admin))) {
-      throw new Error(
-        "Table public.players is still missing after applying SQL. Open the Supabase SQL Editor, paste supabase/migrations/20260918120000_phase1_player.sql, run it, then retry npm run db:seed.",
-      );
-    }
-  }
+  await ensureTable(
+    admin,
+    "players",
+    applyPhase1Schema,
+    "supabase/migrations/20260918120000_phase1_player.sql",
+  );
+  await ensureTable(
+    admin,
+    "campaigns",
+    applyPhase3Schema,
+    "supabase/migrations/20260918210000_phase3_campaign.sql",
+  );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
   const adminAuth = await ensureAuthUser(admin, adminEmail, adminPassword);
@@ -182,8 +299,24 @@ async function main() {
     stats: STAT_KEYS.map((key) => ({ key, value: 0 })),
   });
 
+  const chapter = await upsertChapterOne(admin, player.id, {
+    title: "€0 → €100.000.000",
+    northStar: "Financiële vrijheid begint met een beslissing",
+    bottleneckStat: "optionality",
+    bottleneckReason: "Optionality is de rem: te weinig paden naast het huidige aanbod.",
+    roman: "I",
+    name: "ESCAPE VELOCITY",
+    tagline: "Groter denken. Verder gaan.",
+    economicFrom: 0,
+    economicTo: 100000,
+    economicCurrent: 64800,
+    exitCriteria: ["De eerste €10.000-maand is een feit."],
+  });
+  await snapshotStats(admin, player.id, PLAYER_STATS);
+
   console.log(`Seeded player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
+  console.log(`Seeded chapter I ${chapter.chapterId}`);
 }
 
 main().catch((error) => {

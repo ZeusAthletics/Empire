@@ -30,3 +30,7 @@ export const CORE_STAT_KEYS: StatKey[] = ["network", "authority", "optionality"]
 export function formatXp(n: number) {
   return n.toLocaleString("nl-BE");
 }
+
+export function formatEuro(n: number) {
+  return `€${n.toLocaleString("nl-BE")}`;
+}

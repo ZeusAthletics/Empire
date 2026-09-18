@@ -26,16 +26,12 @@ function loadEnvFile(filename: string, override: boolean) {
 loadEnvFile(".env", false);
 loadEnvFile(".env.local", true);
 
-export async function applyPhase1Schema() {
+async function applySqlFile(relativePath: string, label: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Missing Supabase URL or service role key.");
 
-  const sql = readFileSync(
-    resolve(process.cwd(), "supabase/migrations/20260918120000_phase1_player.sql"),
-    "utf8",
-  );
-
+  const sql = readFileSync(resolve(process.cwd(), relativePath), "utf8");
   const projectRef = new URL(url).hostname.split(".")[0];
   const attempts: { endpoint: string; body: unknown; extraHeaders?: Record<string, string> }[] = [
     {
@@ -60,13 +56,21 @@ export async function applyPhase1Schema() {
       },
       body: JSON.stringify(attempt.body),
     });
-    const text = await response.text();
+    await response.text();
     if (response.ok) {
-      console.log("Applied phase 1 schema.");
+      console.log(`Applied ${label}.`);
       return;
     }
     errors.push(`${attempt.endpoint} → ${response.status}`);
   }
 
-  throw new Error(`Schema apply failed (${errors.join("; ")})`);
+  throw new Error(`Schema apply failed for ${label} (${errors.join("; ")})`);
+}
+
+export async function applyPhase1Schema() {
+  await applySqlFile("supabase/migrations/20260918120000_phase1_player.sql", "phase 1 schema");
+}
+
+export async function applyPhase3Schema() {
+  await applySqlFile("supabase/migrations/20260918210000_phase3_campaign.sql", "phase 3 schema");
 }

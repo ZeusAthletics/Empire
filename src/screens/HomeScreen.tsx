@@ -1,16 +1,28 @@
 "use client";
 
+import Link from "next/link";
 import { ArrowRight, BarChart3, Calendar, Star, Sun } from "lucide-react";
 import { Bar } from "@/components/ui/Bar";
 import { HeroArt } from "@/components/ui/HeroArt";
 import { Plate } from "@/components/ui/Plate";
 import { useEmpireUI } from "@/components/empire-ui-context";
-import { CORE_STAT_KEYS, STAT_META, formatXp } from "@/lib/stats";
+import { CORE_STAT_KEYS, STAT_META, formatEuro, formatXp } from "@/lib/stats";
+import type { PublicCampaign } from "@/server/domain/campaign/types";
 import type { PublicPlayer } from "@/server/domain/player/types";
 
-export function HomeScreen({ player }: { player: PublicPlayer }) {
+export function HomeScreen({
+  player,
+  campaign,
+}: {
+  player: PublicPlayer;
+  campaign: PublicCampaign | null;
+}) {
   const { openNyx } = useEmpireUI();
   const xpPct = player.xpToNext > 0 ? (player.xp / player.xpToNext) * 100 : 0;
+  const chapter = campaign?.chapter ?? null;
+  const span = chapter ? chapter.economicTo - chapter.economicFrom : 0;
+  const chapterPct =
+    chapter && span > 0 ? ((chapter.economicCurrent - chapter.economicFrom) / span) * 100 : 0;
   const mini = CORE_STAT_KEYS.map((key) => {
     const meta = STAT_META[key];
     const value = player.stats.find((stat) => stat.key === key)?.value ?? 0;
@@ -51,17 +63,33 @@ export function HomeScreen({ player }: { player: PublicPlayer }) {
       </header>
 
       <div className="section" style={{ marginTop: 0 }}>
-        <div className="card">
-          <div className="card-head">
-            <h2 className="display d-sm">Chapter</h2>
-            <span className="eyebrow muted" style={{ textAlign: "right", maxWidth: 110, lineHeight: 1.5 }}>
-              Financiële vrijheid begint met een beslissing
-            </span>
+        {chapter ? (
+          <Link href="/profile" className="card tap" style={{ display: "block" }}>
+            <div className="card-head">
+              <h2 className="display d-sm">
+                Chapter {chapter.roman} — {chapter.name}
+              </h2>
+              <span className="eyebrow muted" style={{ textAlign: "right", maxWidth: 110, lineHeight: 1.5 }}>
+                {campaign?.northStar ?? "Financiële vrijheid begint met een beslissing"}
+              </span>
+            </div>
+            <Bar pct={chapterPct} />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11 }}>
+              <span style={{ color: "var(--ink-3)" }}>{formatEuro(chapter.economicFrom)}</span>
+              <span style={{ color: "var(--gold)", fontWeight: 800 }}>{formatEuro(chapter.economicCurrent)}</span>
+              <span style={{ color: "var(--ink-3)" }}>{formatEuro(chapter.economicTo)}</span>
+            </div>
+          </Link>
+        ) : (
+          <div className="card">
+            <div className="card-head">
+              <h2 className="display d-sm">Chapter</h2>
+            </div>
+            <p className="body" style={{ margin: 0 }}>
+              Nog geen hoofdstuk in de database.
+            </p>
           </div>
-          <p className="body" style={{ margin: 0 }}>
-            Uw hoofdstuk komt uit de database. Die tabel volgt in de volgende fase.
-          </p>
-        </div>
+        )}
       </div>
 
       <div className="section">
@@ -71,12 +99,12 @@ export function HomeScreen({ player }: { player: PublicPlayer }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span className="eyebrow">Current mission</span>
-            <span
-              className="eyebrow muted"
-              style={{ display: "flex", gap: 5, alignItems: "center", color: "var(--gold-soft)" }}
-            >
-              <Star size={12} strokeWidth={2} /> Main story
-            </span>
+                <span
+                  className="eyebrow muted"
+                  style={{ display: "flex", gap: 5, alignItems: "center", color: "var(--gold-soft)" }}
+                >
+                  <Star size={12} strokeWidth={2} /> Main story
+                </span>
               </div>
               <h2 className="display d-lg" style={{ margin: "6px 0 2px" }}>
                 Nog geen missie
@@ -99,18 +127,29 @@ export function HomeScreen({ player }: { player: PublicPlayer }) {
               <BarChart3 size={13} strokeWidth={2} /> Empire value
             </span>
           </div>
-          <p className="body" style={{ margin: 0 }}>
-            Empire value volgt wanneer de campagne live gaat.
-          </p>
-          <p className="meta" style={{ margin: "8px 0 0", fontStyle: "italic" }}>
-            “Kapitaal geeft opties. Opties geven vrijheid.”
-          </p>
+          {chapter ? (
+            <>
+              <div className="display d-xl" style={{ fontSize: 30 }}>
+                {formatEuro(chapter.economicCurrent)}
+              </div>
+              <p className="meta" style={{ margin: "8px 0 0", fontStyle: "italic" }}>
+                “Kapitaal geeft opties. Opties geven vrijheid.”
+              </p>
+            </>
+          ) : (
+            <p className="body" style={{ margin: 0 }}>
+              Empire value volgt wanneer de campagne live gaat.
+            </p>
+          )}
         </div>
         <div className="card">
           <div className="card-head">
             <span className="t eyebrow">
               <BarChart3 size={13} strokeWidth={2} /> Core stats
             </span>
+            <Link href="/profile" className="eyebrow muted">
+              Details <ArrowRight size={11} strokeWidth={2.4} />
+            </Link>
           </div>
           <div className="stack" style={{ gap: 8 }}>
             {mini.map(({ key, value, meta }) => {

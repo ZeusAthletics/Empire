@@ -7,9 +7,16 @@ import { Bar } from "@/components/ui/Bar";
 import { EmptyInvite } from "@/components/ui/EmptyInvite";
 import { HeroArt } from "@/components/ui/HeroArt";
 import { STAT_META, formatXp } from "@/lib/stats";
+import type { PublicCampaign } from "@/server/domain/campaign/types";
 import type { PublicPlayer } from "@/server/domain/player/types";
 
-export function ProfileScreen({ player }: { player: PublicPlayer }) {
+export function ProfileScreen({
+  player,
+  campaign,
+}: {
+  player: PublicPlayer;
+  campaign: PublicCampaign | null;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
@@ -63,9 +70,11 @@ export function ProfileScreen({ player }: { player: PublicPlayer }) {
             Current chapter
           </span>
           <span className="display d-md" style={{ display: "block", margin: "4px 0" }}>
-            Nog niet geladen
+            {campaign?.chapter?.name ?? "Nog niet geladen"}
           </span>
-          <span className="meta">Hoofdstuk volgt in fase 3.</span>
+          <span className="meta">
+            {campaign?.chapter?.tagline ?? "Hoofdstuk volgt wanneer de campagne live is."}
+          </span>
         </div>
         <div className="card" style={{ textAlign: "left" }}>
           <span style={{ color: "var(--gold)" }}>
