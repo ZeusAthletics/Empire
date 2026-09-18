@@ -86,3 +86,7 @@ export async function applyPhase5Schema() {
 export async function applyPhase6Schema() {
   await applySqlFile("supabase/migrations/20260919010000_phase6_journal.sql", "phase 6 schema");
 }
+
+export async function applyPhase7Schema() {
+  await applySqlFile("supabase/migrations/20260919020000_phase7_nyx_talk.sql", "phase 7 nyx talk schema");
+}

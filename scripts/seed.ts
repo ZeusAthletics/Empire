@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema } from "./apply-schema";
+import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema } from "./apply-schema";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
+import { SEED_NYX_PROPOSALS } from "./seed-nyx";
 import { SEED_COMPANIES, SEED_CONTACTS, SEED_MAP_PINS, SEED_MISSIONS } from "./seed-missions";
 import { STAT_KEYS, type Role, type StatKey } from "../src/server/domain/player/types";
 
@@ -496,6 +497,33 @@ async function seedJournalAndWraps(admin: Admin, playerId: string) {
   if (wrapError) throw wrapError;
 }
 
+async function seedNyxProposals(admin: Admin, playerId: string) {
+  for (const proposal of SEED_NYX_PROPOSALS) {
+    const { data: existing, error: lookupError } = await admin
+      .from("proposals")
+      .select("id, status")
+      .eq("player_id", playerId)
+      .eq("seed_key", proposal.seedKey)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing && existing.status !== "PENDING") continue;
+    const fields = {
+      player_id: playerId,
+      seed_key: proposal.seedKey,
+      kind: "SIDE_QUEST",
+      payload: proposal.payload,
+      rationale: proposal.rationale,
+      confidence: "LIKELY",
+      importance: "MEDIUM",
+      status: "PENDING",
+    };
+    const { error } = existing
+      ? await admin.from("proposals").update(fields as never).eq("id", existing.id)
+      : await admin.from("proposals").insert(fields as never);
+    if (error) throw error;
+  }
+}
+
 async function main() {
   const url = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -537,6 +565,12 @@ async function main() {
     "journal_entries",
     applyPhase6Schema,
     "supabase/migrations/20260919010000_phase6_journal.sql",
+  );
+  await ensureTable(
+    admin,
+    "nyx_conversations",
+    applyPhase7Schema,
+    "supabase/migrations/20260919020000_phase7_nyx_talk.sql",
   );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
@@ -584,6 +618,7 @@ async function main() {
   await seedContactsAndMissions(admin, player.id, chapterId);
   await seedCompaniesAndPins(admin, player.id);
   await seedJournalAndWraps(admin, player.id);
+  await seedNyxProposals(admin, player.id);
 
   console.log(`Seeded player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
@@ -591,6 +626,7 @@ async function main() {
   console.log(`Seeded ${SEED_CONTACTS.length} contacts and ${SEED_MISSIONS.length} missions`);
   console.log(`Seeded ${SEED_COMPANIES.length} companies and ${SEED_MAP_PINS.length} map pins`);
   console.log(`Seeded ${SEED_JOURNAL.length} journal entries and wrap ${SEED_WRAP_AUGUST.label}`);
+  console.log(`Seeded ${SEED_NYX_PROPOSALS.length} Nyx side-quest proposals`);
 }
 
 main().catch((error) => {

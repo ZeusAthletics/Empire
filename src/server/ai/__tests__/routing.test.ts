@@ -7,6 +7,7 @@ import { planMemoryExtraction } from "../services/MemoryExtractionService";
 import { planMainQuest, planSideQuest } from "../services/MissionGenerationService";
 import { planCasualChat } from "../services/NyxConversationService";
 import { planOpportunityAnalysis } from "../services/OpportunityIntelligenceService";
+import { handleCasualUserTurn } from "../fallback/nyxReply";
 
 const LUNA = getModelForTier("ECONOMY");
 const TERRA = getModelForTier("BALANCED");
@@ -72,4 +73,15 @@ test("9 ordinary networking event relevance routes to Terra", () => {
   });
   assert.equal(decision.modelTier, "BALANCED");
   assert.equal(decision.model, TERRA);
+});
+
+test("12 casual conversation does not create a mission", () => {
+  const result = handleCasualUserTurn("Goede avond", {
+    featuredTitle: "THE CONNECTOR",
+    network: 86,
+    economicCurrent: 64800,
+  });
+  assert.equal(result.createdMission, null);
+  assert.ok(result.reply.length > 0);
+  assert.equal(/Luna|Terra|Sol|gpt-5/i.test(result.reply), false);
 });
