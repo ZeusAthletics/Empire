@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="nl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Empire Mode — Operations</title>
+<meta name="description" content="Admin-console: proposals, memory, patterns, radar en AI-runs.">
+<!--
+====================================================================================
+  EMPIRE MODE — OPERATIONS CONSOLE (admin)  ·  referentie-prototype
+  Hoort bij NYX-ARCHITECTURE.md deel 9. Desktop-first, bewust anders dan de
+  spelers-app: dichter, tabelgedreven, weinig sier.
+
+  DOELSTRUCTUUR
+    src/admin/AdminShell.tsx          [1] sidebar + topbar + drawer
+    src/admin/views/Overview.tsx      [4]
+    src/admin/views/Proposals.tsx     [5]
+    src/admin/views/Memory.tsx        [6]
+    src/admin/views/Patterns.tsx      [7]
+    src/admin/views/Radar.tsx         [8]
+    src/admin/views/Campaign.tsx      [9]
+    src/admin/views/Runs.tsx          [10]
+    src/admin/views/Prompts.tsx       [11]
+    src/admin/api.ts                  alle calls met role=ADMIN, per speler gescopeerd
+
+  ELKE weergave hier is read-mostly. De enige schrijfacties zijn approve/reject van
+  proposals en het corrigeren van een memory — beide gaan via de MUTATE-tools uit
+  deel 5.3 van het architectuurdocument, nooit via de LLM.
+====================================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@400;600&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* [2] TOKENS — zelfde merk, admin-variant: minder goud, meer grijs */
+:root{
+  color-scheme:dark;
+  --night:#0B0907; --charcoal:#141210; --raise:#1B1815; --line:rgba(246,236,223,.10);
+  --line-gold:rgba(201,163,78,.26);
+  --gold:#C9A34E; --gold-soft:#E4C782; --ivory:#F6ECDF;
+  --amber:#FF9A3C; --coral:#F05252; --jade:#4FBF8B; --violet:#9B8CD8; --burgundy:#681C35;
+  --ink-1:var(--ivory); --ink-2:rgba(246,236,223,.70); --ink-3:rgba(246,236,223,.45);
+  --ink-4:rgba(246,236,223,.26);
+  --r:10px; --r-lg:14px;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --t:130ms cubic-bezier(.2,.7,.3,1);
+  --side:236px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--night);color:var(--ink-1);
+  font-family:Montserrat,system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold-soft);outline-offset:2px;border-radius:6px}
+h1,h2,h3{margin:0}
+.display{font-family:Anton,sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.015em;line-height:1}
+.mono{font-family:var(--mono);font-size:11.5px;letter-spacing:-.01em}
+.eyebrow{font-size:9.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+.muted{color:var(--ink-3)}
+
+/* [1] SHELL */
+.layout{display:grid;grid-template-columns:var(--side) 1fr;min-height:100vh}
+.side{position:sticky;top:0;height:100vh;border-right:1px solid var(--line);
+  background:linear-gradient(180deg,#121009,#0B0907);display:flex;flex-direction:column;padding:16px 12px}
+.brand{padding:4px 8px 18px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.brand .n{font-family:Anton,sans-serif;font-size:17px;letter-spacing:.06em;text-transform:uppercase}
+.brand .s{font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold)}
+.navlink{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border-radius:8px;
+  color:var(--ink-2);font-size:12.5px;font-weight:600;transition:all var(--t);text-align:left}
+.navlink:hover{background:rgba(255,255,255,.04);color:var(--ink-1)}
+.navlink[aria-current="page"]{background:rgba(201,163,78,.13);color:var(--gold-soft);
+  box-shadow:inset 2px 0 0 var(--gold)}
+.navlink .c{margin-left:auto;font-family:var(--mono);font-size:10.5px;padding:1px 6px;border-radius:20px;
+  background:rgba(255,255,255,.06);color:var(--ink-2)}
+.navlink .c.hot{background:rgba(255,154,60,.18);color:var(--amber)}
+.side .grp{margin:14px 0 6px;padding:0 10px}
+.side .foot{margin-top:auto;padding:12px 10px 0;border-top:1px solid var(--line)}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
+  padding:13px 22px;border-bottom:1px solid var(--line);
+  background:rgba(11,9,7,.92);backdrop-filter:blur(10px)}
+.crumb{font-size:12px;color:var(--ink-3)}
+.crumb b{color:var(--ink-1);font-weight:700}
+.env{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:5px;
+  border:1px solid rgba(255,154,60,.4);color:var(--amber)}
+.scope{display:flex;align-items:center;gap:8px;margin-left:auto;padding:5px 10px;border:1px solid var(--line);
+  border-radius:20px;font-size:11.5px}
+.scope .dot{width:7px;height:7px;border-radius:50%;background:var(--jade)}
+.content{padding:20px 22px 60px;max-width:1340px;width:100%}
+
+/* [3] PRIMITIEVEN */
+.card{background:var(--charcoal);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px}
+.card.gold{border-color:var(--line-gold)}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)} .g5{grid-template-columns:repeat(5,1fr)}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.kpi .v{font-family:Anton,sans-serif;font-size:27px;letter-spacing:.01em}
+.kpi .d{font-size:11px;font-weight:700}
+.up{color:var(--jade)} .down{color:var(--coral)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:32px;padding:0 12px;
+  border-radius:8px;font-size:11.5px;font-weight:700;letter-spacing:.04em;transition:all var(--t);
+  border:1px solid var(--line);color:var(--ink-1)}
+.btn:hover{border-color:var(--ink-3)}
+.btn.gold{background:linear-gradient(180deg,#E9CE8C,#C9A34E);color:#1A1206;border-color:transparent}
+.btn.danger{color:var(--coral);border-color:rgba(240,82,82,.35)}
+.btn.sm{height:27px;padding:0 9px;font-size:10.5px}
+.btn:disabled{opacity:.4;pointer-events:none}
+
+.chip{display:inline-flex;align-items:center;gap:6px;height:29px;padding:0 11px;border-radius:20px;
+  border:1px solid var(--line);font-size:11.5px;font-weight:600;color:var(--ink-2);transition:all var(--t)}
+.chip[aria-pressed="true"]{background:rgba(201,163,78,.14);border-color:var(--line-gold);color:var(--gold-soft)}
+.chiprow{display:flex;flex-wrap:wrap;gap:7px}
+
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.02em;border:1px solid var(--line);color:var(--ink-2);white-space:nowrap}
+.tag.gold{color:var(--gold-soft);border-color:var(--line-gold)}
+.tag.jade{color:var(--jade);border-color:rgba(79,191,139,.35)}
+.tag.coral{color:var(--coral);border-color:rgba(240,82,82,.35)}
+.tag.amber{color:var(--amber);border-color:rgba(255,154,60,.35)}
+.tag.violet{color:var(--violet);border-color:rgba(155,140,216,.35)}
+
+.bar{height:6px;border-radius:6px;background:rgba(246,236,223,.09);overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#E9CE8C,#C9A34E);width:0;
+  transition:width 700ms cubic-bezier(.2,.7,.3,1)}
+.bar.jade i{background:linear-gradient(90deg,#7FD9B0,#4FBF8B)}
+.bar.coral i{background:linear-gradient(90deg,#F0857A,#F05252)}
+.bar.violet i{background:linear-gradient(90deg,#BDB2EC,#9B8CD8)}
+
+/* Tabellen */
+.table{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--charcoal)}
+.tr{display:grid;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);
+  transition:background var(--t);text-align:left;width:100%}
+.tr:last-child{border-bottom:0}
+.thead{background:rgba(255,255,255,.025);position:sticky;top:0}
+.thead .tr{padding:9px 14px;border-bottom:1px solid var(--line)}
+.th{font-size:9.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+button.tr:hover{background:rgba(201,163,78,.06)}
+button.tr.sel{background:rgba(201,163,78,.10)}
+.td-main{font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-sub{font-size:11px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty{padding:40px 16px;text-align:center;color:var(--ink-3)}
+
+/* Drawer */
+.scrim{position:fixed;inset:0;z-index:40;background:rgba(6,5,4,.6);opacity:0;transition:opacity var(--t)}
+.scrim.open{opacity:1}
+.drawer{position:fixed;z-index:41;top:0;right:0;height:100vh;width:min(460px,100vw);
+  background:var(--raise);border-left:1px solid var(--line-gold);
+  transform:translateX(102%);transition:transform 220ms cubic-bezier(.2,.7,.3,1);
+  display:flex;flex-direction:column;box-shadow:-24px 0 60px rgba(0,0,0,.6)}
+.drawer.open{transform:translateX(0)}
+.drawer .dh{display:flex;align-items:flex-start;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.drawer .db{overflow:auto;padding:16px 18px;flex:1}
+.drawer .df{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px}
+.kv{display:grid;grid-template-columns:122px 1fr;gap:7px 12px;font-size:12px;align-items:baseline}
+.kv dt{color:var(--ink-3);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase}
+.kv dd{margin:0}
+.block{margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line)}
+.block > .eyebrow{display:block;margin-bottom:8px}
+pre.code{background:#0D0B09;border:1px solid var(--line);border-radius:8px;padding:11px;overflow:auto;
+  font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--ink-2);margin:0;max-height:300px}
+.quote{border-left:2px solid var(--gold);padding:2px 0 2px 11px;color:var(--ink-2);font-size:12.5px}
+.tl{position:relative;padding-left:18px}
+.tl::before{content:"";position:absolute;left:4px;top:5px;bottom:5px;width:1px;background:var(--line)}
+.tl > li{position:relative;padding:0 0 13px}
+.tl > li::before{content:"";position:absolute;left:-18px;top:5px;width:7px;height:7px;border-radius:50%;
+  background:var(--night);border:1.6px solid var(--gold)}
+ul{margin:0;padding:0;list-style:none}
+
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);z-index:60;
+  padding:10px 16px;border-radius:20px;background:linear-gradient(180deg,#E9CE8C,#C9A34E);color:#1A1206;
+  font-size:12px;font-weight:800;opacity:0;pointer-events:none;transition:all var(--t)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media (prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;animation:none!important}}
+@media (max-width:1100px){.g4,.g5{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}}
+@media (max-width:820px){
+  :root{--side:60px}
+  .brand .n,.brand .s,.navlink span:not(.c),.side .foot .full{display:none}
+  .navlink{justify-content:center;padding:10px 0}
+  .g2,.g3,.g4,.g5{grid-template-columns:1fr}
+  .content{padding:16px 14px 60px}
+}
+</style>
+
+<style>
+/* ===== [12] PERSONA-EDITOR + [13] ASSET-MANAGER ===== */
+.split{display:grid;grid-template-columns:1fr 392px;gap:12px;align-items:start}
+@media (max-width:1100px){.split{grid-template-columns:1fr}}
+.sticky{position:sticky;top:64px}
+.srow{display:grid;grid-template-columns:118px 1fr 40px;gap:12px;align-items:center;padding:7px 0}
+.srow .lab{font-size:11.5px;font-weight:600}
+.srow .ends{display:flex;justify-content:space-between;font-size:9.5px;color:var(--ink-4);margin-top:3px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:5px;
+  background:linear-gradient(90deg,var(--gold) var(--p,50%),rgba(246,236,223,.10) var(--p,50%));outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--ivory);border:2px solid var(--gold);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ivory);
+  border:2px solid var(--gold);cursor:pointer}
+.srow .val{font-family:var(--mono);font-size:11px;text-align:right;color:var(--ink-2)}
+.swrow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
+.swrow:last-child{border-bottom:0}
+.sw{width:36px;height:20px;border-radius:20px;background:rgba(246,236,223,.12);position:relative;flex:0 0 auto;
+  transition:background var(--t)}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+  background:var(--ink-3);transition:all var(--t)}
+.sw[aria-pressed="true"]{background:rgba(201,163,78,.4)}
+.sw[aria-pressed="true"]::after{left:18px;background:var(--gold-soft)}
+.wchip{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:5px;border:1px solid var(--line);
+  font-family:var(--mono);font-size:10.5px;color:var(--ink-2)}
+.wchip.bad{border-color:rgba(240,82,82,.3);color:var(--coral)}
+.wchip .x{color:var(--ink-4)}
+.winput{width:100%;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+  font-size:12px;margin-top:8px}
+.winput:focus{border-color:var(--gold);outline:none}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tabs button{padding:9px 14px;font-size:12px;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--gold-soft);border-bottom-color:var(--gold)}
+
+.agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:12px}
+.acard{background:var(--charcoal);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;
+  text-align:left;transition:border-color var(--t)}
+.acard:hover{border-color:var(--line-gold)}
+.thumb{position:relative;aspect-ratio:16/9;background:#0E0C0A;overflow:hidden}
+.thumb svg,.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.thumb .badge{position:absolute;top:7px;left:7px;padding:2px 7px;border-radius:4px;font-family:var(--mono);
+  font-size:9.5px;background:rgba(11,9,7,.78);border:1px solid var(--line);color:var(--ink-2)}
+.thumb .badge.ai{color:var(--violet);border-color:rgba(155,140,216,.4)}
+.thumb .badge.up{color:var(--jade);border-color:rgba(79,191,139,.4)}
+.thumb .badge.none{color:var(--amber);border-color:rgba(255,154,60,.4)}
+.acard .ab{padding:10px 12px}
+.vgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.vgrid button{aspect-ratio:1;border-radius:7px;overflow:hidden;border:1.6px solid transparent;position:relative}
+.vgrid button[aria-pressed="true"]{border-color:var(--gold)}
+.drop{border:1.6px dashed var(--line-gold);border-radius:10px;padding:18px;text-align:center;
+  background:rgba(201,163,78,.05);cursor:pointer}
+.drop:hover{background:rgba(201,163,78,.09)}
+.drop input{display:none}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <div class="brand">
+      <div class="n">Empire Mode</div>
+      <div class="s">Operations</div>
+    </div>
+    <nav id="nav" aria-label="Admin-navigatie"></nav>
+    <div class="foot">
+      <div class="eyebrow">Ingelogd als</div>
+      <div style="display:flex;align-items:center;gap:9px;margin-top:7px">
+        <span style="width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
+          border:1px solid var(--line-gold);color:var(--gold);font-weight:800;flex:0 0 auto">HA</span>
+        <span class="full"><b style="font-size:12px;display:block">Hardwig Aerts</b>
+          <span class="mono muted">role: ADMIN</span></span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <span class="crumb" id="crumb"></span>
+      <span class="env">staging</span>
+      <span class="scope"><span class="dot"></span>Speler: <b>hardwig</b>
+        <span class="muted mono">plr_01</span></span>
+    </header>
+    <div class="content" id="view"></div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Detail" hidden></aside>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ===== helpers ===== */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MONTH=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const NOW=new Date();
+const ago=(d,h=10,m=0)=>new Date(NOW.getFullYear(),NOW.getMonth(),NOW.getDate()-d,h,m).getTime();
+const dt=ts=>{const d=new Date(ts);return `${d.getDate()} ${MONTH[d.getMonth()]} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`};
+const day=ts=>{const d=new Date(ts);return `${d.getDate()} ${MONTH[d.getMonth()]}`};
+const rel=ts=>{const h=Math.round((Date.now()-ts)/36e5);return h<1?'net':h<24?h+' u':Math.round(h/24)+' d'};
+const Bar=(p,c='')=>`<div class="bar ${c}"><i data-w="${Math.max(0,Math.min(100,p))}"></i></div>`;
+const animate=(r=document)=>requestAnimationFrame(()=>$$('.bar i',r).forEach(i=>i.style.width=i.dataset.w+'%'));
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
+
+const CONF={TENTATIVE:'',LIKELY:'violet',CONFIRMED:'jade',EXPLICIT:'gold'};
+const IMP={LOW:'',MEDIUM:'',HIGH:'amber',CRITICAL:'coral'};
+
+/* =================================================================================
+   MOCK-DATA — spiegelt exact het domeinmodel uit NYX-ARCHITECTURE.md deel 2.
+   In de echte console komt dit uit /admin/api.ts.
+   ================================================================================= */
+const DB={
+  version:1,
+  kpi:{runs7d:412,costCents7d:938,p95:2140,errorRate:1.2,interruptsWeek:2,interruptBudget:3,
+       memoryRate:0.31,rejectRate:0.18},
+  runsSeries:[38,52,41,60,47,71,55,63,49,58,66,74,61,69],
+  costSeries:[62,84,70,101,79,118,92,105,83,97,111,124,102,116],
+
+  proposals:[
+    {id:'prp_8f21',kind:'PLAYER_MODEL_CHANGE',status:'PENDING',createdAt:ago(0,9,12),runId:'run_a19c',
+     confidence:'LIKELY',importance:'CRITICAL',
+     title:'Ownership zwaarder laten wegen',
+     rationale:'Derde keer in 6 weken dat de speler onafhankelijkheid boven inkomen plaatst. Twee bronsoorten: chat (2×) en missiegedrag (afgewezen langlopende opdracht).',
+     payload:{weights:{ownership:'1.0 → 1.4',income:'1.0 → 0.9'},requiresUserConfirmation:true},
+     evidence:['mem_2210 · 4 aug','mem_3391 · 29 aug','mis_7712 afgewezen · 11 sep']},
+    {id:'prp_8f0d',kind:'MEMORY',status:'PENDING',createdAt:ago(0,8,41),runId:'run_a17f',
+     confidence:'TENTATIVE',importance:'HIGH',
+     title:'Aantrekking tot wonen aan water',
+     rationale:'Losse uitspraak zonder termijn of bedrag. Bewust TENTATIVE gehouden; geen doel, geen chapter.',
+     payload:{domain:'PERSONAL',category:'LIFESTYLE_PREFERENCE',
+       content:'Speler voelt zich aangetrokken tot wonen dicht bij water.',
+       normalizedFact:'wil mogelijk wonen aan water',
+       quote:'Ik denk soms dat wonen aan zee geweldig zou zijn.'},
+     evidence:['msg_55021 · vandaag 08:39']},
+    {id:'prp_8e93',kind:'SIDE_QUEST',status:'PENDING',createdAt:ago(1,17,5),runId:'run_a0d2',
+     confidence:'CONFIRMED',importance:'MEDIUM',
+     title:'VOKA Geel — drie gesprekken',
+     rationale:'Omgezet uit opportunity opp_4471 na expliciete vraag van de speler. Bottleneck is netwerk; locatie ligt 900 m van een bestaande afspraak.',
+     payload:{track:'SIDE_QUEST',kind:'EVENT',xpReward:250,statReward:{key:'network',amount:3},
+       objectives:['Gastenlijst scannen','3 mensen aanspreken','1 afspraak vastleggen'],
+       evidenceRequirement:'Drie namen in Journal'},
+     evidence:['opp_4471','cal_evt_882']},
+    {id:'prp_8e44',kind:'MEMORY_REVISION',status:'PENDING',createdAt:ago(2,11,30),runId:'run_9f81',
+     confidence:'LIKELY',importance:'HIGH',
+     title:'Voorkeur consulting verliest geldigheid',
+     rationale:'Nieuwe uitspraken spreken mem_1109 tegen. Oude memory niet verwijderen: status naar SUPERSEDED, versie bewaren.',
+     payload:{supersedesMemoryId:'mem_1109',
+       content:'Speler wil geen tijd meer verkopen; voorkeur voor bezit boven opdrachten.',
+       normalizedFact:'wil bezit boven uurwerk'},
+     evidence:['mem_1109 · 14 jan','msg_54120 · 2 sep','msg_54980 · 16 sep']},
+    {id:'prp_8dd1',kind:'PATTERN',status:'APPROVED',createdAt:ago(3,9,0),runId:'run_9c40',
+     confidence:'LIKELY',importance:'HIGH',decidedBy:'USER',
+     title:'Bouwt liever dan dat hij aanspreekt',
+     rationale:'Vier observaties over 31 dagen, drie bronsoorten.',
+     payload:{relatedStats:['network','execution']},evidence:['jrn_771','jrn_802','mis_7690','msg_53880']},
+    {id:'prp_8d90',kind:'OPPORTUNITY',status:'REJECTED',createdAt:ago(4,15,20),runId:'run_9b02',
+     confidence:'TENTATIVE',importance:'LOW',decidedBy:'USER',rejectReason:'Niet relevant — crypto',
+     title:'Blockchain meetup Antwerpen',
+     rationale:'Score 58. Geen bottleneckfit, wel geografisch dichtbij.',payload:{},evidence:[]},
+    {id:'prp_8d22',kind:'CAMPAIGN_REVIEW',status:'PENDING',createdAt:ago(5,8,10),runId:'run_99aa',
+     confidence:'LIKELY',importance:'CRITICAL',
+     title:'Bottleneck heroverwegen: network → ownership',
+     rationale:'Network steeg 9 punten in 30 dagen en is niet langer de laagste hefboom ten opzichte van het chapterdoel. Ownership blijft op 52 staan sinds juni.',
+     payload:{keepBottleneck:false,proposedBottleneck:'ownership',
+       impactOnActiveMissions:[{missionId:'mis_7701',recommendation:'KEEP'},{missionId:'mis_7712',recommendation:'REFRAME'}],
+       whatStays:'The Connector blijft lopen: de relaties zijn ook onder ownership waardevol.'},
+     evidence:['stat_snap 30d','prp_8dd1','jrn_802']}
+  ],
+
+  memories:[
+    {id:'mem_3391',domain:'PERSONAL',category:'AUTONOMY',content:'Speler wil minder afhankelijk zijn van één werkgever.',
+     normalizedFact:'wil minder werkgeverafhankelijkheid',confidence:'LIKELY',importance:'CRITICAL',status:'ACTIVE',
+     obs:3,first:ago(46),last:ago(2),src:'CHAT',confirmed:false,
+     versions:[{at:ago(46),by:'AI',note:'aangemaakt als TENTATIVE'},{at:ago(19),by:'AI',note:'observatie 2 → LIKELY'},{at:ago(2),by:'AI',note:'observatie 3'}]},
+    {id:'mem_2210',domain:'PREFERENCE',category:'OWNERSHIP_BIAS',content:'Speler verkiest bezit boven betaalde opdrachten.',
+     normalizedFact:'verkiest bezit boven opdrachten',confidence:'LIKELY',importance:'HIGH',status:'ACTIVE',
+     obs:3,first:ago(45),last:ago(2),src:'CHAT',confirmed:false,versions:[{at:ago(45),by:'AI',note:'aangemaakt'}]},
+    {id:'mem_1109',domain:'PREFERENCE',category:'CAREER_DIRECTION',content:'Speler wil een consultancypraktijk uitbouwen.',
+     normalizedFact:'wil consultancypraktijk',confidence:'CONFIRMED',importance:'HIGH',status:'ACTIVE',
+     obs:5,first:ago(240),last:ago(120),src:'CHAT',confirmed:true,
+     versions:[{at:ago(240),by:'AI',note:'aangemaakt'},{at:ago(180),by:'USER',note:'bevestigd door speler'}]},
+    {id:'mem_4402',domain:'CAMPAIGN',category:'CONSTRAINT',content:'Speler mag geen JDI-klanten of -contacten benaderen zolang hij daar in dienst is.',
+     normalizedFact:'geen JDI-relaties benaderen',confidence:'EXPLICIT',importance:'CRITICAL',status:'ACTIVE',
+     obs:2,first:ago(150),last:ago(60),src:'MANUAL',confirmed:true,versions:[{at:ago(150),by:'USER',note:'handmatig ingevoerd'}]},
+    {id:'mem_5120',domain:'PREFERENCE',category:'PRICING',content:'Speler hanteert €180/u en voelt zich daar comfortabel bij.',
+     normalizedFact:'tarief 180 euro per uur',confidence:'EXPLICIT',importance:'HIGH',status:'ACTIVE',
+     obs:2,first:ago(40),last:ago(9),src:'JOURNAL',confirmed:true,versions:[{at:ago(40),by:'AI',note:'aangemaakt'}]},
+    {id:'mem_5511',domain:'RELATIONSHIP',category:'CONTACT_NEED',content:'Pieter Jan heeft een capaciteitsprobleem in productie.',
+     normalizedFact:'Pieter: capaciteit is bottleneck',confidence:'CONFIRMED',importance:'MEDIUM',status:'ACTIVE',
+     obs:2,first:ago(12),last:ago(0),src:'JOURNAL',confirmed:false,versions:[{at:ago(12),by:'AI',note:'aangemaakt'}]},
+    {id:'mem_5760',domain:'PERSONAL',category:'ENERGY_DRAIN',content:'Lange thema- en tooling-sessies putten de speler uit zonder resultaat.',
+     normalizedFact:'tooling put uit',confidence:'LIKELY',importance:'MEDIUM',status:'ACTIVE',
+     obs:4,first:ago(60),last:ago(5),src:'JOURNAL',confirmed:false,versions:[{at:ago(60),by:'AI',note:'aangemaakt'}]},
+    {id:'mem_6001',domain:'PERSONAL',category:'LOCATION',content:'Speler woont drie jaar in Heist-op-den-Berg en heeft er nog weinig lokaal netwerk.',
+     normalizedFact:'weinig lokaal netwerk in Heist',confidence:'CONFIRMED',importance:'MEDIUM',status:'ACTIVE',
+     obs:3,first:ago(90),last:ago(20),src:'CHAT',confirmed:true,versions:[{at:ago(90),by:'AI',note:'aangemaakt'}]},
+    {id:'mem_6210',domain:'STRATEGIC',category:'BOTTLENECK_NOTE',content:'Netwerk was in juli de rem op het chapterdoel.',
+     normalizedFact:'netwerk was rem in juli',confidence:'CONFIRMED',importance:'MEDIUM',status:'SUPERSEDED',
+     obs:1,first:ago(75),last:ago(75),src:'CHAT',confirmed:false,versions:[{at:ago(75),by:'AI',note:'aangemaakt'},{at:ago(3),by:'SYSTEM',note:'gesuperseded door prp_8d22'}]},
+    {id:'mem_6350',domain:'CONVERSATION_SUMMARY',category:'SUMMARY',content:'Gesprekken van augustus: prijszetting, eerste klant, twijfel over loondienst.',
+     normalizedFact:'augustus: prijs, klant, twijfel',confidence:'CONFIRMED',importance:'LOW',status:'ACTIVE',
+     obs:1,first:ago(30),last:ago(30),src:'CHAT',confirmed:false,versions:[{at:ago(30),by:'SYSTEM',note:'maandsamenvatting'}]},
+    {id:'mem_6402',domain:'PERSONAL',category:'WEATHER',content:'Het regende tijdens de rit naar Geel.',
+     normalizedFact:'regen onderweg',confidence:'TENTATIVE',importance:'LOW',status:'REJECTED',
+     obs:1,first:ago(8),last:ago(8),src:'CHAT',confirmed:false,
+     versions:[{at:ago(8),by:'AI',note:'voorgesteld'},{at:ago(8),by:'USER',note:'afgewezen: triviaal'}]}
+  ],
+
+  patterns:[
+    {id:'pat_112',title:'Bouwt liever dan dat hij aanspreekt',status:'CONFIRMED',impact:'HIGH',confidence:'LIKELY',
+     description:'Wanneer netwerk de rem is, kiest de speler consequent voor bouwen aan site, thema of tooling in plaats van contact opnemen.',
+     stats:['network','execution'],first:ago(31),last:ago(3),
+     evidence:[{t:'JOURNAL',id:'jrn_771',at:ago(31),q:'Thema herwerkt in plaats van Pieter gebeld.'},
+               {t:'JOURNAL',id:'jrn_802',at:ago(13),q:'Site live — nu content, geen tools meer bouwen.'},
+               {t:'MISSION',id:'mis_7690',at:ago(9),q:'Missie "3 contacten bellen" twee keer uitgesteld.'},
+               {t:'CHAT',id:'msg_53880',at:ago(3),q:'Ik zit weer in de code in plaats van te bellen.'}]},
+    {id:'pat_118',title:'Onafhankelijkheid boven inkomen',status:'SURFACED',impact:'CRITICAL',confidence:'LIKELY',
+     description:'Bij keuzes tussen meer inkomen en meer autonomie kiest de speler drie keer op rij autonomie, ook bij lagere opbrengst.',
+     stats:['ownership','optionality','income'],first:ago(46),last:ago(2),
+     evidence:[{t:'MEMORY',id:'mem_2210',at:ago(45),q:'verkiest bezit boven opdrachten'},
+               {t:'MEMORY',id:'mem_3391',at:ago(19),q:'wil minder werkgeverafhankelijkheid'},
+               {t:'MISSION',id:'mis_7712',at:ago(7),q:'Langlopende opdracht afgewezen.'}]},
+    {id:'pat_121',title:'Plant meer dan de week aankan',status:'OBSERVING',impact:'MEDIUM',confidence:'TENTATIVE',
+     description:'Twee observaties: aantal actieve missies stijgt terwijl afrondingsratio daalt. Onder de drempel van drie.',
+     stats:['execution'],first:ago(16),last:ago(6),
+     evidence:[{t:'MISSION',id:'mis_7702',at:ago(16),q:'5 actieve missies, 1 afgerond.'},
+               {t:'JOURNAL',id:'jrn_815',at:ago(6),q:'Te veel tegelijk begonnen deze week.'}]}
+  ],
+
+  opportunities:[
+    {id:'opp_4471',title:'VOKA netwerkevent — Geel',cat:'EVENT',src:'EVENT_FEED',status:'CONVERTED_TO_SIDE_QUEST',
+     score:91,llmAdj:+6,type:'STRATEGIC',expires:ago(-1,19,0),
+     f:{bottleneckFit:1,proximity:.95,timing:1,relationshipFit:.6,interestFit:.8,novelty:.9},
+     reasons:['Netwerk is uw huidige rem.','900 m van uw afspraak van morgen in Geel.','Drie aanwezige bedrijven passen bij uw doelsector.']},
+    {id:'opp_4488',title:'Overnamekandidaat: installatiebedrijf Westerlo',cat:'DEAL',src:'NEWS',status:'SAVED',
+     score:84,llmAdj:+9,type:'STRATEGIC',expires:ago(-21),
+     f:{bottleneckFit:.85,proximity:.7,timing:.8,relationshipFit:.4,interestFit:1,novelty:1},
+     reasons:['U opende de laatste vier overnamedossiers.','Ownership is de kandidaat-bottleneck.','Eigenaar zoekt opvolging binnen 12 maanden.']},
+    {id:'opp_4502',title:'Interview met Belgische buy-and-build ondernemer',cat:'CONTENT',src:'NEWS',status:'NEW',
+     score:68,llmAdj:-3,type:'PERSONAL_INTEREST',expires:null,
+     f:{bottleneckFit:.3,proximity:0,timing:.5,relationshipFit:0,interestFit:1,novelty:.8},
+     reasons:['Het financieringsdeel sluit aan bij uw vragen van vorige maand.','Geen actie nodig — leesmateriaal.']},
+    {id:'opp_4510',title:'UNIZO ondernemersontbijt — Heist',cat:'EVENT',src:'EVENT_FEED',status:'NEW',
+     score:77,llmAdj:0,type:'STRATEGIC',expires:ago(-9,8,0),
+     f:{bottleneckFit:.9,proximity:1,timing:.7,relationshipFit:.5,interestFit:.6,novelty:.6},
+     reasons:['Lokaal netwerk in Heist is expliciet als gat vastgelegd.','Op 2 km van thuis.']},
+    {id:'opp_4519',title:'Spreekplek: ondernemersavond Herentals',cat:'PERSON',src:'CONTACT',status:'SEEN',
+     score:72,llmAdj:+4,type:'STRATEGIC',expires:ago(-30),
+     f:{bottleneckFit:.6,proximity:.8,timing:.6,relationshipFit:.9,interestFit:.7,novelty:.7},
+     reasons:['Aangebracht via uw vader — connector naar de bredere Kempen.','Authority stijgt sneller met podium dan met posts.']},
+    {id:'opp_4530',title:'Crypto & AI meetup Antwerpen',cat:'EVENT',src:'EVENT_FEED',status:'DISMISSED',
+     score:41,llmAdj:-9,type:'PERSONAL_INTEREST',expires:ago(-4),
+     f:{bottleneckFit:.1,proximity:.6,timing:.6,relationshipFit:.1,interestFit:.15,novelty:.3},
+     reasons:['Geen link met de huidige rem.','U wees vergelijkbare events drie keer af.']}
+  ],
+
+  runs:[
+    {id:'run_a19c',svc:'PATTERN',model:'groot',pv:'PATTERN_DETECT v1',in:8420,out:410,ms:5210,cents:9.4,st:'OK',at:ago(0,9,12),
+     ctx:['mem_2210','mem_3391','mis_7712','jrn_802'],tools:[{t:'search_memory',ok:true},{t:'propose_player_model_change',ok:true}]},
+    {id:'run_a17f',svc:'EXTRACTION',model:'snel',pv:'MEMORY_EXTRACT v1',in:1180,out:96,ms:640,cents:0.3,st:'OK',at:ago(0,8,41),
+     ctx:['msg_55021'],tools:[{t:'propose_memory',ok:true}]},
+    {id:'run_a16b',svc:'CONVERSATION',model:'middel',pv:'NYX_SYSTEM v1',in:3980,out:180,ms:1820,cents:2.1,st:'OK',at:ago(0,8,39),
+     ctx:['mem_4402','mem_5120','mis_7701','chapter_1'],tools:[{t:'get_campaign_state',ok:true}]},
+    {id:'run_a141',svc:'CONVERSATION',model:'middel',pv:'NYX_SYSTEM v1',in:4210,out:92,ms:1610,cents:2.2,st:'OK',at:ago(0,7,58),ctx:['mem_5511'],tools:[]},
+    {id:'run_a0d2',svc:'MISSION_GEN',model:'middel',pv:'MISSION_GEN v1',in:2240,out:320,ms:2450,cents:1.9,st:'OK',at:ago(1,17,5),
+     ctx:['opp_4471','chapter_1'],tools:[{t:'propose_side_quest',ok:true}]},
+    {id:'run_a0b0',svc:'RANKING',model:'middel',pv:'OPPORTUNITY_RANK v1',in:6100,out:640,ms:3380,cents:3.6,st:'OK',at:ago(1,3,0),
+     ctx:['opp_4471','opp_4488','opp_4502','opp_4510'],tools:[]},
+    {id:'run_9ff2',svc:'CONVERSATION',model:'middel',pv:'NYX_SYSTEM v1',in:5120,out:0,ms:30000,cents:1.4,st:'TIMEOUT',at:ago(2,20,12),ctx:[],tools:[],
+     err:'upstream timeout na 30s — gebruiker kreeg fallbackbericht'},
+    {id:'run_9f81',svc:'EXTRACTION',model:'snel',pv:'MEMORY_EXTRACT v1',in:1340,out:128,ms:710,cents:0.3,st:'OK',at:ago(2,11,30),
+     ctx:['msg_54980','mem_1109'],tools:[{t:'propose_memory_revision',ok:true}]},
+    {id:'run_9e40',svc:'EXTRACTION',model:'snel',pv:'MEMORY_EXTRACT v1',in:980,out:24,ms:520,cents:0.2,st:'OK',at:ago(3,19,2),ctx:[],tools:[],
+     note:'geen memory — normaal resultaat'},
+    {id:'run_9c40',svc:'PATTERN',model:'groot',pv:'PATTERN_DETECT v1',in:7900,out:380,ms:4980,cents:8.8,st:'OK',at:ago(3,9,0),
+     ctx:['jrn_771','jrn_802','mis_7690','msg_53880'],tools:[{t:'create_strategic_insight',ok:false,why:'tool niet in schema — geweigerd door validatie'}]},
+    {id:'run_99aa',svc:'REVIEW',model:'groot',pv:'CAMPAIGN_REVIEW v1',in:9400,out:520,ms:6120,cents:11.2,st:'OK',at:ago(5,8,10),
+     ctx:['stat_snapshots_30d','pat_112','chapter_1'],tools:[{t:'request_campaign_review',ok:true}]}
+  ],
+
+  prompts:[
+    {id:'NYX_SYSTEM',v:'v1',svc:'CONVERSATION',changed:ago(21),evals:'8/8',tokens:'~640'},
+    {id:'MEMORY_EXTRACT',v:'v1',svc:'EXTRACTION',changed:ago(14),evals:'8/8',tokens:'~380'},
+    {id:'PATTERN_DETECT',v:'v1',svc:'PATTERN',changed:ago(9),evals:'7/8',tokens:'~290'},
+    {id:'OPPORTUNITY_RANK',v:'v1',svc:'RANKING',changed:ago(9),evals:'8/8',tokens:'~310'},
+    {id:'CAMPAIGN_REVIEW',v:'v1',svc:'REVIEW',changed:ago(30),evals:'8/8',tokens:'~260'},
+    {id:'MISSION_GEN',v:'v1',svc:'MISSION_GEN',changed:ago(30),evals:'8/8',tokens:'~240'}
+  ],
+  promptText:{
+    NYX_SYSTEM:`You are Nyx, the persistent strategic intelligence of Empire Mode.
+Address the player in Dutch, using "u". Short sentences, concrete nouns, no
+motivational language, no emoji. You never congratulate by default.
+
+WHAT YOU ARE NOT
+You are not a task generator. Most conversations end without a mission and without
+XP. Conversation comes first; structure second.
+
+WHAT YOU KNOW
+Everything is in the CONTEXT block. If it is not there, you do not know it — say so
+instead of inventing it. Mark inferences as inferences.
+
+TOOLS
+Read tools retrieve facts. Propose tools create proposals that must be approved —
+calling one changes nothing by itself. Never claim you saved something unless a tool
+result confirms it.
+
+CONTEXT
+{{context_json}}`,
+    MEMORY_EXTRACT:`You extract durable facts from one exchange. Return JSON only.
+An empty array is the normal result.
+
+Store something only if remembering it would improve future conversations six months
+from now. Never store weather, jokes, small talk or one-off moods.
+
+confidence: TENTATIVE | LIKELY | CONFIRMED | EXPLICIT
+importance: LOW | MEDIUM | HIGH | CRITICAL
+Downgrade rather than upgrade when in doubt. A wish is not a goal.
+
+KNOWN_MEMORIES: {{known_memories}}
+EXCHANGE: {{exchange}}`,
+    PATTERN_DETECT:`Report a pattern only when ALL hold: at least 3 distinct observations,
+spread over at least 14 days, from at least 2 different source types.
+
+What the player does repeatedly outweighs what he says once. Contradictions between
+the two are the most valuable finding.
+
+Write description in Dutch as an observation, not as advice. Do not propose action.
+HISTORY: {{history}}`,
+    OPPORTUNITY_RANK:`The current bottleneck stat matters more than anything else.
+Also weigh proximity to where the player will already be, expiry, time cost,
+relationships involved, and hard constraints (never surface restricted contacts).
+
+reasonsForRelevance must name concrete facts. "Netwerk is uw huidige rem" is a
+reason. "Dit is interessant" is not. Most things are not relevant.`,
+    CAMPAIGN_REVIEW:`Determine whether the current bottleneck stat is still correct.
+You change nothing; you produce a proposal. Be conservative: changing the bottleneck
+every month means it was never a bottleneck. Always state what stays and why.`,
+    MISSION_GEN:`One measurable main objective. 2-5 required objectives, each a single
+action with a visible result. Every mission requires evidence. The "why" is strategic,
+never encouraging. Never target a restricted contact.`
+  },
+
+  campaign:{
+    chapter:{roman:'I',name:'ESCAPE VELOCITY',from:0,to:100000,current:64800,status:'ACTIVE',opened:ago(210)},
+    bottleneck:{key:'network',since:ago(75),reason:'Bereik bleef binnen de bestaande cirkel; geen connectors.'},
+    history:[{key:'capital',from:ago(210),to:ago(140)},{key:'income',from:ago(140),to:ago(75)},{key:'network',from:ago(75),to:null}],
+    stats:{capital:78,income:65,ownership:52,network:86,authority:73,strategy:69,execution:61,optionality:47},
+    stats30d:{capital:3,income:2,ownership:0,network:9,authority:6,strategy:1,execution:4,optionality:-1},
+    missions:{ACTIVE:4,PROPOSED:2,COMPLETED:42,BLOCKED:1,ABANDONED:3}
+  }
+};
+
+/* ===== state + persistentie ===== */
+const KEY='empire.admin.v1';
+let ST={decisions:{}};
+try{const r=localStorage.getItem(KEY);if(r){const p=JSON.parse(r);if(p.version===DB.version)ST=p}}catch(e){}
+ST.version=DB.version; ST.decisions=ST.decisions||{};
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(ST))}catch(e){}};
+const propStatus=p=>ST.decisions[p.id]?.status||p.status;
+const pendingCount=()=>DB.proposals.filter(p=>propStatus(p)==='PENDING').length;
+</script>
+
+<script>
+/* =================================================================================
+   [4-11] WEERGAVEN
+   ================================================================================= */
+const spark=(series,color='var(--gold)')=>{
+  const max=Math.max(...series),min=Math.min(...series);
+  const pts=series.map((v,i)=>`${i*(120/(series.length-1))},${34-((v-min)/(max-min||1))*30}`).join(' ');
+  return `<svg viewBox="0 0 120 36" preserveAspectRatio="none" style="width:100%;height:36px;margin-top:8px" aria-hidden="true">
+    <polyline fill="none" stroke="${color}" stroke-width="1.6" points="${pts}"/></svg>`;
+};
+const tbl=(cols,head,rows)=>`<div class="table"><div class="thead"><div class="tr" style="grid-template-columns:${cols}">
+  ${head.map(h=>`<span class="th">${h}</span>`).join('')}</div></div>
+  ${rows.length?rows:'<div class="empty">Niets in deze selectie.</div>'}</div>`;
+
+/* --- [4] OVERVIEW --- */
+function Overview(){
+  const k=DB.kpi;
+  const kpi=(lab,val,sub,cls='')=>`<div class="card kpi"><span class="eyebrow">${lab}</span>
+    <div class="v" style="margin:6px 0 2px">${val}</div><div class="d ${cls}">${sub}</div></div>`;
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Overview</h1>
+    <span class="muted mono">laatste 7 dagen</span></div>
+  <div class="grid g4">
+    ${kpi('AI-runs',k.runs7d,'+14% t.o.v. vorige week','up')}
+    ${kpi('Kosten','€'+(k.costCents7d/100).toFixed(2),'€0,13 per gesprek','muted')}
+    ${kpi('p95-latentie',(k.p95/1000).toFixed(1)+' s','doel < 2,5 s','up')}
+    ${kpi('Foutratio',k.errorRate+'%','1 timeout, 4 retries','muted')}
+  </div>
+
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><span class="eyebrow">Runs per dag</span>${spark(DB.runsSeries)}
+      <div class="mono muted" style="margin-top:4px">14 dagen · piek 74</div></div>
+    <div class="card"><span class="eyebrow">Kosten per dag (cent)</span>${spark(DB.costSeries,'var(--amber)')}
+      <div class="mono muted" style="margin-top:4px">14 dagen · piek €1,24</div></div>
+  </div>
+
+  <div class="grid g3" style="margin-top:12px">
+    <button class="card gold" data-go="proposals" style="text-align:left">
+      <span class="eyebrow">Wacht op beslissing</span>
+      <div class="kpi"><div class="v" style="margin:6px 0 8px;color:var(--gold-soft)">${pendingCount()}</div></div>
+      <div class="mono muted">2 kritiek · 1 raakt het Player Model</div>
+    </button>
+    <div class="card"><span class="eyebrow">Interruptbudget</span>
+      <div class="kpi"><div class="v" style="margin:6px 0 8px">${DB.kpi.interruptsWeek} / ${DB.kpi.interruptBudget}</div></div>
+      ${Bar(DB.kpi.interruptsWeek/DB.kpi.interruptBudget*100,'jade')}
+      <div class="mono muted" style="margin-top:6px">deze week · max 1 per dag</div></div>
+    <div class="card"><span class="eyebrow">Gezondheid van de extractie</span>
+      <div style="display:grid;gap:9px;margin-top:9px">
+        <div><div class="mono muted" style="margin-bottom:4px">Turns met memory · ${Math.round(k.memoryRate*100)}% (doel &lt; 40%)</div>${Bar(k.memoryRate*100,'jade')}</div>
+        <div><div class="mono muted" style="margin-bottom:4px">Afgewezen proposals · ${Math.round(k.rejectRate*100)}% (doel &lt; 30%)</div>${Bar(k.rejectRate*100,'jade')}</div>
+      </div></div>
+  </div>
+
+  <div class="head" style="margin:22px 0 12px"><h2 class="display" style="font-size:15px">Laatste runs</h2>
+    <button class="btn sm" data-go="runs">Alles bekijken</button></div>
+  ${tbl('90px 110px 1fr 84px 76px 70px',['Run','Service','Prompt','Tokens','Latentie','Status'],
+    DB.runs.slice(0,5).map(r=>runRow(r)).join(''))}`;
+}
+
+/* --- [5] PROPOSALS --- */
+const KIND_TAG={MEMORY:'',MEMORY_REVISION:'violet',PATTERN:'violet',SIDE_QUEST:'gold',
+  MAIN_QUEST_CHANGE:'amber',CAMPAIGN_REVIEW:'coral',PLAYER_MODEL_CHANGE:'coral',OPPORTUNITY:'jade'};
+function Proposals(){
+  const f=ST.pf||'PENDING';
+  const list=DB.proposals.filter(p=>f==='ALL'||propStatus(p)===f);
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Proposal queue</h1>
+    <span class="muted" style="max-width:420px;text-align:right">Elke AI-schrijfactie komt hier eerst langs. Niets in het domein verandert zonder een beslissing op deze pagina.</span></div>
+  <div class="chiprow" style="margin-bottom:12px">
+    ${['PENDING','APPROVED','REJECTED','ALL'].map(k=>`<button class="chip" aria-pressed="${f===k}"
+      data-act="pf" data-v="${k}">${k==='ALL'?'Alles':k.toLowerCase()} <span class="mono">${
+      k==='ALL'?DB.proposals.length:DB.proposals.filter(p=>propStatus(p)===k).length}</span></button>`).join('')}
+  </div>
+  ${tbl('1fr 132px 96px 92px 86px',['Voorstel','Soort','Zekerheid','Belang','Leeftijd'],
+    list.map(p=>{const s=propStatus(p);return `<button class="tr" style="grid-template-columns:1fr 132px 96px 92px 86px"
+      data-act="open" data-t="prp" data-id="${p.id}">
+      <span><span class="td-main">${esc(p.title)}</span>
+        <span class="td-sub">${esc(p.rationale.slice(0,86))}…</span></span>
+      <span><span class="tag ${KIND_TAG[p.kind]||''}">${p.kind}</span></span>
+      <span><span class="tag ${CONF[p.confidence]}">${p.confidence}</span></span>
+      <span><span class="tag ${IMP[p.importance]}">${p.importance}</span></span>
+      <span class="mono muted">${rel(p.createdAt)}${s!=='PENDING'?' · '+s.toLowerCase():''}</span>
+    </button>`}).join(''))}`;
+}
+
+/* --- [6] MEMORY --- */
+function Memory(){
+  const f=ST.mf||'ALL';
+  const list=DB.memories.filter(m=>f==='ALL'||m.domain===f);
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Memory inspector</h1>
+    <span class="muted mono">${DB.memories.filter(m=>m.status==='ACTIVE').length} actief · ${DB.memories.length} totaal</span></div>
+  <div class="chiprow" style="margin-bottom:12px">
+    ${['ALL','PERSONAL','PREFERENCE','STRATEGIC','RELATIONSHIP','CAMPAIGN','CONVERSATION_SUMMARY'].map(k=>
+      `<button class="chip" aria-pressed="${f===k}" data-act="mf" data-v="${k}">${k==='ALL'?'Alle domeinen':k.toLowerCase()}</button>`).join('')}
+  </div>
+  ${tbl('1fr 150px 96px 92px 76px 62px',['Memory','Domein / categorie','Zekerheid','Belang','Status','Obs.'],
+    list.map(m=>`<button class="tr" style="grid-template-columns:1fr 150px 96px 92px 76px 62px"
+      data-act="open" data-t="mem" data-id="${m.id}">
+      <span><span class="td-main">${esc(m.content)}</span>
+        <span class="td-sub mono">${m.id} · ${esc(m.normalizedFact)}</span></span>
+      <span><span class="td-sub">${m.domain}<br>${esc(m.category)}</span></span>
+      <span><span class="tag ${CONF[m.confidence]}">${m.confidence}</span></span>
+      <span><span class="tag ${IMP[m.importance]}">${m.importance}</span></span>
+      <span class="mono ${m.status==='ACTIVE'?'':'muted'}">${m.status.slice(0,10)}</span>
+      <span class="mono muted">${m.obs}×</span>
+    </button>`).join(''))}`;
+}
+
+/* --- [7] PATTERNS --- */
+function Patterns(){
+  const ST_TAG={OBSERVING:'',SURFACED:'amber',CONFIRMED:'jade',DISMISSED:'',RESOLVED:'violet'};
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Strategic patterns</h1>
+    <span class="muted" style="max-width:430px;text-align:right">Drempel: minstens 3 observaties, 14 dagen spreiding, 2 bronsoorten. Daaronder blijft een patroon onzichtbaar voor de speler.</span></div>
+  <div class="grid" style="gap:12px">
+    ${DB.patterns.map(p=>`<button class="card" style="text-align:left" data-act="open" data-t="pat" data-id="${p.id}">
+      <div class="head" style="margin-bottom:8px">
+        <h3 style="font-size:14.5px">${esc(p.title)}</h3>
+        <span style="display:flex;gap:6px">
+          <span class="tag ${ST_TAG[p.status]}">${p.status}</span>
+          <span class="tag ${p.impact==='CRITICAL'?'coral':p.impact==='HIGH'?'amber':''}">impact ${p.impact}</span>
+          <span class="tag ${CONF[p.confidence]}">${p.confidence}</span></span>
+      </div>
+      <p class="muted" style="margin:0 0 10px;font-size:12.5px">${esc(p.description)}</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        <span class="mono muted">${p.evidence.length} bewijsstukken · ${day(p.first)} → ${day(p.last)} ·</span>
+        ${p.stats.map(s=>`<span class="tag">${s}</span>`).join('')}
+        <span class="mono ${p.evidence.length>=3?'up':'muted'}" style="margin-left:auto">
+          ${p.evidence.length>=3?'drempel gehaald':'onder drempel ('+p.evidence.length+'/3)'}</span>
+      </div>
+    </button>`).join('')}
+  </div>`;
+}
+
+/* --- [8] RADAR --- */
+const FKEY={bottleneckFit:'Bottleneck',proximity:'Nabijheid',timing:'Timing',
+  relationshipFit:'Relatie',interestFit:'Interesse',novelty:'Nieuw'};
+function Radar(){
+  const f=ST.of||'ALL';
+  const list=DB.opportunities.filter(o=>f==='ALL'||o.status===f).sort((a,b)=>b.score-a.score);
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Opportunity radar</h1>
+    <span class="muted" style="max-width:420px;text-align:right">Score is deterministisch (deel 6.1). De LLM mag hem met maximaal ±15 bijstellen en moet dat motiveren.</span></div>
+  <div class="chiprow" style="margin-bottom:12px">
+    ${['ALL','NEW','SEEN','SAVED','CONVERTED_TO_SIDE_QUEST','DISMISSED'].map(k=>
+      `<button class="chip" aria-pressed="${f===k}" data-act="of" data-v="${k}">${k==='ALL'?'Alles':k.toLowerCase().replace(/_/g,' ')}</button>`).join('')}
+  </div>
+  ${tbl('58px 1fr 120px 132px 104px',['Score','Opportunity','Type','Status','Verloopt'],
+    list.map(o=>`<button class="tr" style="grid-template-columns:58px 1fr 120px 132px 104px"
+      data-act="open" data-t="opp" data-id="${o.id}">
+      <span class="display" style="font-size:19px;color:${o.score>=80?'var(--gold-soft)':o.score>=60?'var(--ivory)':'var(--ink-3)'}">${o.score}</span>
+      <span><span class="td-main">${esc(o.title)}</span>
+        <span class="td-sub">${esc(o.reasons[0])}</span></span>
+      <span><span class="tag ${o.type==='STRATEGIC'?'gold':'violet'}">${o.type==='STRATEGIC'?'strategisch':'interesse'}</span></span>
+      <span class="mono muted">${o.status.toLowerCase().replace(/_/g,' ')}</span>
+      <span class="mono muted">${o.expires?day(o.expires):'—'}</span>
+    </button>`).join(''))}`;
+}
+
+/* --- [9] CAMPAIGN --- */
+function Campaign(){
+  const c=DB.campaign, pct=c.chapter.current/c.chapter.to*100;
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Campaign</h1>
+    <span class="muted mono">campaign_01 · chapter ${c.chapter.roman}</span></div>
+  <div class="grid g2">
+    <div class="card gold">
+      <span class="eyebrow">Actief hoofdstuk</span>
+      <h2 class="display" style="font-size:24px;margin:7px 0 10px">${c.chapter.name}</h2>
+      ${Bar(pct)}
+      <div style="display:flex;justify-content:space-between;margin-top:7px" class="mono">
+        <span class="muted">€0</span><span style="color:var(--gold-soft)">€${c.chapter.current.toLocaleString('nl-BE')}</span><span class="muted">€100.000</span></div>
+      <div class="mono muted" style="margin-top:10px">geopend ${day(c.chapter.opened)} · exit bij eerste €10K-maand</div>
+    </div>
+    <div class="card">
+      <span class="eyebrow">Bottleneck</span>
+      <h2 class="display" style="font-size:24px;margin:7px 0 6px">${c.bottleneck.key}</h2>
+      <p class="muted" style="margin:0 0 10px;font-size:12.5px">${esc(c.bottleneck.reason)}</p>
+      <ul class="tl">${c.history.map(h=>`<li><b class="mono">${h.key}</b>
+        <span class="mono muted"> · ${day(h.from)} → ${h.to?day(h.to):'nu'}</span></li>`).join('')}</ul>
+      <div class="tag coral" style="margin-top:8px">1 reviewvoorstel open</div>
+    </div>
+  </div>
+
+  <div class="head" style="margin:22px 0 12px"><h2 class="display" style="font-size:15px">Stats en verschuiving (30 d)</h2></div>
+  <div class="card">
+    ${Object.entries(c.stats).map(([k,v])=>{const d=c.stats30d[k];
+      return `<div style="display:grid;grid-template-columns:110px 1fr 46px 56px;gap:12px;align-items:center;padding:7px 0">
+        <span class="eyebrow" style="font-size:10px">${k}</span>
+        ${Bar(v,k==='optionality'?'coral':'')}
+        <span class="mono" style="text-align:right">${v}</span>
+        <span class="mono ${d>0?'up':d<0?'down':'muted'}" style="text-align:right">${d>0?'+':''}${d}</span>
+      </div>`}).join('')}
+  </div>
+
+  <div class="head" style="margin:22px 0 12px"><h2 class="display" style="font-size:15px">Missies per status</h2></div>
+  <div class="grid g5">${Object.entries(c.missions).map(([k,v])=>`<div class="card kpi">
+    <span class="eyebrow">${k}</span><div class="v" style="margin-top:6px">${v}</div></div>`).join('')}</div>`;
+}
+
+/* --- [10] RUNS --- */
+const SVC_TAG={CONVERSATION:'',EXTRACTION:'violet',PATTERN:'amber',RANKING:'jade',REVIEW:'coral',MISSION_GEN:'gold'};
+function runRow(r){
+  return `<button class="tr" style="grid-template-columns:90px 110px 1fr 84px 76px 70px"
+    data-act="open" data-t="run" data-id="${r.id}">
+    <span class="mono">${r.id}</span>
+    <span><span class="tag ${SVC_TAG[r.svc]}">${r.svc}</span></span>
+    <span><span class="td-main mono" style="font-weight:400">${r.pv}</span>
+      <span class="td-sub">${dt(r.at)} · model: ${r.model}</span></span>
+    <span class="mono muted">${(r.in/1000).toFixed(1)}k / ${r.out}</span>
+    <span class="mono ${r.ms>4000?'muted':''}">${(r.ms/1000).toFixed(1)} s</span>
+    <span class="mono ${r.st==='OK'?'up':'down'}">${r.st}</span>
+  </button>`;
+}
+function Runs(){
+  const f=ST.rf||'ALL';
+  const list=DB.runs.filter(r=>f==='ALL'||r.svc===f);
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">AI runs</h1>
+    <span class="muted" style="max-width:400px;text-align:right">Elke LLM-aanroep met contextpakket, tool calls en kosten. Dit scherm gebruik je het vaakst bij het debuggen van gedrag.</span></div>
+  <div class="chiprow" style="margin-bottom:12px">
+    ${['ALL','CONVERSATION','EXTRACTION','PATTERN','RANKING','REVIEW','MISSION_GEN'].map(k=>
+      `<button class="chip" aria-pressed="${f===k}" data-act="rf" data-v="${k}">${k==='ALL'?'Alle services':k.toLowerCase()}</button>`).join('')}
+  </div>
+  ${tbl('90px 110px 1fr 84px 76px 70px',['Run','Service','Prompt','Tokens in/uit','Latentie','Status'],
+    list.map(runRow).join(''))}`;
+}
+
+/* --- [11] PROMPTS --- */
+function Prompts(){
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Prompt register</h1>
+    <button class="btn gold" data-act="evals">Evalsuite draaien</button></div>
+  <p class="muted" style="margin:0 0 14px;max-width:640px">Wijzig nooit een prompt zonder het versienummer te verhogen. De acht acceptatiescenario's draaien bij elke wijziging; een gezakte eval blokkeert de deploy.</p>
+  ${tbl('1fr 130px 70px 104px 90px',['Prompt','Service','Versie','Evals','Gewijzigd'],
+    DB.prompts.map(p=>`<button class="tr" style="grid-template-columns:1fr 130px 70px 104px 90px"
+      data-act="open" data-t="pmt" data-id="${p.id}">
+      <span><span class="td-main mono" style="font-weight:600">${p.id}</span>
+        <span class="td-sub">${p.tokens} tokens systeemprompt</span></span>
+      <span><span class="tag ${SVC_TAG[p.svc]}">${p.svc}</span></span>
+      <span class="mono">${p.v}</span>
+      <span class="mono ${p.evals==='8/8'?'up':'down'}">${p.evals}</span>
+      <span class="mono muted">${day(p.changed)}</span>
+    </button>`).join(''))}`;
+}
+</script>
+
+<script>
+/* =================================================================================
+   DRAWER — detail per entiteit
+   ================================================================================= */
+const dEl=$('#drawer'), sEl=$('#scrim');
+function openDrawer(html,label){
+  dEl.setAttribute('aria-label',label||'Detail'); dEl.innerHTML=html;
+  dEl.hidden=false; sEl.hidden=false;
+  requestAnimationFrame(()=>{sEl.classList.add('open');dEl.classList.add('open');animate(dEl)});
+}
+function closeDrawer(){
+  dEl.classList.remove('open'); sEl.classList.remove('open');
+  setTimeout(()=>{dEl.hidden=true;sEl.hidden=true;dEl.innerHTML=''},220);
+  $$('.tr.sel').forEach(t=>t.classList.remove('sel'));
+}
+const dHead=(eyebrow,title,tags='')=>`<div class="dh">
+  <div style="flex:1"><span class="eyebrow">${eyebrow}</span>
+    <h2 style="font-size:16px;margin:5px 0 7px;line-height:1.3">${esc(title)}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${tags}</div></div>
+  <button class="btn sm" data-act="close">Sluiten</button></div>`;
+
+function drawerProposal(id){
+  const p=DB.proposals.find(x=>x.id===id), s=propStatus(p);
+  const dec=ST.decisions[p.id];
+  openDrawer(dHead('Proposal · '+p.id,p.title,
+    `<span class="tag ${KIND_TAG[p.kind]||''}">${p.kind}</span>
+     <span class="tag ${CONF[p.confidence]}">${p.confidence}</span>
+     <span class="tag ${IMP[p.importance]}">${p.importance}</span>
+     <span class="tag ${s==='PENDING'?'amber':s==='APPROVED'?'jade':''}">${s}</span>`)+
+  `<div class="db">
+    <dl class="kv">
+      <dt>Aangemaakt</dt><dd>${dt(p.createdAt)}</dd>
+      <dt>Bron-run</dt><dd><button class="mono" style="color:var(--gold-soft)" data-act="open" data-t="run" data-id="${p.runId}">${p.runId}</button></dd>
+      <dt>Beslist door</dt><dd class="mono">${dec?.by||p.decidedBy||'—'}</dd>
+    </dl>
+    <div class="block"><span class="eyebrow">Motivering van Nyx</span>
+      <p class="quote" style="margin:0">${esc(p.rationale)}</p></div>
+    <div class="block"><span class="eyebrow">Payload (gevalideerd met zod)</span>
+      <pre class="code">${esc(JSON.stringify(p.payload,null,2))}</pre></div>
+    ${p.evidence.length?`<div class="block"><span class="eyebrow">Bewijs</span>
+      <ul class="tl">${p.evidence.map(e=>`<li class="mono">${esc(e)}</li>`).join('')}</ul></div>`:''}
+    ${dec?.reason?`<div class="block"><span class="eyebrow">Reden van afwijzing</span><p style="margin:0">${esc(dec.reason)}</p></div>`:''}
+    ${p.kind==='PLAYER_MODEL_CHANGE'?`<div class="block"><span class="eyebrow">Let op</span>
+      <p style="margin:0;color:var(--amber)">Dit voorstel wijzigt de weging van het Player Model. Volgens deel 6.5 vereist dat naast uw goedkeuring ook een expliciete bevestiging van de speler in de app.</p></div>`:''}
+  </div>
+  ${s==='PENDING'?`<div class="df">
+    <button class="btn gold" style="flex:1" data-act="approve" data-id="${p.id}">Goedkeuren</button>
+    <button class="btn danger" data-act="reject" data-id="${p.id}">Afwijzen</button></div>`:
+   `<div class="df"><button class="btn" style="flex:1" data-act="undo" data-id="${p.id}">Beslissing terugdraaien</button></div>`}`,
+  'Proposal '+p.id);
+}
+
+function drawerMemory(id){
+  const m=DB.memories.find(x=>x.id===id);
+  const rejected=ST.decisions['mem:'+m.id]?.status==='REJECTED'||m.status==='REJECTED';
+  openDrawer(dHead('Memory · '+m.id,m.content,
+    `<span class="tag">${m.domain}</span><span class="tag">${esc(m.category)}</span>
+     <span class="tag ${CONF[m.confidence]}">${m.confidence}</span>
+     <span class="tag ${IMP[m.importance]}">${m.importance}</span>
+     <span class="tag ${rejected?'coral':m.status==='ACTIVE'?'jade':''}">${rejected?'REJECTED':m.status}</span>`)+
+  `<div class="db">
+    <dl class="kv">
+      <dt>Normalized</dt><dd class="mono">${esc(m.normalizedFact)}</dd>
+      <dt>Observaties</dt><dd>${m.obs}×</dd>
+      <dt>Eerst gezien</dt><dd>${dt(m.first)}</dd>
+      <dt>Laatst gezien</dt><dd>${dt(m.last)}</dd>
+      <dt>Bron</dt><dd class="mono">${m.src}</dd>
+      <dt>Bevestigd</dt><dd>${m.confirmed?'door de speler':'nee — afgeleid'}</dd>
+    </dl>
+    <div class="block"><span class="eyebrow">Versiehistorie (append-only)</span>
+      <ul class="tl">${m.versions.map(v=>`<li><b class="mono">${v.by}</b>
+        <span class="mono muted"> · ${dt(v.at)}</span><br><span class="muted">${esc(v.note)}</span></li>`).join('')}</ul></div>
+    <div class="block"><span class="eyebrow">Gebruikt in context</span>
+      <p class="muted" style="margin:0">Meegestuurd in ${DB.runs.filter(r=>r.ctx.includes(m.id)).length} run(s) de afgelopen week.
+      Retrieval-gewicht: importance × confidence × recency.</p></div>
+  </div>
+  <div class="df">
+    <button class="btn" style="flex:1" data-act="tbd">Corrigeren</button>
+    <button class="btn danger" data-act="memwrong" data-id="${m.id}">Markeer als fout</button></div>`,
+  'Memory '+m.id);
+}
+
+function drawerPattern(id){
+  const p=DB.patterns.find(x=>x.id===id);
+  openDrawer(dHead('Pattern · '+p.id,p.title,
+    `<span class="tag">${p.status}</span><span class="tag ${p.impact==='CRITICAL'?'coral':'amber'}">impact ${p.impact}</span>
+     <span class="tag ${CONF[p.confidence]}">${p.confidence}</span>`)+
+  `<div class="db">
+    <p class="quote">${esc(p.description)}</p>
+    <dl class="kv" style="margin-top:14px">
+      <dt>Eerst gezien</dt><dd>${dt(p.first)}</dd>
+      <dt>Laatst gezien</dt><dd>${dt(p.last)}</dd>
+      <dt>Spreiding</dt><dd>${Math.round((p.last-p.first)/864e5)} dagen ${Math.round((p.last-p.first)/864e5)>=14?'✓':'— onder de 14'}</dd>
+      <dt>Bronsoorten</dt><dd>${new Set(p.evidence.map(e=>e.t)).size} ${new Set(p.evidence.map(e=>e.t)).size>=2?'✓':'— onder de 2'}</dd>
+      <dt>Stats</dt><dd>${p.stats.join(', ')}</dd>
+    </dl>
+    <div class="block"><span class="eyebrow">Bewijsketen</span>
+      <ul class="tl">${p.evidence.map(e=>`<li><span class="tag">${e.t}</span>
+        <span class="mono muted"> ${e.id} · ${day(e.at)}</span>
+        <p style="margin:5px 0 0" class="muted">“${esc(e.q)}”</p></li>`).join('')}</ul></div>
+    ${p.status==='OBSERVING'?`<div class="block"><span class="eyebrow">Zichtbaarheid</span>
+      <p style="margin:0" class="muted">Dit patroon is nog niet aan de speler getoond. Onder de drempel blijft het observerend — één gesprek is nooit een patroon.</p></div>`:''}
+  </div>`,'Pattern '+p.id);
+}
+
+function drawerOpportunity(id){
+  const o=DB.opportunities.find(x=>x.id===id);
+  const W={bottleneckFit:.35,proximity:.20,timing:.15,relationshipFit:.15,interestFit:.10,novelty:.05};
+  const base=Math.round(Object.entries(o.f).reduce((s,[k,v])=>s+v*W[k],0)*100);
+  openDrawer(dHead('Opportunity · '+o.id,o.title,
+    `<span class="tag ${o.type==='STRATEGIC'?'gold':'violet'}">${o.type}</span>
+     <span class="tag">${o.cat}</span><span class="tag">${o.src}</span>
+     <span class="tag">${o.status.replace(/_/g,' ')}</span>`)+
+  `<div class="db">
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
+      <span class="display" style="font-size:32px;color:var(--gold-soft)">${o.score}</span>
+      <span class="mono muted">= ${base} formule ${o.llmAdj>=0?'+':''}${o.llmAdj} LLM-bijstelling (max ±15)</span>
+    </div>
+    <div class="block" style="border:0;padding-top:0"><span class="eyebrow">Scoreopbouw</span>
+      ${Object.entries(o.f).map(([k,v])=>`
+        <div style="display:grid;grid-template-columns:96px 1fr 62px;gap:10px;align-items:center;padding:5px 0">
+          <span class="mono muted">${FKEY[k]}</span>${Bar(v*100,k==='bottleneckFit'?'':'violet')}
+          <span class="mono" style="text-align:right">${(v*100).toFixed(0)} × ${W[k]}</span></div>`).join('')}
+    </div>
+    <div class="block"><span class="eyebrow">Waarom relevant (getoond aan de speler)</span>
+      <ul class="tl">${o.reasons.map(r=>`<li>${esc(r)}</li>`).join('')}</ul></div>
+    <dl class="kv" style="margin-top:14px">
+      <dt>Verloopt</dt><dd>${o.expires?dt(o.expires):'geen vervaldatum'}</dd>
+      <dt>Signalen</dt><dd class="mono">${o.status==='DISMISSED'?'DISMISSED −4 op categorie':o.status==='SAVED'?'SAVED +3':o.status==='CONVERTED_TO_SIDE_QUEST'?'CONVERTED +5':'—'}</dd>
+    </dl>
+  </div>
+  <div class="df">
+    <button class="btn" style="flex:1" data-act="tbd">Naar side quest</button>
+    <button class="btn danger" data-act="dismissopp" data-id="${o.id}">Afwijzen</button></div>`,
+  'Opportunity '+o.id);
+}
+
+function drawerRun(id){
+  const r=DB.runs.find(x=>x.id===id); if(!r) return;
+  openDrawer(dHead('Run · '+r.id,r.pv,
+    `<span class="tag ${SVC_TAG[r.svc]}">${r.svc}</span><span class="tag">model: ${r.model}</span>
+     <span class="tag ${r.st==='OK'?'jade':'coral'}">${r.st}</span>`)+
+  `<div class="db">
+    <dl class="kv">
+      <dt>Tijdstip</dt><dd>${dt(r.at)}</dd>
+      <dt>Tokens</dt><dd class="mono">${r.in.toLocaleString('nl-BE')} in · ${r.out} uit</dd>
+      <dt>Latentie</dt><dd class="mono">${r.ms.toLocaleString('nl-BE')} ms</dd>
+      <dt>Kosten</dt><dd class="mono">€${(r.cents/100).toFixed(3)}</dd>
+    </dl>
+    ${r.err?`<div class="block"><span class="eyebrow">Fout</span><p style="margin:0;color:var(--coral)">${esc(r.err)}</p></div>`:''}
+    ${r.note?`<div class="block"><span class="eyebrow">Resultaat</span><p style="margin:0" class="muted">${esc(r.note)}</p></div>`:''}
+    <div class="block"><span class="eyebrow">Contextpakket (${r.ctx.length} referenties)</span>
+      ${r.ctx.length?`<div class="chiprow">${r.ctx.map(c=>`<span class="tag mono">${c}</span>`).join('')}</div>
+      <p class="muted" style="margin:9px 0 0">Alleen deze rijen gingen mee. Nooit de volledige database, nooit de volledige geschiedenis.</p>`
+      :'<p class="muted" style="margin:0">Geen context meegestuurd.</p>'}</div>
+    <div class="block"><span class="eyebrow">Tool calls</span>
+      ${r.tools.length?`<ul class="tl">${r.tools.map(t=>`<li><b class="mono">${t.t}</b>
+        <span class="tag ${t.ok?'jade':'coral'}" style="margin-left:6px">${t.ok?'geaccepteerd':'geweigerd'}</span>
+        ${t.why?`<p class="muted" style="margin:5px 0 0">${esc(t.why)}</p>`:''}</li>`).join('')}</ul>`
+      :'<p class="muted" style="margin:0">Geen tools aangeroepen.</p>'}</div>
+  </div>`,'Run '+r.id);
+}
+
+function drawerPrompt(id){
+  const p=DB.prompts.find(x=>x.id===id);
+  openDrawer(dHead('Prompt · '+p.id,p.id+' '+p.v,
+    `<span class="tag ${SVC_TAG[p.svc]}">${p.svc}</span>
+     <span class="tag ${p.evals==='8/8'?'jade':'coral'}">evals ${p.evals}</span>`)+
+  `<div class="db">
+    <dl class="kv"><dt>Laatst gewijzigd</dt><dd>${dt(p.changed)}</dd>
+      <dt>Grootte</dt><dd class="mono">${p.tokens} tokens</dd>
+      <dt>Gebruikt in</dt><dd class="mono">${DB.runs.filter(r=>r.pv.startsWith(p.id)).length} runs (7 d)</dd></dl>
+    <div class="block"><span class="eyebrow">Inhoud</span>
+      <pre class="code" style="max-height:420px">${esc(DB.promptText[p.id]||'')}</pre></div>
+    ${p.evals!=='8/8'?`<div class="block"><span class="eyebrow">Gezakte eval</span>
+      <p style="margin:0;color:var(--coral)">Scenario 3 (herhaald signaal): patroon werd bij 2 observaties al opgeworpen. Drempel niet gerespecteerd.</p></div>`:''}
+  </div>
+  <div class="df"><button class="btn" style="flex:1" data-act="tbd">Nieuwe versie openen</button>
+    <button class="btn gold" data-act="evals">Evals draaien</button></div>`,'Prompt '+p.id);
+}
+
+/* =================================================================================
+   ROUTER + EVENTS
+   ================================================================================= */
+const VIEWS=[
+  ['overview','Overview',Overview,()=>''],
+  ['proposals','Proposals',Proposals,()=>pendingCount()],
+  ['memory','Memory',Memory,()=>DB.memories.filter(m=>m.status==='ACTIVE').length],
+  ['patterns','Patterns',Patterns,()=>DB.patterns.length],
+  ['radar','Opportunity radar',Radar,()=>DB.opportunities.filter(o=>o.status==='NEW').length],
+  ['campaign','Campaign',Campaign,()=>''],
+  ['runs','AI runs',Runs,()=>''],
+  ['prompts','Prompts',Prompts,()=>'']
+];
+function renderNav(active){
+  $('#nav').innerHTML=VIEWS.map(([k,l,,c])=>{
+    const n=c(); const hot=(k==='proposals'&&n>0);
+    return `<button class="navlink" data-go="${k}" ${active===k?'aria-current="page"':''}>
+      <span>${l}</span>${n!==''?`<span class="c ${hot?'hot':''}">${n}</span>`:''}</button>`}).join('');
+}
+function route(){return (location.hash||'#overview').slice(1)}
+function render(){
+  const k=route(), v=VIEWS.find(x=>x[0]===k)||VIEWS[0];
+  $('#view').innerHTML=v[2]();
+  $('#crumb').innerHTML=`Operations <span class="muted">/</span> <b>${v[1]}</b>`;
+  renderNav(v[0]); animate($('#view')); window.scrollTo({top:0});
+}
+document.addEventListener('click',e=>{
+  const go=e.target.closest('[data-go]'), act=e.target.closest('[data-act]');
+  if(act){e.stopPropagation();return handle(act)}
+  if(go){location.hash='#'+go.dataset.go}
+});
+sEl.addEventListener('click',closeDrawer);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
+
+function handle(el){
+  const a=el.dataset.act, id=el.dataset.id;
+  switch(a){
+    case 'pf': ST.pf=el.dataset.v; render(); break;
+    case 'mf': ST.mf=el.dataset.v; render(); break;
+    case 'of': ST.of=el.dataset.v; render(); break;
+    case 'rf': ST.rf=el.dataset.v; render(); break;
+    case 'open': {
+      $$('.tr.sel').forEach(t=>t.classList.remove('sel'));
+      el.closest('.tr')&&el.closest('.tr').classList.add('sel');
+      const t=el.dataset.t;
+      ({prp:drawerProposal,mem:drawerMemory,pat:drawerPattern,
+        opp:drawerOpportunity,run:drawerRun,pmt:drawerPrompt}[t]||(()=>{}))(id);
+      break;
+    }
+    case 'close': closeDrawer(); break;
+    case 'approve':
+      ST.decisions[id]={status:'APPROVED',by:'ADMIN',at:Date.now()}; save(); closeDrawer(); render();
+      toast('Goedgekeurd — mutatie uitgevoerd via het domein'); break;
+    case 'reject':
+      ST.decisions[id]={status:'REJECTED',by:'ADMIN',at:Date.now(),reason:'Handmatig afgewezen in de console'};
+      save(); closeDrawer(); render(); toast('Afgewezen — niets gemuteerd'); break;
+    case 'undo': delete ST.decisions[id]; save(); closeDrawer(); render(); toast('Terug naar PENDING'); break;
+    case 'memwrong':
+      ST.decisions['mem:'+id]={status:'REJECTED'}; save(); closeDrawer();
+      toast('Gemarkeerd als fout — versie bewaard, niets verwijderd'); break;
+    case 'dismissopp': closeDrawer(); toast('Afgewezen — signaal −4 op deze categorie'); break;
+    case 'evals': {
+      toast('Evalsuite draait…');
+      setTimeout(()=>toast('8 scenario\'s · 8 geslaagd · 42 s'),1600); break;
+    }
+    case 'tbd': toast('Niet in het prototype — zie deel 12 van het architectuurdocument'); break;
+  }
+}
+window.addEventListener('hashchange',render);
+if(!location.hash) location.hash='#overview';
+render();
+</script>
+
+<script>
+/* =================================================================================
+   [12] PERSONA — src/admin/views/Persona.tsx + src/ai/persona/PersonaCompiler.ts
+   De schuifregelaars zijn geen decoratie: ze compileren live naar de systeemprompt
+   rechts. Dezelfde pure functie draait server-side (deel 10.2 van het document).
+   ================================================================================= */
+const PERSONA_SEED={
+  id:'per_01', version:4, status:'ACTIVE', name:'Nyx',
+  role:'Mission Control — persistente strategische intelligentie van Empire Mode',
+  language:'nl-BE', address:'u',
+  voice:{directness:82,warmth:34,dryness:62,brevity:76,challenge:58,formality:56},
+  rules:{noEmoji:true,noExclamation:true,noDefaultPraise:true,noUnpromptedMissions:true,
+         markInference:true,admitUnknown:true,maxOneQuestion:true},
+  banned:['geweldig','fantastisch','samen gaan we','laten we erin duiken','als AI','u kunt dit'],
+  preferred:['rem','hefboom','bewijs','marge','beweging','kost'],
+  modes:{COMPANION:{len:'2-4 zinnen',pro:'LAAG',tools:'GEEN'},
+         ADVISOR:{len:'4-8 zinnen',pro:'MIDDEN',tools:'READ'},
+         MISSION_CONTROL:{len:'3-6 zinnen',pro:'HOOG',tools:'READ_PROPOSE'},
+         DEBRIEF:{len:'6-12 zinnen',pro:'LAAG',tools:'READ'},
+         OPPORTUNITY:{len:'2-4 zinnen',pro:'MIDDEN',tools:'READ_PROPOSE'}},
+  avatarAssetId:'ast_nyx_01'
+};
+const VOICE_META={
+  directness:['Directheid','omweg','stelling eerst'],
+  warmth:['Warmte','zakelijk','betrokken'],
+  dryness:['Droogte','neutraal','droge humor'],
+  brevity:['Beknoptheid','uitleggend','kort'],
+  challenge:['Weerwerk','meegaand','confronteert'],
+  formality:['Formaliteit','los','formeel']
+};
+const RULE_META={
+  noEmoji:'Geen emoji',
+  noExclamation:'Geen uitroeptekens',
+  noDefaultPraise:'Feliciteert niet standaard',
+  noUnpromptedMissions:'Maakt niet spontaan missies aan',
+  markInference:'Markeert afgeleide kennis als vermoeden',
+  admitUnknown:'Zegt het wanneer iets niet in de context staat',
+  maxOneQuestion:'Maximaal één vraag per antwoord'
+};
+ST.persona=ST.persona||JSON.parse(JSON.stringify(PERSONA_SEED));
+ST.personaDirty=ST.personaDirty||false;
+
+/* De compiler — pure functie, unit-testbaar, geen LLM */
+function compilePersona(p){
+  const v=p.voice, L=[];
+  L.push(`You are ${p.name}, ${p.role}.`);
+  L.push(`Speak Dutch (${p.language}) and address the player with "${p.address}".`);
+  L.push('');
+  L.push('VOICE');
+  L.push(v.directness>=70?'State your position in the first sentence. Do not open with context.'
+    :v.directness>=40?'Give one line of context, then your position.'
+    :'Lay out the considerations before you conclude anything.');
+  L.push(v.brevity>=70?'Default to 2-4 sentences. Go longer only when asked for analysis.'
+    :v.brevity>=40?'Default to 4-8 sentences.':'Explain fully; length is not a concern.');
+  L.push(v.warmth>=60?'Acknowledge how something lands for the player before analysing it.'
+    :v.warmth>=35?'Stay businesslike. One human sentence is enough.'
+    :'Do not soften observations with reassurance.');
+  if(v.dryness>=60) L.push('Dry understatement is allowed. Jokes and wordplay are not.');
+  L.push(v.challenge>=55?'Name contradictions between stated goals and current choices. Once, without moralising, and leave the decision with the player.'
+    :'Point out tension only when the player asks for it.');
+  L.push(v.formality>=60?'Keep the register formal throughout.':'Keep the register plain and unceremonious.');
+  L.push('');
+  L.push('HARD RULES');
+  Object.entries(p.rules).filter(([,on])=>on).forEach(([k])=>L.push('- '+({
+    noEmoji:'Never use emoji.',
+    noExclamation:'Never use exclamation marks.',
+    noDefaultPraise:'Do not congratulate by default. Praise only a result you can name.',
+    noUnpromptedMissions:'Do not create or propose a mission unless the player asks or the situation clearly warrants it.',
+    markInference:'Mark inferred knowledge as inference ("dat lijkt", "ik vermoed").',
+    admitUnknown:'If something is not in CONTEXT, say you do not know it. Never invent.',
+    maxOneQuestion:'Ask at most one question per reply.'})[k]));
+  if(p.banned.length){L.push('');L.push('NEVER USE THESE WORDS OR PHRASES');L.push(p.banned.join(' · '))}
+  if(p.preferred.length){L.push('');L.push('PREFERRED VOCABULARY');L.push(p.preferred.join(' · '))}
+  L.push('');
+  L.push('MODES');
+  Object.entries(p.modes).forEach(([k,m])=>L.push(`${k.padEnd(16)} ${m.len.padEnd(12)} proactivity ${m.pro.padEnd(7)} tools ${m.tools}`));
+  L.push('');
+  L.push('CONTEXT');
+  L.push('{{context_json}}');
+  return L.join('\n');
+}
+/* Voorbeeldantwoord, opgebouwd uit dezelfde instellingen */
+function sampleReply(p){
+  const v=p.voice, out=[];
+  if(v.directness<40) out.push('U vroeg waar u vandaag het meeste beweging haalt.');
+  if(v.warmth>=60) out.push('Dat het schuurt, is begrijpelijk.');
+  out.push('Netwerk is uw rem, niet uw output.');
+  if(v.brevity<70) out.push('U hebt deze maand vier stukken content gemaakt en twee mensen gesproken; de eerste kost tijd, de tweede opent deuren.');
+  if(v.challenge>=55) out.push('U zegt vrijheid te willen en overweegt een opdracht van twaalf maanden. Dat hoeft geen fout te zijn, maar het is het noteren waard.');
+  if(v.dryness>=60) out.push('De site is inmiddels mooier dan uw agenda.');
+  out.push(p.rules.maxOneQuestion?'Wie belt u vandaag?':'Wie belt u vandaag? En wat biedt u aan vóór u iets vraagt?');
+  let t=out.join(' ');
+  if(p.address==='je') t=t.replace(/\bU\b/g,'Je').replace(/\bu\b/g,'je').replace(/\buw\b/g,'je');
+  if(p.rules.noExclamation) t=t.replace(/!/g,'.');
+  return t;
+}
+const PERSONA_VERSIONS=[
+  {v:4,at:ago(6),by:'ADMIN',status:'ACTIVE',note:'Weerwerk 44 → 58 na scenario 5',evals:'8/8'},
+  {v:3,at:ago(23),by:'ADMIN',status:'ARCHIVED',note:'Verbodenwoordenlijst toegevoegd',evals:'8/8'},
+  {v:2,at:ago(41),by:'ADMIN',status:'ARCHIVED',note:'Warmte 55 → 34, te coachend',evals:'7/8'},
+  {v:1,at:ago(64),by:'SYSTEM',status:'ARCHIVED',note:'Startpersona',evals:'6/8'}
+];
+
+function Persona(){
+  const p=ST.persona;
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Nyx — persona</h1>
+    <span style="display:flex;gap:8px;align-items:center">
+      <span class="tag ${ST.personaDirty?'amber':'jade'}">${ST.personaDirty?'DRAFT v'+(p.version+1):'ACTIVE v'+p.version}</span>
+      <button class="btn" data-act="p-reset">Herstellen</button>
+      <button class="btn gold" data-act="p-activate">Activeren</button></span></div>
+  <p class="muted" style="margin:0 0 16px;max-width:660px">Haar karakter is configuratie, geen string in de codebase. Wat u hier instelt, compileert naar de systeemprompt rechts. Activeren kan alleen wanneer de acht evalscenario's slagen; een lopend gesprek blijft op de oude versie.</p>
+
+  <div class="split">
+    <div class="grid" style="gap:12px">
+      <div class="card">
+        <div class="head"><span class="eyebrow">Identiteit</span></div>
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <button class="thumb" style="width:92px;aspect-ratio:1;border-radius:50%;border:1.6px solid var(--gold);flex:0 0 auto"
+            data-act="open" data-t="ast" data-id="ast_nyx_01">${coverArt('portrait',7)}</button>
+          <div style="flex:1">
+            <dl class="kv" style="grid-template-columns:96px 1fr">
+              <dt>Naam</dt><dd>${p.name}</dd>
+              <dt>Rol</dt><dd>${esc(p.role)}</dd>
+              <dt>Taal</dt><dd class="mono">${p.language}</dd>
+              <dt>Aanspreking</dt><dd>
+                <button class="chip" aria-pressed="${p.address==='u'}" data-act="p-addr" data-v="u">u</button>
+                <button class="chip" aria-pressed="${p.address==='je'}" data-act="p-addr" data-v="je">je</button></dd>
+            </dl>
+            <p class="mono muted" style="margin:9px 0 0">portret: ast_nyx_01 · 3 renditions · zij verschijnt nergens anders groot</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="head"><span class="eyebrow">Stem</span><span class="mono muted">compileert live</span></div>
+        ${Object.entries(VOICE_META).map(([k,[lab,lo,hi]])=>`
+          <div class="srow">
+            <span><span class="lab">${lab}</span></span>
+            <span><input type="range" min="0" max="100" value="${p.voice[k]}" data-act="p-voice" data-k="${k}"
+              style="--p:${p.voice[k]}%" aria-label="${lab}">
+              <span class="ends"><span>${lo}</span><span>${hi}</span></span></span>
+            <span class="val" id="val-${k}">${p.voice[k]}</span>
+          </div>`).join('')}
+      </div>
+
+      <div class="card">
+        <div class="head"><span class="eyebrow">Harde regels</span><span class="mono muted">geen nuance, aan of uit</span></div>
+        ${Object.entries(RULE_META).map(([k,lab])=>`
+          <div class="swrow">
+            <button class="sw" role="switch" aria-pressed="${p.rules[k]}" data-act="p-rule" data-k="${k}"
+              aria-label="${lab}"></button>
+            <span style="font-size:12.5px">${lab}</span>
+            <span class="mono muted" style="margin-left:auto">${p.rules[k]?'aan':'uit'}</span>
+          </div>`).join('')}
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <span class="eyebrow">Verboden taal</span>
+          <div class="chiprow" style="margin-top:10px">
+            ${p.banned.map(w=>`<button class="wchip bad" data-act="p-unban" data-v="${esc(w)}">${esc(w)}<span class="x">×</span></button>`).join('')}
+          </div>
+          <input class="winput" id="banInput" placeholder="Woord toevoegen en enter" aria-label="Verboden woord">
+        </div>
+        <div class="card">
+          <span class="eyebrow">Voorkeurswoorden</span>
+          <div class="chiprow" style="margin-top:10px">
+            ${p.preferred.map(w=>`<span class="wchip">${esc(w)}</span>`).join('')}
+          </div>
+          <p class="mono muted" style="margin:10px 0 0">Woorden die haar register dragen. Ze worden aangeraden, niet afgedwongen.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="head"><span class="eyebrow">Gedrag per modus</span></div>
+        ${tbl('150px 1fr 104px 132px',['Modus','Lengte','Proactiviteit','Tooltoegang'],
+          Object.entries(p.modes).map(([k,m])=>`<div class="tr" style="grid-template-columns:150px 1fr 104px 132px">
+            <span class="mono">${k}</span><span class="muted">${m.len}</span>
+            <span><span class="tag ${m.pro==='HOOG'?'amber':''}">${m.pro}</span></span>
+            <span><span class="tag ${m.tools==='READ_PROPOSE'?'gold':''}">${m.tools}</span></span>
+          </div>`).join(''))}
+      </div>
+    </div>
+
+    <div class="grid sticky" style="gap:12px">
+      <div class="card gold">
+        <div class="head"><span class="eyebrow">Voorbeeldantwoord</span><span class="mono muted">MISSION_CONTROL</span></div>
+        <p class="quote" id="sample" style="margin:0">${esc(sampleReply(p))}</p>
+      </div>
+      <div class="card">
+        <div class="head"><span class="eyebrow">Gecompileerde systeemprompt</span>
+          <span class="mono muted" id="plen">${compilePersona(p).length} tekens</span></div>
+        <pre class="code" id="compiled" style="max-height:360px">${esc(compilePersona(p))}</pre>
+      </div>
+      <div class="card">
+        <span class="eyebrow">Versies</span>
+        <ul class="tl" style="margin-top:10px">${PERSONA_VERSIONS.map(v=>`<li>
+          <b class="mono">v${v.v}</b> <span class="tag ${v.status==='ACTIVE'?'jade':''}">${v.status}</span>
+          <span class="tag ${v.evals==='8/8'?'':'coral'}">evals ${v.evals}</span>
+          <span class="mono muted" style="display:block;margin-top:3px">${day(v.at)} · ${v.by}</span>
+          <span class="muted">${esc(v.note)}</span></li>`).join('')}</ul>
+      </div>
+    </div>
+  </div>`;
+}
+function refreshPersonaPreview(){
+  const p=ST.persona;
+  const c=$('#compiled'); if(c) c.textContent=compilePersona(p);
+  const s=$('#sample');   if(s) s.textContent=sampleReply(p);
+  const l=$('#plen');     if(l) l.textContent=compilePersona(p).length+' tekens';
+}
+
+/* =================================================================================
+   [13] ASSETS — src/admin/views/Assets.tsx
+   ================================================================================= */
+function coverArt(kind,seed){
+  const g='ca'+seed+kind;
+  const sets={
+    mission:['#2A1408','#6E3A15','#C87A2E'], event:['#10181F','#2A4459','#C87A2E'],
+    business:['#241A0C','#4A3618','#B8903F'], content:['#2A1020','#57203A','#C9527A'],
+    boss:['#20060F','#681C35','#F05252'], portrait:['#1A1512','#3A2A1E','#C9A34E'],
+    chapter:['#12100D','#3A2A14','#E4C782']
+  };
+  const [a,b,c]=sets[kind]||sets.mission;
+  return `<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs><linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${a}"/><stop offset=".62" stop-color="${b}"/><stop offset="1" stop-color="${c}"/></linearGradient>
+      <radialGradient id="${g}s" cx=".68" cy=".72" r=".55">
+        <stop offset="0" stop-color="#FFC978" stop-opacity=".85"/><stop offset="1" stop-color="#FF9A3C" stop-opacity="0"/></radialGradient></defs>
+    <rect width="320" height="180" fill="url(#${g})"/>
+    <circle cx="218" cy="128" r="92" fill="url(#${g}s)"/>
+    ${kind==='portrait'
+      ? `<g fill="#0A0806" opacity=".92"><ellipse cx="160" cy="78" rx="34" ry="40"/>
+         <path d="M104 180c0-38 25-62 56-62s56 24 56 62z"/></g>`
+      : `<g fill="#120B06" opacity=".55"><path d="M0 128h26v-14h8v14h20v-24h11v24h23v-11h9v11h30v-36h7l4-17 4 17h7v36h42v-20h10v20h45v-26h9v26h29v-16h8v16h35v52H0z"/></g>
+         <g fill="#080503"><path d="M0 148h34v-12h9v12h26v-18h8v18h27v-9h10v9h25v-29h6l5-20 5 20h6v29h39v-15h9v15h41v-21h8v21h24v-11h9v11h39v32H0z"/></g>`}
+  </svg>`;
+}
+const ASSETS=[
+  {id:'ast_1101',entity:'MISSION',entityId:'mis_7701',title:'THE CONNECTOR',kind:'MISSION_COVER',art:'mission',
+   source:'AI_GENERATED',status:'ACTIVE',preset:'kempen-vice-dusk',model:'diffusion-xl',seed:4419827,cents:1.2,
+   px:'1536×864',kb:214,ratio:'16:9',variants:4,pick:2,alt:'Twee mannen geven elkaar een hand op een terras bij zonsondergang, silhouetten tegen een stadsgezicht.',
+   prompt:'two businessmen shaking hands on a terrace at dusk, seen from behind, warm sunset over a Flemish town skyline'},
+  {id:'ast_1104',entity:'MISSION',entityId:'mis_7702',title:'VOKA EVENT — GEEL',kind:'MISSION_COVER',art:'event',
+   source:'UPLOAD',status:'ACTIVE',preset:null,model:null,seed:null,cents:0,
+   px:'2000×1125',kb:486,ratio:'16:9',variants:0,pick:null,alt:'Verlicht bedrijvencentrum bij avond, glazen gevel met warme binnenverlichting.',
+   prompt:null,uploadedBy:'hardwig',note:'Eigen foto van de locatie. Rechten bevestigd bij upload.'},
+  {id:'ast_1107',entity:'MISSION',entityId:'mis_7703',title:'Q4 STRATEGY REVIEW',kind:'MISSION_COVER',art:'business',
+   source:'AI_GENERATED',status:'PENDING_REVIEW',preset:'kempen-vice-dusk',model:'diffusion-xl',seed:7781204,cents:1.2,
+   px:'1536×864',kb:198,ratio:'16:9',variants:4,pick:0,alt:'',
+   prompt:'a desk at night with printed spreadsheets and a cup of coffee, single warm lamp, no text visible'},
+  {id:'ast_1109',entity:'MISSION',entityId:'mis_7704',title:'THOUGHT LEADERSHIP ARTICLE',kind:'MISSION_COVER',art:'content',
+   source:'AI_GENERATED',status:'ACTIVE',preset:'kempen-vice-dusk',model:'diffusion-xl',seed:1029384,cents:1.2,
+   px:'1536×864',kb:176,ratio:'16:9',variants:4,pick:1,alt:'Schrijvende hand bij een raam met stadslicht, van opzij gezien.',
+   prompt:'hand writing at a window desk, city lights beyond, side view, no faces, no text'},
+  {id:'ast_1112',entity:'MISSION',entityId:'mis_7705',title:'DE EERSTE €10K-MAAND',kind:'MISSION_COVER',art:'boss',
+   source:'AI_GENERATED',status:'DRAFT',preset:'kempen-vice-boss',model:'diffusion-xl',seed:5512901,cents:1.2,
+   px:'1536×864',kb:230,ratio:'16:9',variants:4,pick:3,alt:'',
+   prompt:'a narrow staircase rising toward a lit doorway, deep burgundy shadows, architectural, no people'},
+  {id:'ast_1115',entity:'MISSION',entityId:'mis_7706',title:'LUNCH MET PIETER',kind:'MISSION_COVER',art:null,
+   source:null,status:'MISSING',preset:null,model:null,seed:null,cents:0,px:null,kb:0,ratio:'16:9',
+   variants:0,pick:null,alt:'',prompt:null},
+  {id:'ast_nyx_01',entity:'PERSONA',entityId:'per_01',title:'Nyx — portret',kind:'NYX_PORTRAIT',art:'portrait',
+   source:'UPLOAD',status:'ACTIVE',preset:null,model:null,seed:null,cents:0,
+   px:'1024×1536',kb:640,ratio:'1:1',variants:0,pick:null,
+   alt:'Portret van Nyx, donker haar, gouden accenten, neutrale blik.',prompt:null,uploadedBy:'hardwig',
+   note:'Drie renditions: knop 128 px, chat-sheet 256 px, persona-editor 512 px.'},
+  {id:'ast_ch_01',entity:'CHAPTER',entityId:'chapter_1',title:'ESCAPE VELOCITY',kind:'CHAPTER',art:'chapter',
+   source:'AI_GENERATED',status:'ACTIVE',preset:'kempen-vice-dusk',model:'diffusion-xl',seed:3310022,cents:1.2,
+   px:'1536×864',kb:204,ratio:'16:9',variants:4,pick:0,alt:'Bergkam bij dageraad, warme gloed achter de horizon.',
+   prompt:'mountain ridge at first light, warm glow behind the horizon, no people, cinematic'}
+];
+const PRESETS=[
+  {id:'kempen-vice-dusk',name:'Kempen Vice — dusk',active:true,used:14,model:'diffusion-xl',
+   frag:'cinematic still, warm dusk light, deep shadows, champagne gold highlights on near-black, European town setting, 35mm, shallow depth of field, editorial, no text',
+   neg:'text, letters, logos, watermarks, recognisable real people, celebrities, brand names, weapons, cash, casino imagery, neon cyberpunk, cartoon, plastic 3d render, extra fingers',
+   palette:['#0B0907','#171411','#C9A34E','#F6ECDF','#FF9A3C']},
+  {id:'kempen-vice-boss',name:'Kempen Vice — boss',active:true,used:3,model:'diffusion-xl',
+   frag:'cinematic still, burgundy and coral rim light on near-black, architectural, tense, empty of people, low angle, no text',
+   neg:'text, logos, faces, gore, weapons, cartoon, neon',
+   palette:['#0B0907','#681C35','#F05252','#F6ECDF']},
+  {id:'kempen-vice-flat',name:'Kempen Vice — vlak (fallback)',active:true,used:'∞',model:'—',
+   frag:'geen generatie: de gradient-plate uit het designsysteem',
+   neg:'—',palette:['#171411','#C9A34E']}
+];
+const ASRC={AI_GENERATED:['ai','AI'],UPLOAD:['up','Upload'],null:['none','Geen beeld']};
+function Assets(){
+  const t=ST.at||'MISSION';
+  const list=t==='STYLES'?[]:ASSETS.filter(a=>t==='ALL'||a.entity===t);
+  return `
+  <div class="head"><h1 class="display" style="font-size:22px">Beeldmateriaal</h1>
+    <span style="display:flex;gap:8px"><button class="btn" data-act="a-genall">Ontbrekende genereren</button>
+      <button class="btn gold" data-act="a-upload-new">Beeld uploaden</button></span></div>
+  <div class="tabs">
+    ${[['MISSION','Missies'],['PERSONA','Nyx'],['CHAPTER','Hoofdstukken'],['ALL','Alles'],['STYLES','Stijlpresets']]
+      .map(([k,l])=>`<button aria-selected="${t===k}" data-act="a-tab" data-v="${k}">${l}</button>`).join('')}
+  </div>
+  ${t==='STYLES'?`
+    <div class="grid" style="gap:12px">${PRESETS.map(p=>`
+      <button class="card" style="text-align:left" data-act="open" data-t="sty" data-id="${p.id}">
+        <div class="head" style="margin-bottom:8px"><h3 style="font-size:14px">${p.name}</h3>
+          <span style="display:flex;gap:6px"><span class="tag mono">${p.id}</span>
+            <span class="tag ${p.active?'jade':''}">${p.active?'actief':'uit'}</span>
+            <span class="tag">${p.used} assets</span></span></div>
+        <p class="muted mono" style="margin:0 0 9px;font-size:11px">${esc(p.frag.slice(0,120))}…</p>
+        <div style="display:flex;gap:5px">${p.palette.map(c=>`<span style="width:20px;height:20px;border-radius:5px;background:${c};border:1px solid var(--line)"></span>`).join('')}</div>
+      </button>`).join('')}</div>`
+  :`<div class="agrid">${list.map(a=>{
+      const [cls,lab]=ASRC[a.source]||ASRC[null];
+      return `<button class="acard" data-act="open" data-t="ast" data-id="${a.id}">
+        <span class="thumb">${a.art?coverArt(a.art,a.seed||1):`<svg viewBox="0 0 320 180"><rect width="320" height="180" fill="#171411"/>
+          <path d="M120 96h80M160 66v60" stroke="rgba(201,163,78,.4)" stroke-width="3" stroke-linecap="round"/></svg>`}
+          <span class="badge ${cls}">${lab}</span></span>
+        <span class="ab">
+          <span class="td-main" style="display:block">${esc(a.title)}</span>
+          <span class="td-sub mono" style="display:block;margin:3px 0 7px">${a.id} · ${a.kind}</span>
+          <span style="display:flex;gap:5px;flex-wrap:wrap">
+            <span class="tag ${a.status==='ACTIVE'?'jade':a.status==='MISSING'?'amber':a.status==='PENDING_REVIEW'?'amber':''}">${a.status}</span>
+            ${a.px?`<span class="tag mono">${a.px}</span>`:''}
+            ${!a.alt&&a.status!=='MISSING'?'<span class="tag coral">alt ontbreekt</span>':''}
+          </span></span>
+      </button>`}).join('')}</div>`}`;
+}
+
+function drawerAsset(id){
+  const a=ASSETS.find(x=>x.id===id); if(!a) return;
+  const preset=PRESETS.find(p=>p.id===a.preset);
+  const [cls,lab]=ASRC[a.source]||ASRC[null];
+  openDrawer(dHead('Asset · '+a.id,a.title,
+    `<span class="tag ${cls==='ai'?'violet':cls==='up'?'jade':'amber'}">${lab}</span>
+     <span class="tag">${a.kind}</span>
+     <span class="tag ${a.status==='ACTIVE'?'jade':a.status==='MISSING'?'amber':''}">${a.status}</span>`)+
+  `<div class="db">
+    <div class="thumb" id="astPreview" style="border-radius:10px;border:1px solid var(--line);margin-bottom:12px">
+      ${a.art?coverArt(a.art,a.seed||1):`<svg viewBox="0 0 320 180"><rect width="320" height="180" fill="#171411"/>
+        <path d="M120 96h80M160 66v60" stroke="rgba(201,163,78,.4)" stroke-width="3" stroke-linecap="round"/></svg>`}
+    </div>
+    <dl class="kv">
+      <dt>Hoort bij</dt><dd class="mono">${a.entity} ${a.entityId}</dd>
+      <dt>Bron</dt><dd>${a.source==='AI_GENERATED'?'gegenereerd':a.source==='UPLOAD'?'geüpload door '+(a.uploadedBy||'—'):'nog geen beeld'}</dd>
+      ${a.preset?`<dt>Stijlpreset</dt><dd><button class="mono" style="color:var(--gold-soft)" data-act="open" data-t="sty" data-id="${a.preset}">${a.preset}</button></dd>`:''}
+      ${a.model?`<dt>Model / seed</dt><dd class="mono">${a.model} · ${a.seed}</dd>`:''}
+      ${a.px?`<dt>Origineel</dt><dd class="mono">${a.px} · ${a.kb} kB</dd>`:''}
+      <dt>Renditions</dt><dd class="mono">16:9 · 1:1 · 4:5</dd>
+      ${a.cents?`<dt>Generatiekost</dt><dd class="mono">€${(a.cents/100).toFixed(3)}</dd>`:''}
+    </dl>
+    ${a.prompt?`<div class="block"><span class="eyebrow">Prompt</span>
+      <pre class="code">${esc((preset?preset.frag+',\n':'')+a.prompt)}</pre>
+      <span class="eyebrow" style="display:block;margin:10px 0 6px">Negatief</span>
+      <pre class="code" style="max-height:110px">${esc(preset?preset.neg:'—')}</pre></div>`:''}
+    ${a.variants?`<div class="block"><span class="eyebrow">Varianten (zelfde seedreeks)</span>
+      <div class="vgrid">${[0,1,2,3].map(i=>`<button aria-pressed="${a.pick===i}" data-act="a-pick" data-id="${a.id}" data-v="${i}"
+        aria-label="Variant ${i+1}">${coverArt(a.art||'mission',(a.seed||1)+i)}</button>`).join('')}</div>
+      <p class="mono muted" style="margin:8px 0 0">Kiezen zet de variant klaar. Publiceren gebeurt pas bij goedkeuren.</p></div>`:''}
+    <div class="block"><span class="eyebrow">Eigen beeld gebruiken</span>
+      <label class="drop">
+        <input type="file" accept="image/*" data-act="a-file" data-id="${a.id}">
+        <div style="font-size:12.5px;font-weight:600">Bestand kiezen of hierheen slepen</div>
+        <div class="mono muted" style="margin-top:4px">jpg · png · webp · max 12 MB · min 1280 px</div>
+      </label>
+      <p class="mono muted" style="margin:8px 0 0">Upload is gelijkwaardig aan generatie. Bij herkenbare personen vraagt het systeem om bevestiging van toestemming.</p></div>
+    <div class="block"><span class="eyebrow">Alt-tekst (verplicht)</span>
+      <input class="winput" id="altInput" value="${esc(a.alt||'')}" placeholder="Beschrijf wat er te zien is">
+      ${!a.alt&&a.status!=='MISSING'?'<p style="margin:7px 0 0;color:var(--coral);font-size:11.5px">Zonder alt-tekst kan dit beeld niet op ACTIVE gezet worden.</p>':''}</div>
+    ${a.note?`<div class="block"><span class="eyebrow">Notitie</span><p class="muted" style="margin:0">${esc(a.note)}</p></div>`:''}
+  </div>
+  <div class="df">
+    ${a.status==='MISSING'
+      ? `<button class="btn gold" style="flex:1" data-act="a-gen" data-id="${a.id}">Genereren met preset</button>`
+      : `<button class="btn gold" style="flex:1" data-act="a-approve" data-id="${a.id}">Goedkeuren en activeren</button>
+         <button class="btn" data-act="a-gen" data-id="${a.id}">Opnieuw</button>`}
+  </div>`,'Asset '+a.id);
+}
+function drawerStyle(id){
+  const p=PRESETS.find(x=>x.id===id); if(!p) return;
+  openDrawer(dHead('Stijlpreset · '+p.id,p.name,
+    `<span class="tag ${p.active?'jade':''}">${p.active?'actief':'uit'}</span><span class="tag">${p.used} assets</span>`)+
+  `<div class="db">
+    <div class="vgrid" style="grid-template-columns:repeat(2,1fr)">
+      ${[1,2,3,4].map(i=>`<span class="thumb" style="aspect-ratio:16/9;border-radius:8px">${coverArt(id==='kempen-vice-boss'?'boss':'mission',i*97)}</span>`).join('')}
+    </div>
+    <div class="block"><span class="eyebrow">Promptfragment</span><pre class="code">${esc(p.frag)}</pre></div>
+    <div class="block"><span class="eyebrow">Negatief fragment</span><pre class="code">${esc(p.neg)}</pre></div>
+    <div class="block"><span class="eyebrow">Palet</span>
+      <div style="display:flex;gap:7px;margin-top:4px">${p.palette.map(c=>`<span style="flex:1;height:34px;border-radius:6px;background:${c};border:1px solid var(--line)"></span>`).join('')}</div></div>
+    <div class="block"><span class="eyebrow">Regels die altijd gelden</span>
+      <ul class="tl"><li>Geen herkenbare echte personen, logo's of merken.</li>
+        <li>Geen tekst in het beeld.</li>
+        <li>Geen wapens, geld of casino-iconografie.</li>
+        <li>Gezichten alleen als silhouet of van opzij, behalve bij Nyx.</li>
+        <li>Nooit genereren zonder preset.</li></ul>
+      <p class="mono muted" style="margin:9px 0 0">Deze regels staan in de negatieve prompt én in een validatie ná generatie.</p></div>
+  </div>`,'Preset '+p.id);
+}
+
+/* ===== registratie in de shell ===== */
+VIEWS.push(['persona','Nyx — persona',Persona,()=>ST.personaDirty?'•':''],
+           ['assets','Beeldmateriaal',Assets,()=>ASSETS.filter(a=>a.status!=='ACTIVE').length]);
+
+const baseHandle=handle;
+handle=function(el){
+  const a=el.dataset.act, id=el.dataset.id, p=ST.persona;
+  switch(a){
+    case 'open':
+      if(el.dataset.t==='ast'){$$('.tr.sel').forEach(t=>t.classList.remove('sel'));return drawerAsset(id)}
+      if(el.dataset.t==='sty'){return drawerStyle(id)}
+      break;
+    case 'p-addr': p.address=el.dataset.v; ST.personaDirty=true; save(); render(); return;
+    case 'p-rule': p.rules[el.dataset.k]=!p.rules[el.dataset.k]; ST.personaDirty=true; save(); render(); return;
+    case 'p-unban': p.banned=p.banned.filter(w=>w!==el.dataset.v); ST.personaDirty=true; save(); render(); return;
+    case 'p-reset': ST.persona=JSON.parse(JSON.stringify(PERSONA_SEED)); ST.personaDirty=false; save(); render();
+      toast('Terug naar de actieve versie v4'); return;
+    case 'p-activate':
+      if(!ST.personaDirty){toast('Geen wijzigingen om te activeren');return}
+      toast('Evalsuite draait op de nieuwe persona…');
+      setTimeout(()=>{ST.personaDirty=false;PERSONA_VERSIONS.unshift({v:p.version+1,at:Date.now(),by:'ADMIN',
+        status:'ACTIVE',note:'Handmatig aangepast in de console',evals:'8/8'});
+        PERSONA_VERSIONS[1].status='ARCHIVED'; p.version++; save(); render();
+        toast('8/8 geslaagd · persona v'+p.version+' actief');},1800); return;
+    case 'a-tab': ST.at=el.dataset.v; save(); render(); return;
+    case 'a-pick': toast('Variant '+(+el.dataset.v+1)+' gekozen — nog niet gepubliceerd'); return;
+    case 'a-gen': toast('Generatie in wachtrij · 4 varianten · ±€0,05'); return;
+    case 'a-genall': toast('1 ontbrekend beeld in de wachtrij gezet'); return;
+    case 'a-approve': {
+      const alt=$('#altInput');
+      if(!alt||!alt.value.trim()){toast('Alt-tekst is verplicht voor u kunt activeren');alt&&alt.focus();return}
+      closeDrawer(); toast('Geactiveerd — renditions worden gebakken'); return;
+    }
+    case 'a-upload-new': toast('Kies eerst een asset; upload vervangt altijd één bestaand beeld'); return;
+  }
+  return baseHandle(el);
+};
+
+/* sliders, tekstvelden en bestandsinvoer */
+document.addEventListener('input',e=>{
+  const r=e.target.closest('[data-act="p-voice"]');
+  if(r){ const k=r.dataset.k, v=+r.value;
+    ST.persona.voice[k]=v; ST.personaDirty=true; r.style.setProperty('--p',v+'%');
+    const val=$('#val-'+k); if(val) val.textContent=v;
+    refreshPersonaPreview(); clearTimeout(window._ps); window._ps=setTimeout(save,300); }
+});
+document.addEventListener('keydown',e=>{
+  if(e.target.id==='banInput'&&e.key==='Enter'){
+    const w=e.target.value.trim(); if(!w)return;
+    if(!ST.persona.banned.includes(w))ST.persona.banned.push(w);
+    ST.personaDirty=true; save(); render(); toast('“'+w+'” toegevoegd aan de verbodenlijst');
+  }
+});
+document.addEventListener('change',e=>{
+  const f=e.target.closest('[data-act="a-file"]'); if(!f||!f.files||!f.files[0])return;
+  const file=f.files[0];
+  if(file.size>12*1024*1024){toast('Te groot — maximaal 12 MB');return}
+  const url=URL.createObjectURL(file);
+  const prev=$('#astPreview'); if(prev) prev.innerHTML=`<img src="${url}" alt="">`;
+  toast(file.name+' geladen · alt-tekst invullen, daarna goedkeuren');
+});
+render();
+</script>
+
+</body>
+</html>

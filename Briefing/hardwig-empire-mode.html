@@ -1,0 +1,2716 @@
+<!DOCTYPE html>
+<html lang="nl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HARDWIG: EMPIRE MODE</title>
+<meta name="description" content="Kempen Vice — persoonlijk operating system voor netwerk, missies en empire value.">
+
+<!--
+====================================================================================
+  HARDWIG: EMPIRE MODE — REFERENTIE-PROTOTYPE (v1)
+  Kempen Vice · mobile-first · 390–430px primair
+====================================================================================
+
+  DOEL VAN DIT BESTAND
+  Dit is één zelfstandig bestand (vanilla JS) dat bewust gestructureerd is als de
+  React/TS-app die eruit moet groeien. Elke sectie hieronder is gemarkeerd met het
+  bestandspad dat ze in de echte app krijgt. Poort per blok, niet per scherm.
+
+  DOELSTRUCTUUR (Vite + React + TS + Tailwind + Framer Motion + Leaflet)
+
+    src/
+      styles/tokens.css            <- [A] DESIGN TOKENS
+      styles/global.css            <- [B] BASE + COMPONENT CSS  (of Tailwind @layer)
+      types/index.ts               <- [C] DATAMODELLEN
+      data/seed.ts                 <- [D] DEMO-DATA
+      store/useStore.ts            <- [E] STATE + LOCALSTORAGE (Zustand aanbevolen)
+      components/ui/               <- [F] UI-PRIMITIEVEN (Card, Button, Progress, Chip...)
+      components/AppShell.tsx      <- [G] SHELL + BOTTOM NAV + NYX FAB
+      components/Sheet.tsx         <- [G] BOTTOM SHEET
+      features/map/MapEngine.ts    <- [H] KAARTMOTOR (projectie, tiles, markers)
+      screens/HomeScreen.tsx       <- [I]
+      screens/MapScreen.tsx        <- [J]
+      screens/MissionsScreen.tsx   <- [K]
+      screens/MissionDetail.tsx    <- [L]
+      screens/JournalScreen.tsx    <- [M]
+      screens/MonthlyWrap.tsx      <- [N]
+      screens/ProfileScreen.tsx    <- [O]
+      features/nyx/NyxSheet.tsx    <- [P]
+      app/router.tsx               <- [Q] ROUTES
+
+  ROUTES (hash-based hier, react-router in de echte app)
+    #/home  #/map  #/missions  #/mission/:id  #/journal  #/wrap/:monthId  #/profile
+
+  KAART
+  De kaartmotor projecteert echte lat/lng via Web Mercator en probeert echte
+  OSM-tegels te laden. Faalt dat (offline/CSP), dan valt ze terug op een eigen
+  vectorlaag met echte coördinaten. Zie blok [H] voor het inhaakpunt naar
+  Leaflet/MapLibre. Geen enkele kaart is een afbeelding.
+
+  ASSETS
+  Alleen eigen SVG, CSS-gradients en de door de gebruiker aangeleverde Nyx-portret.
+  Geen externe of gelicentieerde game-assets.
+====================================================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@500;600&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* =================================================================================
+   [A] DESIGN TOKENS  ->  src/styles/tokens.css
+   ================================================================================= */
+:root{
+  color-scheme: dark;
+
+  /* Kern */
+  --night:#0B0907;
+  --charcoal:#171411;
+  --charcoal-2:#1F1B16;
+  --gold:#C9A34E;
+  --gold-soft:#E4C782;
+  --gold-deep:#8A6C2A;
+  --ivory:#F6ECDF;
+
+  /* Accenten */
+  --amber:#FF9A3C;
+  --coral:#F05252;
+  --burgundy:#681C35;
+  --jade:#4FBF8B;
+
+  /* Afgeleid */
+  --ink-1:var(--ivory);
+  --ink-2:rgba(246,236,223,.72);
+  --ink-3:rgba(246,236,223,.48);
+  --ink-4:rgba(246,236,223,.30);
+  --line:rgba(201,163,78,.20);
+  --line-soft:rgba(246,236,223,.10);
+  --surface:linear-gradient(180deg,#191511 0%,#131010 100%);
+  --surface-raised:linear-gradient(180deg,#221D17 0%,#171411 100%);
+  --gold-grad:linear-gradient(180deg,#E9CE8C 0%,#C9A34E 52%,#A8813A 100%);
+  --sunset:linear-gradient(180deg,#2A1A10 0%,#6B3A18 46%,#C9702B 78%,#FF9A3C 100%);
+
+  /* Ruimte (4pt) */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px; --s8:32px; --s10:40px;
+
+  /* Radius */
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px; --r-pill:999px;
+
+  /* Layout */
+  --col:430px;
+  --nav-h:72px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+
+  /* Elevatie */
+  --glow-gold:0 0 0 1px rgba(201,163,78,.35), 0 8px 28px rgba(201,163,78,.14);
+  --shadow-sheet:0 -18px 50px rgba(0,0,0,.65);
+
+  /* Motion */
+  --t-fast:140ms cubic-bezier(.2,.7,.3,1);
+  --t-mid:260ms cubic-bezier(.2,.7,.3,1);
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--night);
+  color:var(--ink-1);
+  font-family:Montserrat,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:14px; line-height:1.5;
+  overscroll-behavior-y:none;
+  -webkit-font-smoothing:antialiased;
+}
+/* Ambient achtergrond op breed scherm — de kolom blijft mobiel */
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(201,163,78,.10), transparent 60%),
+    radial-gradient(80% 50% at 50% 100%, rgba(104,28,53,.18), transparent 70%),
+    var(--night);
+}
+button,input,textarea{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+a{color:inherit}
+ul{margin:0;padding:0;list-style:none}
+:focus-visible{outline:2px solid var(--gold-soft);outline-offset:2px;border-radius:6px}
+
+/* =================================================================================
+   [B] BASE + COMPONENTEN  ->  src/styles/global.css
+   ================================================================================= */
+
+/* --- Shell ---------------------------------------------------------------- */
+.app{
+  position:relative;z-index:1;
+  width:100%;max-width:var(--col);margin:0 auto;min-height:100dvh;
+  background:var(--night);
+  box-shadow:0 0 0 1px rgba(201,163,78,.12), 0 30px 120px rgba(0,0,0,.8);
+}
+.view{padding-bottom:calc(var(--nav-h) + var(--safe-b) + 28px)}
+
+/* --- Typografie ----------------------------------------------------------- */
+.display{
+  font-family:Anton,Impact,sans-serif;font-weight:400;
+  letter-spacing:.01em;line-height:.94;text-transform:uppercase;
+}
+.d-xl{font-size:34px}
+.d-lg{font-size:27px}
+.d-md{font-size:21px}
+.d-sm{font-size:17px}
+.eyebrow{
+  font-size:10px;font-weight:700;letter-spacing:.20em;text-transform:uppercase;
+  color:var(--gold);
+}
+.eyebrow.muted{color:var(--ink-3)}
+.meta{font-size:11px;color:var(--ink-3);letter-spacing:.04em}
+.body{font-size:13.5px;color:var(--ink-2);line-height:1.55}
+.script{font-family:Caveat,cursive;font-size:22px;color:var(--gold-soft);line-height:1}
+.num{font-variant-numeric:tabular-nums}
+
+/* --- Hero ----------------------------------------------------------------- */
+.hero{position:relative;overflow:hidden;padding:18px 16px 16px;isolation:isolate}
+.hero-art{position:absolute;inset:0;z-index:-1}
+.hero-art svg{width:100%;height:100%;display:block}
+.hero-fade{position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(180deg,rgba(11,9,7,.15) 0%,rgba(11,9,7,.55) 55%,var(--night) 100%)}
+.hero-corner{position:absolute;top:16px;right:16px;text-align:right;max-width:120px}
+.hero-corner .eyebrow{display:block;line-height:1.5;color:rgba(246,236,223,.55);font-size:8.5px}
+
+/* --- Card ----------------------------------------------------------------- */
+.card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--r-lg);
+  padding:14px;
+  position:relative;overflow:hidden;
+}
+.card.flat{background:var(--charcoal);}
+.card.tap{transition:transform var(--t-fast),border-color var(--t-fast)}
+.card.tap:active{transform:scale(.985);border-color:rgba(201,163,78,.45)}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.card-head .t{display:flex;align-items:center;gap:8px}
+.section{padding:0 16px;margin-top:16px}
+.section-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 10px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stack{display:grid;gap:10px}
+
+/* --- Knoppen -------------------------------------------------------------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:44px;padding:0 16px;border-radius:var(--r-md);
+  font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  transition:transform var(--t-fast),filter var(--t-fast);
+}
+.btn:active{transform:scale(.97)}
+.btn-gold{background:var(--gold-grad);color:#1A1206;box-shadow:0 6px 18px rgba(201,163,78,.22)}
+.btn-ghost{border:1px solid var(--line);color:var(--ink-1);background:rgba(255,255,255,.02)}
+.btn-quiet{color:var(--ink-2);border:1px solid var(--line-soft)}
+.btn-block{width:100%}
+.btn-sm{min-height:38px;font-size:11px;padding:0 12px}
+.btn-icon{width:44px;min-height:44px;padding:0}
+.btn[disabled]{opacity:.45;pointer-events:none}
+
+/* --- Chips / tabs --------------------------------------------------------- */
+.chiprow{display:flex;gap:8px;overflow-x:auto;padding:0 16px 2px;scrollbar-width:none}
+.chiprow::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;
+  height:38px;padding:0 14px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:rgba(255,255,255,.02);
+  font-size:12px;font-weight:600;color:var(--ink-2);white-space:nowrap;
+  transition:all var(--t-fast);
+}
+.chip[aria-pressed="true"],.chip.is-on{background:var(--gold-grad);color:#1A1206;border-color:transparent;font-weight:800}
+.chip .cnt{
+  display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;
+  border-radius:var(--r-pill);background:rgba(0,0,0,.28);font-size:10px;font-weight:800;
+}
+.chip[aria-pressed="true"] .cnt{background:rgba(0,0,0,.22);color:#1A1206}
+
+.tag{
+  display:inline-block;padding:3px 8px;border-radius:5px;border:1px solid var(--line);
+  font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-soft);
+}
+.tag.alt{color:var(--ink-3);border-color:var(--line-soft)}
+.tag.warn{color:var(--amber);border-color:rgba(255,154,60,.35)}
+.tag.risk{color:var(--coral);border-color:rgba(240,82,82,.35)}
+
+/* --- Progress ------------------------------------------------------------- */
+.bar{height:8px;border-radius:var(--r-pill);background:rgba(246,236,223,.10);overflow:hidden}
+.bar > i{display:block;height:100%;border-radius:inherit;background:var(--gold-grad);
+  width:0;transition:width 900ms cubic-bezier(.2,.7,.3,1)}
+.bar.thin{height:5px}
+.bar.coral > i{background:linear-gradient(90deg,#F0857A,#F05252)}
+.bar.jade > i{background:linear-gradient(90deg,#7FD9B0,#4FBF8B)}
+
+/* --- Reward pills --------------------------------------------------------- */
+.pill{
+  display:flex;align-items:center;gap:9px;padding:9px 12px;
+  border:1px solid var(--line);border-radius:var(--r-md);background:rgba(0,0,0,.25);
+}
+.pill .lab{font-size:8.5px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase}
+.pill .val{font-size:13px;font-weight:800;letter-spacing:.02em}
+.pill .ico{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;
+  border:1px solid var(--line);color:var(--gold)}
+
+/* --- Media / beeldvlakken (eigen gradient-composities, geen stockbeeld) --- */
+.plate{position:relative;border-radius:var(--r-md);overflow:hidden;background:var(--charcoal-2)}
+.plate svg{position:absolute;inset:0;width:100%;height:100%}
+.plate.fill{position:absolute;inset:0;width:100%;height:100%;border-radius:inherit}
+.plate.sq{width:96px;height:112px;flex:0 0 auto}
+.plate.wide{width:100%;height:76px}
+.plate .lbl{position:absolute;left:8px;bottom:6px;font-size:8px;letter-spacing:.16em;
+  text-transform:uppercase;color:rgba(246,236,223,.65)}
+
+/* --- Bottom nav ----------------------------------------------------------- */
+.nav{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:min(100%,var(--col));z-index:40;
+  height:calc(var(--nav-h) + var(--safe-b));padding-bottom:var(--safe-b);
+  display:grid;grid-template-columns:repeat(5,1fr);align-items:center;
+  background:linear-gradient(180deg,rgba(11,9,7,.86),rgba(11,9,7,.98));
+  backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);
+}
+.nav button{
+  display:grid;justify-items:center;gap:5px;height:100%;min-height:44px;color:var(--ink-3);
+  font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  position:relative;transition:color var(--t-fast);
+}
+.nav button[aria-current="page"]{color:var(--gold)}
+.nav button[aria-current="page"]::after{
+  content:"";position:absolute;bottom:10px;width:20px;height:2px;border-radius:2px;background:var(--gold)}
+.nav svg{width:22px;height:22px}
+
+/* --- Nyx FAB -------------------------------------------------------------- */
+.nyx-fab{
+  position:fixed;z-index:45;right:calc(50% - min(50%, var(--col)/2) + 14px);
+  bottom:calc(var(--nav-h) + var(--safe-b) + 14px);
+  width:64px;height:64px;border-radius:50%;
+  box-shadow:0 0 0 2px var(--gold), 0 0 26px rgba(201,163,78,.40), 0 10px 24px rgba(0,0,0,.6);
+  overflow:visible;
+}
+.nyx-fab img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.nyx-fab .bubble{
+  position:absolute;top:-8px;right:-6px;width:28px;height:28px;border-radius:50%;
+  display:grid;place-items:center;background:var(--night);border:1px solid var(--gold);color:var(--gold)}
+.nyx-fab:active{transform:scale(.94)}
+.nyx-fab.pulse::after{
+  content:"";position:absolute;inset:-6px;border-radius:50%;border:1px solid rgba(201,163,78,.5);
+  animation:ring 2.6s ease-out infinite}
+@keyframes ring{0%{opacity:.7;transform:scale(.96)}100%{opacity:0;transform:scale(1.18)}}
+
+/* --- Sheets --------------------------------------------------------------- */
+.scrim{position:fixed;inset:0;z-index:50;background:rgba(6,5,4,.66);backdrop-filter:blur(3px);
+  opacity:0;transition:opacity var(--t-mid)}
+.scrim.open{opacity:1}
+.sheet{
+  position:fixed;z-index:51;bottom:0;left:50%;transform:translate(-50%,102%);
+  width:min(100%,var(--col));max-height:88dvh;display:flex;flex-direction:column;
+  background:var(--surface-raised);border:1px solid var(--line);border-bottom:0;
+  border-radius:var(--r-xl) var(--r-xl) 0 0;box-shadow:var(--shadow-sheet);
+  transition:transform var(--t-mid);
+  padding-bottom:var(--safe-b);
+}
+.sheet.open{transform:translate(-50%,0)}
+.sheet .grip{width:40px;height:4px;border-radius:2px;background:var(--ink-4);margin:10px auto 2px;flex:0 0 auto}
+.sheet .sheet-body{overflow:auto;padding:12px 16px 18px}
+.sheet .sheet-foot{padding:10px 16px 14px;border-top:1px solid var(--line-soft);flex:0 0 auto}
+
+/* --- Formulier ------------------------------------------------------------ */
+.field{display:grid;gap:6px;margin-bottom:12px}
+.field label{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.input{
+  width:100%;min-height:44px;padding:11px 12px;border-radius:var(--r-md);
+  background:rgba(0,0,0,.35);border:1px solid var(--line-soft);color:var(--ink-1);font-size:14px;
+}
+.input:focus{border-color:var(--gold);outline:none}
+textarea.input{resize:vertical;min-height:76px;line-height:1.5}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{
+  min-height:40px;padding:0 12px;border-radius:var(--r-pill);border:1px solid var(--line);
+  font-size:11px;font-weight:600;color:var(--ink-2)}
+.seg button.is-on{background:var(--gold-grad);color:#1A1206;border-color:transparent;font-weight:800}
+
+/* --- Kaart ---------------------------------------------------------------- */
+.mapwrap{position:relative;height:clamp(340px,52dvh,520px);background:#0E0C0A;overflow:hidden;touch-action:none}
+#mapCanvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.marker-layer{position:absolute;inset:0;pointer-events:none}
+.mk{
+  position:absolute;transform:translate(-50%,-100%);pointer-events:auto;
+  width:38px;height:44px;display:grid;place-items:start center;
+  filter:drop-shadow(0 3px 6px rgba(0,0,0,.7));
+  transition:filter var(--t-fast);
+}
+.mk svg{width:38px;height:44px;overflow:visible}
+.mk.sel{z-index:5;filter:drop-shadow(0 0 10px rgba(201,163,78,.75)) drop-shadow(0 3px 6px rgba(0,0,0,.7))}
+.mk.done{opacity:.45}
+.mk.locked{opacity:.5}
+.mk .glow{animation:pulseGlow 2.8s ease-in-out infinite;transform-origin:center}
+@keyframes pulseGlow{0%,100%{opacity:.25}50%{opacity:.6}}
+.map-ctl{position:absolute;right:12px;display:grid;gap:8px;z-index:6}
+.map-btn{
+  width:44px;height:44px;display:grid;place-items:center;border-radius:12px;
+  background:rgba(14,12,10,.86);border:1px solid var(--line);color:var(--ivory);
+  backdrop-filter:blur(6px)}
+.map-badge{
+  position:absolute;left:12px;bottom:12px;z-index:6;display:flex;align-items:center;gap:8px;
+  padding:7px 11px;border-radius:10px;background:rgba(14,12,10,.86);border:1px solid var(--line);
+  font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.map-scale{position:absolute;right:12px;bottom:12px;z-index:6;font-size:10px;color:var(--ink-2);text-align:right}
+.map-scale .rule{height:6px;border:1px solid var(--ink-3);border-top:0;margin-top:3px}
+.map-hint{position:absolute;left:12px;top:12px;z-index:6;font-size:10px;color:var(--ink-3);
+  background:rgba(14,12,10,.8);border:1px solid var(--line-soft);padding:5px 9px;border-radius:8px}
+
+/* --- Journal -------------------------------------------------------------- */
+.tl{position:relative;padding-left:56px}
+.tl::before{content:"";position:absolute;left:44px;top:6px;bottom:24px;width:1px;
+  background:linear-gradient(180deg,var(--gold),rgba(201,163,78,.05))}
+.tl-item{position:relative;margin-bottom:10px}
+.tl-item .tl-time{position:absolute;left:-56px;top:12px;width:34px;text-align:right;
+  font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.tl-item .tl-dot{position:absolute;left:-13px;top:16px;width:9px;height:9px;border-radius:50%;
+  background:var(--night);border:2px solid var(--gold)}
+.tl-ico{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
+  display:grid;place-items:center;color:var(--gold);flex:0 0 auto}
+.media-row{display:flex;gap:6px;margin-top:9px}
+.media-row .plate{width:74px;height:52px;flex:0 0 auto}
+.media-more{width:44px;height:52px;border-radius:var(--r-sm);border:1px dashed var(--line);
+  display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--ink-3)}
+
+.composer{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--nav-h) + var(--safe-b) + 8px);
+  width:min(100% - 24px,calc(var(--col) - 24px));z-index:38;
+  display:flex;align-items:flex-end;gap:8px;padding:8px 8px 8px 12px;
+  background:rgba(23,20,17,.96);border:1px solid var(--line);border-radius:var(--r-lg);
+  box-shadow:0 14px 34px rgba(0,0,0,.6);backdrop-filter:blur(10px);
+}
+.composer textarea{
+  flex:1;background:none;border:0;outline:none;resize:none;max-height:92px;
+  font-size:13.5px;line-height:1.45;color:var(--ink-1);padding:10px 0 8px}
+.composer textarea::placeholder{color:var(--ink-4)}
+.composer .ic{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:var(--ink-3)}
+.composer .ic:active{color:var(--gold)}
+.composer .send{width:44px;height:40px;border-radius:10px;background:var(--gold-grad);
+  display:grid;place-items:center;color:#1A1206}
+
+/* --- Stats / profiel ------------------------------------------------------ */
+.statrow{display:grid;grid-template-columns:22px 92px 1fr auto;align-items:center;gap:10px;padding:6px 0}
+.statrow .nm{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+.statrow .vl{font-size:12px;font-weight:800;min-width:52px;text-align:right}
+.statrow .vl small{color:var(--ink-4);font-weight:600}
+.metric{display:grid;gap:4px;padding:12px 10px;border:1px solid var(--line);border-radius:var(--r-md);
+  background:rgba(0,0,0,.25);text-align:center}
+.metric .v{font-family:Anton,sans-serif;font-size:24px;color:var(--gold-soft);letter-spacing:.02em}
+.metric .k{font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);line-height:1.35}
+.ach{display:grid;gap:6px;justify-items:center;text-align:center;width:88px;flex:0 0 auto}
+.ach .hex{width:56px;height:62px;display:grid;place-items:center;color:var(--gold)}
+.ach.locked{opacity:.4}
+.ach .an{font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.ach .ad{font-size:8.5px;color:var(--ink-4);letter-spacing:.08em;text-transform:uppercase}
+
+/* --- Wrap ----------------------------------------------------------------- */
+.wrap-hero{position:relative;padding:26px 16px 18px;overflow:hidden}
+.wrap-q{border-left:2px solid var(--gold);padding:2px 0 2px 12px;margin:10px 0}
+.wrap-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline}
+.wrap-block{padding:12px 0;border-top:1px solid var(--line-soft)}
+.wrap-block .k{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:4px}
+.wrap-block .v{font-size:14px;line-height:1.5}
+
+/* --- Toast ---------------------------------------------------------------- */
+.toast{
+  position:fixed;left:50%;transform:translate(-50%,16px);z-index:60;
+  bottom:calc(var(--nav-h) + var(--safe-b) + 92px);
+  padding:11px 16px;border-radius:var(--r-pill);
+  background:var(--gold-grad);color:#1A1206;font-size:12px;font-weight:800;letter-spacing:.06em;
+  box-shadow:0 10px 26px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:all var(--t-mid)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* --- XP-flits bij missievoltooiing ---------------------------------------- */
+.goldflash{position:fixed;inset:0;z-index:70;pointer-events:none;opacity:0;
+  background:radial-gradient(60% 40% at 50% 50%,rgba(201,163,78,.30),transparent 70%)}
+.goldflash.go{animation:flash 900ms ease-out}
+@keyframes flash{0%{opacity:0}25%{opacity:1}100%{opacity:0}}
+
+/* --- Reduced motion ------------------------------------------------------- */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important}
+}
+/* --- Breed scherm: kolom blijft mobiel ------------------------------------ */
+@media (min-width:900px){
+  .app{min-height:100dvh;border-left:1px solid rgba(201,163,78,.12);border-right:1px solid rgba(201,163,78,.12)}
+}
+</style>
+</head>
+<body>
+
+<!-- [G] APPSHELL -> src/components/AppShell.tsx -->
+<div class="app" id="app">
+  <main class="view" id="view" tabindex="-1"></main>
+</div>
+
+<button class="nyx-fab pulse" id="nyxFab" aria-label="Open Nyx — Mission Control">
+  <img id="nyxAvatar" alt="Nyx" />
+  <span class="bubble" aria-hidden="true">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+      stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></svg>
+  </span>
+</button>
+
+<nav class="nav" id="nav" aria-label="Hoofdnavigatie"></nav>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Detailpaneel" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="goldflash" id="goldflash" aria-hidden="true"></div>
+
+<script>
+/* =================================================================================
+   [C] DATAMODELLEN  ->  src/types/index.ts
+   In de React-app worden dit echte TypeScript interfaces. Ze staan hier als
+   contract zodat de seed-data en de schermen exact hetzelfde vorm gebruiken.
+
+   export type StatKey = 'capital'|'income'|'ownership'|'network'
+                       | 'authority'|'strategy'|'execution'|'optionality';
+
+   export interface Stat        { key:StatKey; label:string; value:number; max:100; tone?:'gold'|'coral'|'jade' }
+   export interface User        { id:string; name:string; level:number; title:string;
+                                  xp:number; xpToNext:number; lifetimeXp:number;
+                                  chapter:Chapter; empire:Empire; counters:Counters; stats:Stat[] }
+   export interface Chapter     { id:string; roman:string; name:string; tagline:string;
+                                  economic:{ from:number; to:number; current:number } }
+   export interface Empire      { value:number; deltaPct:number; deltaLabel:string; trend:number[] }
+   export interface Counters    { missionsCompleted:number; bossCompleted:number;
+                                  networkSize:number; achievements:number }
+
+   export type MissionKind   = 'main'|'boss'|'event'|'business'|'content'|'network'|'opportunity';
+   export type MissionStatus = 'active'|'suggested'|'completed'|'locked';
+
+   export interface MissionObjective { id:string; label:string; done:boolean; optional?:boolean }
+   export interface Mission     { id:string; kind:MissionKind; track:'Main Story'|'Side Quest';
+                                  title:string; why:string; mainObjective:string;
+                                  objectives:MissionObjective[]; status:MissionStatus;
+                                  location?:{ name:string; address?:string; lat:number; lng:number };
+                                  people:string[]; estimate:string; difficulty:'Low'|'Medium'|'High'|'Boss';
+                                  impact:string; xp:number; statReward:{ key:StatKey; amount:number };
+                                  evidence:string; when?:string; featured?:boolean; source?:'seed'|'nyx' }
+
+   export interface Contact     { id:string; name:string; role:string; org?:string;
+                                  tier:'client'|'connector'|'warm'|'partner';
+                                  lat:number; lng:number; note?:string }
+   export interface Company     { id:string; name:string; sector:string; lat:number; lng:number }
+   export interface JournalEntry{ id:string; ts:number; title:string; text:string; tags:string[];
+                                  people:string[]; missionId?:string; location?:string;
+                                  media:{ kind:string; label:string }[]; icon:string }
+   export interface MapPin      { id:string; title:string; type:PinType; lat:number; lng:number;
+                                  note?:string; contactId?:string; missionId?:string;
+                                  state:'default'|'active'|'completed'|'locked'; custom?:boolean }
+   export type PinType = 'home'|'main'|'side'|'boss'|'contact'|'company'|'event'|'opportunity'|'saved';
+   export interface Achievement { id:string; name:string; detail:string; icon:string; unlocked:boolean }
+   export interface MonthlyWrap { id:string; label:string; year:number; events:number;
+                                  newContacts:number; missionsCompleted:number;
+                                  deltas:Partial<Record<StatKey,number>>; empireDelta:number;
+                                  biggestWin:string; biggestMistake:string; bestRelationship:string;
+                                  keyDecision:string; bestMission:string; timeSink:string;
+                                  whatChanged:string; nyx:string; generatedAt?:number }
+   export interface NyxSuggestion{ id:string; title:string; duration:string; difficulty:string;
+                                  xp:number; impact:string; blueprint:Partial<Mission> }
+   ================================================================================= */
+
+/* ---------- Iconenset (eigen SVG, 24x24, stroke) -------------------------- */
+const P = {
+  home:'M4 11.6 12 4.2l8 7.4V20a1 1 0 0 1-1 1h-4.2v-6H9.2v6H5a1 1 0 0 1-1-1z',
+  map:'M9 4 3 6.6v13L9 17l6 3 6-2.6v-13L15 7.2 9 4zM9 4v13M15 7.2v13',
+  target:'M12 4.2a7.8 7.8 0 1 0 0 15.6 7.8 7.8 0 0 0 0-15.6zM12 8.9a3.1 3.1 0 1 0 0 6.2 3.1 3.1 0 0 0 0-6.2zM12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4',
+  book:'M12 6.4C12 4.9 9.9 4 7 4S2.6 4.9 2.6 6.4v12C2.6 16.9 4.4 16 7 16s5 .9 5 2.4zM12 6.4C12 4.9 14.1 4 17 4s4.4.9 4.4 2.4v12c0-1.5-1.8-2.4-4.4-2.4s-5 .9-5 2.4z',
+  user:'M12 4.2a3.9 3.9 0 1 0 0 7.8 3.9 3.9 0 0 0 0-7.8zM4.2 20.8c0-3.9 3.5-5.9 7.8-5.9s7.8 2 7.8 5.9',
+  star:'M12 3.4l2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6L3.3 9.8l6-.9z',
+  flag:'M5.2 21V3.6h9.4l-1.6 3.6 1.6 3.6H5.2',
+  check:'M12 4.2a7.8 7.8 0 1 0 0 15.6 7.8 7.8 0 0 0 0-15.6zM8.4 12.2l2.5 2.5 4.7-5.2',
+  crown:'M3.8 18.4h16.4M3.8 15.2 2.2 6.8l5.2 4.1L12 4.6l4.6 6.3 5.2-4.1-1.6 8.4z',
+  users:'M9.2 4.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8zM2.8 19.8c0-3.4 2.8-5.2 6.4-5.2s6.4 1.8 6.4 5.2M16.4 5.4a3.4 3.4 0 0 1 0 6.4M17.6 15c2.6.5 3.9 2.2 3.9 4.8',
+  chart:'M4.4 20V11.2M9.6 20V4.4M14.8 20v-6.4M20 20V8M2.6 20.6h18.8',
+  infinity:'M8.4 8.6c-2.1 0-3.7 1.5-3.7 3.4s1.6 3.4 3.7 3.4c3.7 0 3.9-6.8 7.4-6.8 2.1 0 3.7 1.5 3.7 3.4s-1.6 3.4-3.7 3.4c-3.5 0-3.7-6.8-7.4-6.8z',
+  cal:'M4 5.6h16v15H4zM4 10.4h16M8.4 3v4M15.6 3v4',
+  clock:'M12 4.2a7.8 7.8 0 1 0 0 15.6 7.8 7.8 0 0 0 0-15.6zM12 7.6v4.7l3.1 2',
+  pin:'M12 21.2s6.4-6.4 6.4-10.7a6.4 6.4 0 1 0-12.8 0C5.6 14.8 12 21.2 12 21.2zM12 8.1a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
+  plus:'M12 5v14M5 12h14',
+  send:'M3.6 12 20.4 3.6l-6.2 16.8-2.8-6.8z',
+  image:'M3.6 5.4h16.8v13.2H3.6zM8.4 10.2a1.5 1.5 0 1 0 0-.1M4.6 17.4l5-5 3.6 3.6 2.6-2.2 4 3.6',
+  mic:'M12 3.2a2.9 2.9 0 0 0-2.9 2.9v5a2.9 2.9 0 0 0 5.8 0v-5A2.9 2.9 0 0 0 12 3.2zM5.8 11.4a6.2 6.2 0 0 0 12.4 0M12 17.6v3.2',
+  right:'M9.4 4.8 16.6 12l-7.2 7.2',
+  left:'M14.6 4.8 7.4 12l7.2 7.2',
+  arrow:'M3.8 12h15.4M13.4 6.2 19.2 12l-5.8 5.8',
+  search:'M11 4.6a6.4 6.4 0 1 0 0 12.8 6.4 6.4 0 0 0 0-12.8zM15.8 15.8 20.4 20.4',
+  filter:'M3.6 7h16.8M6.6 12h10.8M9.6 17h4.8',
+  layers:'M12 3.2 21 8.2l-9 5-9-5zM3 13l9 5 9-5',
+  locate:'M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z',
+  dumb:'M3 9.2v5.6M6.2 7.2v9.6M17.8 7.2v9.6M21 9.2v5.6M6.2 12h11.6',
+  laptop:'M4.4 5.8h15.2v9.4H4.4zM2.2 18.2h19.6',
+  file:'M6.2 3.2h7.6l4 4v13.6H6.2zM13.8 3.2v4h4M9.4 13h5.2M9.4 16.6h3.6',
+  tool:'M3.4 20.6 10 14M13.6 3.4l7 7-2.8 2.8-7-7z',
+  bookopen:'M3.2 5.6c2.9-1.4 5.8-1.4 8.8 0v13.6c-3-1.4-5.9-1.4-8.8 0zM12 5.6c3-1.4 5.9-1.4 8.8 0v13.6c-2.9-1.4-5.8-1.4-8.8 0z',
+  sun:'M12 7.6a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8zM12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6',
+  trophy:'M7.4 3.8h9.2v5a4.6 4.6 0 1 1-9.2 0zM7.4 5.8H4.2v1a3 3 0 0 0 3 3M16.6 5.8h3.2v1a3 3 0 0 1-3 3M12 13.4v4.2M8.6 20.6h6.8',
+  shield:'M12 3.2 19 6v6c0 4.6-3 7.7-7 9-4-1.3-7-4.4-7-9V6zM9.4 11.6l2.2 2.2 3.4-3.8',
+  lock:'M5.6 11.4h12.8v9H5.6zM8.8 11.4V8.2a3.2 3.2 0 0 1 6.4 0v3.2',
+  x:'M6.2 6.2 17.8 17.8M17.8 6.2 6.2 17.8',
+  edit:'M4 20.2h4.2L19.4 9 15.2 4.8 4 16z',
+  nav:'M3.2 11.2 20.8 3.2l-8 17.6-2.2-7.4z',
+  zap:'M13.4 2.8 5.2 14.2h6l-2.2 7 8.2-11.4h-6z',
+  build:'M4.2 3.6h9.6v17.2H4.2zM13.8 9.4h6v11.4h-6M7 7.4h1.6M10.4 7.4H12M7 11.4h1.6M10.4 11.4H12M16 13h1.6',
+  hands:'M3.2 12.6 7 8.8l3.2 3.2 2-2 3.2 3.2 4.4-4.4M6 17.4l3.6-3.6M14.4 17.4 18 13.8',
+  coffee:'M4.2 7.8h11.4v5.4a5.7 5.7 0 0 1-11.4 0zM15.6 9h2.2a2.6 2.6 0 0 1 0 5.2h-2.2M3.4 20.2h13',
+  gem:'M12 3.2l5.4 5.6L12 20.8 6.6 8.8zM6.6 8.8h10.8',
+  dots:'M6 12h.01M12 12h.01M18 12h.01',
+  bookmark:'M6.4 3.4h11.2v17.2L12 16.6l-5.6 4z',
+  brain:'M9.6 4.2a3 3 0 0 0-3 3 2.8 2.8 0 0 0-1.4 5 3 3 0 0 0 1.8 4.6 2.8 2.8 0 0 0 5.4-.8V6.6a2.4 2.4 0 0 0-2.8-2.4zM14.4 4.2a3 3 0 0 1 3 3 2.8 2.8 0 0 1 1.4 5 3 3 0 0 1-1.8 4.6 2.8 2.8 0 0 1-5.4-.8',
+  sort:'M3.6 7h12M3.6 12h8M3.6 17h5M17.4 9.4v9M17.4 18.4l2.6-2.6M17.4 18.4l-2.6-2.6'
+};
+const ico = (n, size = 20, sw = 1.7) =>
+  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor"
+    stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[n] || P.dots}"/></svg>`;
+
+/* ---------- Helpers ------------------------------------------------------- */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const uid = (p = 'id') => p + '-' + Math.random().toString(36).slice(2, 9);
+const eur = n => '€' + n.toLocaleString('nl-BE');
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const DAYS = ['zo','ma','di','wo','do','vr','za'];
+const MONTHS = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const hhmm = ts => new Date(ts).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+const dateLabel = ts => { const d = new Date(ts); return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)} ${d.getFullYear()}`; };
+const monthId = ts => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
+const monthLabel = id => { const [y,m] = id.split('-'); return `${MONTHS[+m-1]} ${y}`.toUpperCase(); };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+const NOW = new Date();
+const atToday = (h, m) => new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate(), h, m).getTime();
+const daysAgo = (n, h, m) => new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - n, h, m).getTime();
+
+/* =================================================================================
+   [D] DEMO-DATA  ->  src/data/seed.ts
+   Volledig gescheiden van de componenten. Alle coördinaten zijn echte locaties
+   in de Kempen; de kaart projecteert ze met Web Mercator.
+   ================================================================================= */
+const SEED = {
+  version: 1,
+
+  user: {
+    id: 'u1', name: 'HARDWIG AERTS', level: 12, title: 'STRATEGIC OPERATOR',
+    xp: 7420, xpToNext: 10000, lifetimeXp: 24860,
+    chapter: { id: 'ch1', roman: 'I', name: 'ESCAPE VELOCITY',
+      tagline: 'Groter denken. Verder gaan.',
+      economic: { from: 0, to: 100000, current: 64800 } },
+    empire: { value: 64800, deltaPct: 12, deltaLabel: 'vs. vorige maand',
+      trend: [38,41,39,46,49,47,53,58,57,62,61,64.8] },
+    counters: { missionsCompleted: 42, bossCompleted: 8, networkSize: 139, achievements: 12 },
+    stats: [
+      { key:'capital',     label:'CAPITAL',     value:78, icon:'gem'      },
+      { key:'income',      label:'INCOME',      value:65, icon:'chart'    },
+      { key:'ownership',   label:'OWNERSHIP',   value:52, icon:'build'    },
+      { key:'network',     label:'NETWORK',     value:86, icon:'users'    },
+      { key:'authority',   label:'AUTHORITY',   value:73, icon:'crown'    },
+      { key:'strategy',    label:'STRATEGY',    value:69, icon:'brain'    },
+      { key:'execution',   label:'EXECUTION',   value:61, icon:'check'    },
+      { key:'optionality', label:'OPTIONALITY', value:47, icon:'infinity', tone:'coral' }
+    ]
+  },
+
+  missions: [
+    { id:'m-connector', kind:'main', track:'Main Story', title:'THE CONNECTOR', featured:true,
+      why:'Uw netwerk heeft toegang nodig buiten uw huidige cirkel. Wie u vandaag kent, bepaalt welke kansen u volgend jaar te zien krijgt.',
+      mainObjective:'Bouw 1 connector-relatie',
+      objectives:[
+        { id:'o1', label:'Identificeer 3 kandidaten', done:true },
+        { id:'o2', label:'Contacteer 2 kandidaten', done:true },
+        { id:'o3', label:'Ontmoet er 1 fysiek', done:false },
+        { id:'o4', label:'Creëer waarde vóór je iets vraagt', done:false },
+        { id:'o5', label:'Noteer wat hij nodig heeft', done:false, optional:true },
+        { id:'o6', label:'Follow-up binnen 48 uur', done:false, optional:true }
+      ],
+      status:'active', location:{ name:'Kempen — regiobreed', address:'Heist-op-den-Berg · Lier · Geel', lat:51.0764, lng:4.7283 },
+      people:['c-pieter','c-mike','c-christophe'], estimate:'4 u over 14 dagen', difficulty:'Medium',
+      impact:'Opent toegang tot 2 nieuwe netwerkkringen', xp:250, statReward:{ key:'network', amount:4 },
+      evidence:'Foto of notitie van de ontmoeting + naam van de connector in Journal', source:'seed' },
+
+    { id:'m-voka', kind:'event', track:'Side Quest', title:'VOKA EVENT — GEEL',
+      why:'Drie potentiële partners in de technologiesector staan op de gastenlijst. Eén avond, drie deuren.',
+      mainObjective:'Spreek 3 nieuwe mensen aan',
+      objectives:[
+        { id:'o1', label:'Gastenlijst scannen', done:true },
+        { id:'o2', label:'3 mensen aanspreken', done:false },
+        { id:'o3', label:'1 concrete afspraak vastleggen', done:false }
+      ],
+      status:'active', location:{ name:'Geel', address:'Lambertzlaan 10, Geel', lat:51.1656, lng:4.9906 },
+      people:['c-christophe'], estimate:'3 u', difficulty:'Low', when:'morgen · 19:00',
+      impact:'Netwerk +3 en zicht op de technologiesector', xp:250, statReward:{ key:'network', amount:3 },
+      evidence:'Namen van 3 gesprekken in Journal', source:'seed' },
+
+    { id:'m-q4', kind:'business', track:'Side Quest', title:'Q4 STRATEGY REVIEW',
+      why:'Zonder cijfers is groei een gevoel. Q4 bepaalt of hoofdstuk I sluit op schema.',
+      mainObjective:'Targets en marges voor Q4 vastleggen',
+      objectives:[
+        { id:'o1', label:'Omzet en marge per klant uitrekenen', done:true },
+        { id:'o2', label:'Uurtarief herevalueren', done:false },
+        { id:'o3', label:'Q4-doel vastleggen in één zin', done:false }
+      ],
+      status:'active', location:{ name:'Home Base', address:'Heist-op-den-Berg', lat:51.0764, lng:4.7283 },
+      people:[], estimate:'2 u', difficulty:'Medium',
+      impact:'Strategie +3 en scherper zicht op marge', xp:100, statReward:{ key:'strategy', amount:3 },
+      evidence:'Screenshot van het ingevulde overzicht', source:'seed' },
+
+    { id:'m-article', kind:'content', track:'Side Quest', title:'THOUGHT LEADERSHIP ARTICLE',
+      why:'Autoriteit is het enige kanaal dat blijft werken terwijl u slaapt.',
+      mainObjective:'Eén artikel publiceren over AI in het KMO-landschap',
+      objectives:[
+        { id:'o1', label:'Onderwerp en invalshoek kiezen', done:true },
+        { id:'o2', label:'Eerste versie schrijven', done:false },
+        { id:'o3', label:'Publiceren en verspreiden', done:false }
+      ],
+      status:'active', location:{ name:'Remote', lat:51.0764, lng:4.7283 },
+      people:[], estimate:'3 u', difficulty:'Medium',
+      impact:'Autoriteit +2, inbound aanvragen', xp:75, statReward:{ key:'authority', amount:2 },
+      evidence:'Link naar het gepubliceerde artikel', source:'seed' },
+
+    { id:'m-lunch', kind:'network', track:'Side Quest', title:'LUNCH MET PIETER',
+      why:'Capaciteit is zijn bottleneck. Dat is precies waar u waarde kunt leveren vóór u iets vraagt.',
+      mainObjective:'Opvolggesprek inplannen en een voorstel voorbereiden',
+      objectives:[
+        { id:'o1', label:'Datum vastleggen', done:false },
+        { id:'o2', label:'Voorstel op één pagina', done:false }
+      ],
+      status:'suggested', location:{ name:'Heist-op-den-Berg', lat:51.0801, lng:4.7220 },
+      people:['c-pieter'], estimate:'2 u', difficulty:'Low',
+      impact:'Netwerk +3 en een reële opdracht in beeld', xp:120, statReward:{ key:'network', amount:3 },
+      evidence:'Bevestigde afspraak in agenda', source:'seed' },
+
+    { id:'m-vastgoed', kind:'opportunity', track:'Side Quest', title:'VERKEN VASTGOEDLOCATIE',
+      why:'Optionality koopt u door vooraf te kijken, niet door te wachten tot u moet.',
+      mainObjective:'Locatie ter plaatse beoordelen',
+      objectives:[
+        { id:'o1', label:'Ligging en bereikbaarheid checken', done:false },
+        { id:'o2', label:'Prijs per m² noteren', done:false }
+      ],
+      status:'suggested', location:{ name:'Booischot', lat:51.0500, lng:4.7833 },
+      people:[], estimate:'1,5 u', difficulty:'Low',
+      impact:'Optionality +2', xp:80, statReward:{ key:'optionality', amount:2 }, evidence:'Foto + notitie', source:'seed' },
+
+    { id:'m-boss10k', kind:'boss', track:'Main Story', title:'DE EERSTE €10K-MAAND',
+      why:'Dit is de drempel waar de praktijk stopt met bijverdienste zijn. Alles daarvoor is voorbereiding.',
+      mainObjective:'€10.000 omzet in één kalendermaand',
+      objectives:[
+        { id:'o1', label:'3 betalende klanten tegelijk', done:false },
+        { id:'o2', label:'Tarief €180/u vasthouden', done:false },
+        { id:'o3', label:'Eén klant op retainer', done:false },
+        { id:'o4', label:'Twee weken buffer in de pijplijn', done:false }
+      ],
+      status:'locked', location:{ name:'Kempen', lat:51.1000, lng:4.8600 },
+      people:['c-rita','c-nico'], estimate:'1 kwartaal', difficulty:'Boss',
+      impact:'Sluit hoofdstuk I. Capital +6, Income +5', xp:1000, statReward:{ key:'capital', amount:6 },
+      evidence:'Facturatie-overzicht van de maand', source:'seed' },
+
+    { id:'m-unizo', kind:'event', track:'Side Quest', title:'UNIZO NETWERKAVOND', status:'completed',
+      why:'Lokale zichtbaarheid opbouwen in Heist.', mainObjective:'5 lokale ondernemers spreken',
+      objectives:[{ id:'o1', label:'Aanwezig zijn', done:true },{ id:'o2', label:'5 gesprekken', done:true }],
+      location:{ name:'Heist-op-den-Berg', lat:51.0731, lng:4.7305 }, people:[], estimate:'3 u',
+      difficulty:'Low', impact:'Netwerk +2', xp:150, statReward:{ key:'network', amount:2 },
+      evidence:'Namen in Journal', source:'seed' },
+
+    { id:'m-rita', kind:'boss', track:'Main Story', title:'EERSTE BETALENDE KLANT', status:'completed',
+      why:'Bewijs dat het aanbod verkoopt zonder JDI achter uw naam.', mainObjective:'Eerste factuur versturen',
+      objectives:[{ id:'o1', label:'Aanbod scherpstellen', done:true },{ id:'o2', label:'Voorstel versturen', done:true },{ id:'o3', label:'Factureren', done:true }],
+      location:{ name:'Heist-op-den-Berg', lat:51.0790, lng:4.7350 }, people:['c-rita'], estimate:'—',
+      difficulty:'Boss', impact:'Capital +4, Income +3', xp:600, statReward:{ key:'capital', amount:4 },
+      evidence:'Betaalde factuur', source:'seed' }
+  ],
+
+  contacts: [
+    { id:'c-pieter',    name:'Pieter Jan',  role:'Ondernemer · productie', tier:'connector', lat:51.0801, lng:4.7220, note:'Capaciteit is zijn bottleneck. Voorstel volgende week.' },
+    { id:'c-rita',      name:'Rita',        role:'Ademcoach · klant',      tier:'client',    lat:51.0790, lng:4.7350, note:'Eerste klant. Zit nog op instaptarief.' },
+    { id:'c-nico',      name:'Nico',        role:'Carbonherstelling',      tier:'client',    lat:51.0512, lng:4.6362, note:'Testimonial staat live.' },
+    { id:'c-kevin',     name:'Kevin',       role:'13th Fool · maker',      tier:'partner',   lat:51.1167, lng:4.6500, note:'Graphic design, 3D-print, merkbeleving.' },
+    { id:'c-mike',      name:'Mike',        role:'Neef · bouw',            tier:'warm',      lat:51.1667, lng:4.6667 },
+    { id:'c-christophe',name:'Christophe',  role:'Warm netwerk',           tier:'warm',      lat:51.1333, lng:4.7500 },
+    { id:'c-anthony',   name:'Anthony',     role:'Warm netwerk',           tier:'warm',      lat:50.9861, lng:4.8361 },
+    { id:'c-frans',     name:'Frans',       role:'Vader · clubs Nijlen–Herenthout–Berlaar', tier:'connector', lat:51.1560, lng:4.6640, note:'Bruggenbouwer naar de bredere Kempen.' }
+  ],
+
+  companies: [
+    { id:'co-verheyen', name:'Werken Verheyen', sector:'Grondwerken',  lat:51.0472, lng:4.7910 },
+    { id:'co-carbon',   name:'Carbonherstelling', sector:'Industrie',  lat:51.0505, lng:4.6300 },
+    { id:'co-unizo',    name:'UNIZO Heist',     sector:'Ondernemersorganisatie', lat:51.0745, lng:4.7260 },
+    { id:'co-voka',     name:'VOKA Kempen',     sector:'Ondernemersorganisatie', lat:51.1656, lng:4.9906 }
+  ],
+
+  pins: [
+    { id:'p-home', title:'Home Base', type:'home', lat:51.0764, lng:4.7283, state:'active', note:'Heist-op-den-Berg' }
+  ],
+
+  journal: [
+    { id:'j1', ts:atToday(6,15),  icon:'dumb',     title:'Workout — Upper Body', tags:['HEALTH','EXECUTION'],
+      text:'Push day in de garage gym. Voelde sterk.', people:[], media:[{kind:'gym',label:'Gym'},{kind:'gym',label:'Set'},{kind:'gym',label:'Rack'}], extraMedia:2 },
+    { id:'j2', ts:atToday(8,30),  icon:'laptop',   title:'Deep Work — Strategie', tags:['BUSINESS','STRATEGY'],
+      text:'Q4 uitgewerkt. Focus op één nieuwe markt in plaats van drie.', missionId:'m-q4',
+      media:[{kind:'note',label:'Discipline'},{kind:'note',label:'Schema'},{kind:'city',label:'Skyline'}], extraMedia:1 },
+    { id:'j3', ts:atToday(12,30), icon:'users',    title:'Lunch met Pieter', tags:['NETWORK','OPPORTUNITY'],
+      text:'Goede gesprekken over samenwerking en capaciteit. Volgende week voorstel sturen.',
+      people:['c-pieter'], missionId:'m-lunch', location:'Heist-op-den-Berg',
+      media:[{kind:'meet',label:'Lunch'},{kind:'note',label:'Notities'}], extraMedia:2 },
+    { id:'j4', ts:atToday(15,45), icon:'file',     title:'Content — LinkedIn post', tags:['AUTHORITY','BRAND'],
+      text:'Artikel geschreven: “Discipline als concurrentievoordeel.”', missionId:'m-article',
+      media:[{kind:'note',label:'Draft'},{kind:'meet',label:'Portret'},{kind:'city',label:'Kempen'}], extraMedia:1 },
+    { id:'j5', ts:atToday(18,30), icon:'tool',     title:'Renovatie studio', tags:['PERSONAL','EXECUTION'],
+      text:'Vloer bijna af. Morgen meubels laten leveren.',
+      media:[{kind:'room',label:'Vloer'},{kind:'room',label:'Studio'}], extraMedia:3 },
+    { id:'j6', ts:atToday(21,0),  icon:'bookopen', title:'Reading — The Prince', tags:['GROWTH'],
+      text:'Hoofdstuk 6–7. Macht, perceptie en timing. Veel parallellen met positionering.',
+      media:[{kind:'book',label:'Boek'},{kind:'book',label:'Passage'}], extraMedia:1 },
+
+    { id:'j7', ts:daysAgo(4,19,30), icon:'users', title:'UNIZO netwerkavond', tags:['NETWORK','EVENT'],
+      text:'Vijf lokale ondernemers gesproken. Twee willen een scan.', missionId:'m-unizo',
+      location:'Heist-op-den-Berg', media:[{kind:'meet',label:'Avond'}], extraMedia:0 },
+    { id:'j8', ts:daysAgo(9,11,0), icon:'zap', title:'Tarief verhoogd naar €180/u', tags:['BUSINESS','CAPITAL'],
+      text:'Eerste nieuwe klant akkoord zonder discussie. Had dit zes maanden eerder moeten doen.',
+      media:[], extraMedia:0 },
+    { id:'j9', ts:daysAgo(13,16,20), icon:'build', title:'Site live — Kempen Vice', tags:['BRAND','EXECUTION'],
+      text:'Nieuw thema staat online. Tracking loopt. Nu content, geen tools meer bouwen.',
+      media:[{kind:'city',label:'Site'}], extraMedia:0 }
+  ],
+
+  achievements: [
+    { id:'a1', name:'NETWORKER',       detail:'100+ contacten', icon:'users',  unlocked:true },
+    { id:'a2', name:'MISSION MASTER',  detail:'40 missies',     icon:'shield', unlocked:true },
+    { id:'a3', name:'BELGIAN BUILDER', detail:'Groter spel',    icon:'build',  unlocked:true },
+    { id:'a4', name:'FIRST BLOOD',     detail:'Eerste klant',   icon:'zap',    unlocked:true },
+    { id:'a5', name:'DEEP WORK 100U',  detail:'Nog 12 u',       icon:'lock',   unlocked:false }
+  ],
+
+  wraps: [
+    { id:'2026-08', label:'AUGUSTUS 2026', year:2026, events:3, newContacts:7, missionsCompleted:6,
+      deltas:{ income:12, execution:8, network:4 }, empireDelta:5200,
+      biggestWin:'Instaptarief losgelaten bij twee offertes.',
+      biggestMistake:'Drie weken aan de site gewerkt in plaats van te bellen.',
+      bestRelationship:'Nico — bracht een tweede klant aan zonder dat u ernaar vroeg.',
+      keyDecision:'Stoppen met gratis adviesgesprekken van meer dan 30 minuten.',
+      bestMission:'Eerste betalende klant',
+      timeSink:'Thema-tweaks op de website.',
+      whatChanged:'De praktijk is voor het eerst winstgevend zonder JDI-uren.',
+      nyx:'Augustus was de maand waarin u leerde vragen wat het waard is.' }
+  ],
+
+  nyxSuggestions: [
+    { id:'ns1', title:'BUILD 3 CONNECTOR RELATIONSHIPS', duration:'30 dagen', difficulty:'Medium',
+      xp:200, impact:'Network impact',
+      blueprint:{ kind:'network', track:'Main Story',
+        why:'Drie connectors bereiken samen meer ondernemers dan u in een jaar koud kunt benaderen.',
+        mainObjective:'Drie connector-relaties opbouwen',
+        objectives:[
+          { id:'o1', label:'3 connectors selecteren', done:false },
+          { id:'o2', label:'Elk een gesprek van 30 minuten', done:false },
+          { id:'o3', label:'Elk één concrete doorverwijzing geven', done:false }
+        ],
+        location:{ name:'Kempen', lat:51.1100, lng:4.7600 }, people:['c-frans','c-mike'],
+        estimate:'6 u over 30 dagen', difficulty:'Medium', impact:'Netwerk +6',
+        statReward:{ key:'network', amount:6 }, evidence:'Drie namen + datum van elk gesprek' } },
+
+    { id:'ns2', title:'HERACTIVEER 5 SLAPENDE CONTACTEN', duration:'14 dagen', difficulty:'Low',
+      xp:120, impact:'Network impact',
+      blueprint:{ kind:'network', track:'Side Quest',
+        why:'U kent al meer mensen dan u gebruikt. Warm is sneller dan koud.',
+        mainObjective:'Vijf contacten opnieuw activeren',
+        objectives:[
+          { id:'o1', label:'Lijst van 5 namen', done:false },
+          { id:'o2', label:'Persoonlijk bericht per naam', done:false },
+          { id:'o3', label:'Eén koffie inplannen', done:false }
+        ],
+        location:{ name:'Kempen', lat:51.0900, lng:4.7000 }, people:[], estimate:'3 u',
+        difficulty:'Low', impact:'Netwerk +3', statReward:{ key:'network', amount:3 },
+        evidence:'Vijf verstuurde berichten in Journal' } },
+
+    { id:'ns3', title:'PRIJSGESPREK MET RITA', duration:'7 dagen', difficulty:'Medium',
+      xp:150, impact:'Capital impact',
+      blueprint:{ kind:'business', track:'Side Quest',
+        why:'Het instaptarief is bewijsmateriaal geworden in plaats van een startpunt.',
+        mainObjective:'Tarief herzien met de eerste klant',
+        objectives:[
+          { id:'o1', label:'Resultaten van 6 maanden op papier', done:false },
+          { id:'o2', label:'Nieuw tarief voorstellen', done:false }
+        ],
+        location:{ name:'Heist-op-den-Berg', lat:51.0790, lng:4.7350 }, people:['c-rita'],
+        estimate:'1,5 u', difficulty:'Medium', impact:'Capital +3',
+        statReward:{ key:'capital', amount:3 }, evidence:'Bevestigd nieuw tarief' } }
+  ],
+
+  dailyImpact: [
+    { key:'capital', label:'CAPITAL', v:2 }, { key:'income', label:'INCOME', v:1 },
+    { key:'ownership', label:'OWNERSHIP', v:1 }, { key:'network', label:'NETWORK', v:3 },
+    { key:'authority', label:'AUTHORITY', v:2 }, { key:'strategy', label:'STRATEGY', v:2 },
+    { key:'execution', label:'EXECUTION', v:3 }, { key:'wellbeing', label:'WELLBEING', v:1 }
+  ],
+
+  upcoming: [
+    { id:'u1', when:'Morgen · 09:00', title:'Strategy call', detail:'Q4 marketing' },
+    { id:'u2', when:'Morgen · 14:00', title:'Studio levering', detail:'Meubels' },
+    { id:'u3', when:'Wo 23 sep · 10:00', title:'Investor meeting', detail:'Online' }
+  ]
+};
+</script>
+
+<script>
+/* =================================================================================
+   [E] STATE + PERSISTENTIE  ->  src/store/useStore.ts
+   Bewust één simpele store met expliciete mutaties. In de React-app: Zustand met
+   dezelfde acties (persist-middleware op localStorage, zelfde sleutel/versie).
+   ================================================================================= */
+const STORAGE_KEY = 'hardwig.empire.v1';
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== SEED.version) return null;   // migratie: val terug op seed
+    return parsed;
+  } catch (e) { console.warn('localStorage niet beschikbaar, we draaien op seed-data.', e); return null; }
+}
+function persist() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); }
+  catch (e) { /* private mode of quota: prototype blijft werken in geheugen */ }
+}
+const S = loadState() || JSON.parse(JSON.stringify(SEED));
+S.ui = { tab:'home', missionFilter:'active', journalFilter:'today', mapFilter:'all',
+         selectedPin:null, activeMissionId:'m-connector' };
+
+/* Selectors */
+const missionById = id => S.missions.find(m => m.id === id);
+const contactById = id => S.contacts.find(c => c.id === id);
+const activeMissions  = () => S.missions.filter(m => m.status === 'active');
+const featuredMission = () => S.missions.find(m => m.id === S.ui.activeMissionId) || activeMissions()[0];
+const statByKey = k => S.user.stats.find(s => s.key === k);
+const doneCount = m => m.objectives.filter(o => !o.optional && o.done).length;
+const reqCount  = m => m.objectives.filter(o => !o.optional).length;
+
+/* Acties ------------------------------------------------------------------- */
+function toggleObjective(missionId, objId) {
+  const m = missionById(missionId); if (!m) return;
+  const o = m.objectives.find(x => x.id === objId); if (!o) return;
+  o.done = !o.done;
+  if (doneCount(m) === reqCount(m) && m.status === 'active') completeMission(m.id);
+  persist();
+}
+function completeMission(id) {
+  const m = missionById(id); if (!m || m.status === 'completed') return;
+  m.status = 'completed';
+  m.objectives.forEach(o => { if (!o.optional) o.done = true; });
+  S.user.xp += m.xp; S.user.lifetimeXp += m.xp;
+  while (S.user.xp >= S.user.xpToNext) { S.user.xp -= S.user.xpToNext; S.user.level += 1; }
+  const st = statByKey(m.statReward.key);
+  if (st) st.value = clamp(st.value + m.statReward.amount, 0, 100);
+  S.user.counters.missionsCompleted += 1;
+  if (m.kind === 'boss') S.user.counters.bossCompleted += 1;
+  if (S.ui.activeMissionId === id) {
+    const next = activeMissions()[0]; S.ui.activeMissionId = next ? next.id : id;
+  }
+  goldFlash(); toast(`Missie voltooid · +${m.xp} XP`);
+  persist();
+}
+function acceptSuggestion(sugId) {
+  const sug = S.nyxSuggestions.find(s => s.id === sugId); if (!sug) return null;
+  const m = Object.assign({
+    id: uid('m'), title: sug.title, status:'active', xp: sug.xp, source:'nyx',
+    objectives: [], people: [], featured:false
+  }, JSON.parse(JSON.stringify(sug.blueprint)));
+  m.id = uid('m'); m.title = sug.title; m.status = 'active'; m.xp = sug.xp; m.source = 'nyx';
+  S.missions.unshift(m);
+  S.nyxSuggestions = S.nyxSuggestions.filter(s => s.id !== sugId);
+  persist();
+  return m;
+}
+function addJournalEntry({ text, media = [] }) {
+  const firstLine = text.split(/[.\n]/)[0].trim();
+  const entry = {
+    id: uid('j'), ts: Date.now(), icon: 'edit',
+    title: firstLine.length > 46 ? firstLine.slice(0, 44) + '…' : (firstLine || 'Quick note'),
+    text: text.trim(), tags:['QUICK NOTE'], people:[], media, extraMedia:0
+  };
+  const people = S.contacts.filter(c => new RegExp('\\b' + c.name + '\\b', 'i').test(text));
+  entry.people = people.map(c => c.id);
+  if (people.length) entry.tags.push('NETWORK');
+  S.journal.unshift(entry); persist();
+  return entry;
+}
+function addPin(pin) {
+  const p = Object.assign({ id: uid('pin'), state:'default', custom:true }, pin);
+  S.pins.push(p); persist(); return p;
+}
+function removePin(id) { S.pins = S.pins.filter(p => p.id !== id); persist(); }
+
+function generateWrap() {
+  const id = monthId(Date.now());
+  const entries = S.journal.filter(j => monthId(j.ts) === id);
+  const done = S.missions.filter(m => m.status === 'completed');
+  const people = new Set(); entries.forEach(e => (e.people || []).forEach(p => people.add(p)));
+  const wrap = {
+    id, label: monthLabel(id), year: new Date().getFullYear(),
+    events: entries.filter(e => (e.tags || []).includes('EVENT') || (e.tags || []).includes('NETWORK')).length,
+    newContacts: 11, missionsCompleted: done.length,
+    deltas: { network:9, authority:6, execution:4 },
+    empireDelta: 6900,
+    biggestWin:'De eerste gesprekken kwamen naar u toe in plaats van andersom.',
+    biggestMistake:'Te lang aan het thema gesleuteld voor u Pieter belde.',
+    bestRelationship:'Pieter Jan — capaciteitsprobleem dat u kunt oplossen.',
+    keyDecision:'Tarief op €180/u houden, ook bij twijfel.',
+    bestMission:'The Connector',
+    timeSink:'Website en tooling.',
+    whatChanged:'Netwerk is van uw zwakste naar uw sterkste beweging gegaan.',
+    nyx:'September was de maand waarin u eindelijk uit het safehouse kwam.',
+    generatedAt: Date.now(),
+    entryIds: entries.slice(0, 6).map(e => e.id)
+  };
+  S.wraps = [wrap, ...S.wraps.filter(w => w.id !== id)];
+  persist(); return wrap;
+}
+function resetDemo() { try { localStorage.removeItem(STORAGE_KEY); } catch (e) {} location.reload(); }
+
+/* =================================================================================
+   [F] UI-PRIMITIEVEN  ->  src/components/ui/*
+   Stringgebaseerd hier; 1-op-1 te mappen op React-componenten met dezelfde props.
+   ================================================================================= */
+const Bar = (pct, cls = '') =>
+  `<div class="bar ${cls}"><i data-w="${clamp(pct,0,100)}"></i></div>`;
+
+const Pill = (iconName, val, lab) => `
+  <div class="pill">
+    <span class="ico">${ico(iconName, 14, 2)}</span>
+    <span><span class="val">${val}</span><br><span class="lab">${lab}</span></span>
+  </div>`;
+
+const Tag = (t, cls = '') => `<span class="tag ${cls}">${esc(t)}</span>`;
+
+/* Cinematische hero — eigen SVG, geen fotomateriaal */
+function heroArt(seed = 0) {
+  const g = 'g' + seed;
+  return `
+  <div class="hero-art" aria-hidden="true"><svg viewBox="0 0 430 220" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="sky${g}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#2A1408"/><stop offset=".45" stop-color="#6E3A15"/>
+        <stop offset=".72" stop-color="#C87A2E"/><stop offset="1" stop-color="#3A2010"/>
+      </linearGradient>
+      <radialGradient id="sun${g}" cx=".62" cy=".62" r=".5">
+        <stop offset="0" stop-color="#FFC978" stop-opacity=".95"/>
+        <stop offset="1" stop-color="#FF9A3C" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="430" height="220" fill="url(#sky${g})"/>
+    <circle cx="250" cy="150" r="120" fill="url(#sun${g})"/>
+    <g fill="#180F09" opacity=".55">
+      <path d="M0 150h34v-18h10v18h26v-30h14v30h30v-14h12v14h40v-46h9l5-22 5 22h9v46h56v-26h13v26h60v-34h12v34h38v-20h10v20h47v70H0z"/>
+    </g>
+    <g fill="#0D0805">
+      <path d="M0 176h46v-16h12v16h34v-24h11v24h36v-12h13v12h33v-38h8l6-26 6 26h8v38h52v-20h12v20h54v-28h11v28h32v-14h12v14h44v44H0z"/>
+    </g>
+    <g fill="#080604" opacity=".92">
+      <ellipse cx="348" cy="104" rx="26" ry="29"/>
+      <path d="M300 220c0-46 20-74 48-74s48 28 48 74z"/>
+    </g>
+    <rect width="430" height="220" fill="url(#sun${g})" opacity=".12"/>
+  </svg></div>
+  <div class="hero-fade" aria-hidden="true"></div>`;
+}
+
+/* Beeldvlakken voor journal/missies — abstracte composities, geen stockbeeld */
+const PLATE_ART = {
+  gym:  ['#241A12','#3B2A18','M6 30h12M22 30h12M12 22v16M28 22v16'],
+  note: ['#1B1814','#2E2A21','M8 14h26M8 22h20M8 30h24M8 38h14'],
+  meet: ['#1E1610','#3A2716','M10 34c0-6 4-9 9-9s9 3 9 9M19 14a5 5 0 1 0 .1 0M32 34c0-5 3-8 7-8'],
+  city: ['#1A1209','#4A2A12','M4 40V26h8v14M14 40V18h9v22M25 40V10h7v30M34 40V22h8v18'],
+  room: ['#1C1815','#332B21','M6 38V18l18-8 18 8v20M18 38V26h12v12'],
+  book: ['#171310','#2B2218','M10 12h12v26H10zM26 12h12v26H26zM13 18h6M29 18h6'],
+  mission: ['#1A130C','#553017','M24 8a16 16 0 1 0 .1 0M24 18a6 6 0 1 0 .1 0M24 2v6M24 40v6M2 24h6M40 24h6']
+};
+function plate(kind, cls = '', label = '') {
+  const [a, b, d] = PLATE_ART[kind] || PLATE_ART.note;
+  const id = uid('pl');
+  return `<div class="plate ${cls}">
+    <svg viewBox="0 0 48 48" preserveAspectRatio="none" aria-hidden="true">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>
+      <rect width="48" height="48" fill="url(#${id})"/>
+      <path d="${d}" fill="none" stroke="rgba(201,163,78,.45)" stroke-width="1.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>${label ? `<span class="lbl">${esc(label)}</span>` : ''}</div>`;
+}
+
+/* Animatie van alle progress-bars na render */
+function animateBars(root = document) {
+  requestAnimationFrame(() => $$('.bar > i', root).forEach(i => { i.style.width = i.dataset.w + '%'; }));
+}
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function goldFlash() {
+  const f = $('#goldflash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+}
+
+/* =================================================================================
+   [H] KAARTMOTOR  ->  src/features/map/MapEngine.ts
+   Web Mercator-projectie op echte lat/lng. Probeert echte OSM-rastertegels; als die
+   niet laden (offline / geblokkeerd) valt ze terug op een eigen vectorlaag die
+   dezelfde echte coördinaten tekent. Markers zijn DOM-elementen: tapbaar en
+   toegankelijk.
+
+   VERVANGEN DOOR LEAFLET IN DE ECHTE APP:
+     const map = L.map(el,{zoomControl:false}).setView([51.0764,4.7283],11);
+     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+       {attribution:'&copy; OpenStreetMap, &copy; CARTO', maxZoom:19}).addTo(map);
+     // markers: L.marker([lat,lng],{icon:L.divIcon({html:markerSvg(pin)})})
+   De rest van dit bestand (filters, sheets, custom pins, persistentie) blijft gelijk.
+   ================================================================================= */
+const TILE_URL = z => `https://tile.openstreetmap.org/${z}/{x}/{y}.png`;
+const TOWNS = [
+  { n:'Heist-op-den-Berg', lat:51.0764, lng:4.7283, rank:1 },
+  { n:'Mechelen',   lat:51.0259, lng:4.4776, rank:1 },
+  { n:'Aarschot',   lat:50.9861, lng:4.8361, rank:1 },
+  { n:'Lier',       lat:51.1314, lng:4.5706, rank:1 },
+  { n:'Geel',       lat:51.1656, lng:4.9906, rank:1 },
+  { n:'Herentals',  lat:51.1758, lng:4.8339, rank:2 },
+  { n:'Putte',      lat:51.0500, lng:4.6333, rank:2 },
+  { n:'Booischot',  lat:51.0500, lng:4.7833, rank:2 },
+  { n:'Begijnendijk',lat:51.0167,lng:4.7833, rank:2 },
+  { n:'Tremelo',    lat:50.9931, lng:4.7047, rank:2 },
+  { n:'Keerbergen', lat:50.9986, lng:4.6386, rank:2 },
+  { n:'Bonheiden',  lat:51.0167, lng:4.5333, rank:2 },
+  { n:'Haacht',     lat:50.9764, lng:4.6333, rank:2 },
+  { n:'Rotselaar',  lat:50.9500, lng:4.7167, rank:2 },
+  { n:'Nijlen',     lat:51.1667, lng:4.6667, rank:2 },
+  { n:'Herenthout', lat:51.1333, lng:4.7500, rank:2 },
+  { n:'Berlaar',    lat:51.1167, lng:4.6500, rank:2 },
+  { n:'Westerlo',   lat:51.0897, lng:4.9161, rank:2 }
+];
+const LINKS = [
+  ['Heist-op-den-Berg','Putte',1],['Heist-op-den-Berg','Booischot',1],['Booischot','Westerlo',1],
+  ['Westerlo','Geel',1],['Heist-op-den-Berg','Berlaar',1],['Berlaar','Lier',1],['Lier','Nijlen',2],
+  ['Nijlen','Herenthout',2],['Herenthout','Herentals',2],['Herentals','Geel',1],
+  ['Putte','Bonheiden',2],['Bonheiden','Mechelen',1],['Mechelen','Keerbergen',2],
+  ['Keerbergen','Tremelo',2],['Tremelo','Begijnendijk',2],['Begijnendijk','Aarschot',1],
+  ['Aarschot','Rotselaar',2],['Rotselaar','Haacht',2],['Haacht','Keerbergen',2],
+  ['Heist-op-den-Berg','Begijnendijk',2],['Herenthout','Heist-op-den-Berg',2],['Aarschot','Westerlo',2]
+];
+const townByName = n => TOWNS.find(t => t.n === n);
+
+const MapEngine = {
+  el:null, canvas:null, ctx:null, layer:null,
+  center:{ lat:51.0680, lng:4.7250 }, zoom:11.2,
+  tilesOK:true, tileFails:0, cache:new Map(), markers:[], onSelect:null, onLongPress:null,
+  dpr: Math.min(window.devicePixelRatio || 1, 2),
+
+  mount(el, layer) {
+    this.el = el; this.layer = layer;
+    this.canvas = $('#mapCanvas', el); this.ctx = this.canvas.getContext('2d');
+    this.resize(); this.bind(); this.draw(); this.renderMarkers();
+    if (!this._ro) { this._ro = new ResizeObserver(() => { this.resize(); this.draw(); this.renderMarkers(); }); }
+    this._ro.observe(el);
+  },
+  resize() {
+    const r = this.el.getBoundingClientRect();
+    this.w = r.width; this.h = r.height;
+    this.canvas.width = Math.round(r.width * this.dpr);
+    this.canvas.height = Math.round(r.height * this.dpr);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  },
+  /* --- projectie --- */
+  worldSize(z) { return 256 * Math.pow(2, z); },
+  project(lat, lng, z) {
+    const s = this.worldSize(z);
+    const x = (lng + 180) / 360 * s;
+    const sin = Math.sin(lat * Math.PI / 180);
+    const y = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * s;
+    return { x, y };
+  },
+  unproject(x, y, z) {
+    const s = this.worldSize(z);
+    const lng = x / s * 360 - 180;
+    const n = Math.PI - 2 * Math.PI * y / s;
+    const lat = 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    return { lat, lng };
+  },
+  screenOf(lat, lng) {
+    const c = this.project(this.center.lat, this.center.lng, this.zoom);
+    const p = this.project(lat, lng, this.zoom);
+    return { x: p.x - c.x + this.w / 2, y: p.y - c.y + this.h / 2 };
+  },
+  latLngAt(sx, sy) {
+    const c = this.project(this.center.lat, this.center.lng, this.zoom);
+    return this.unproject(c.x + sx - this.w / 2, c.y + sy - this.h / 2, this.zoom);
+  },
+  metersPerPx() { return 156543.03392 * Math.cos(this.center.lat * Math.PI / 180) / Math.pow(2, this.zoom); },
+
+  /* --- tekenen --- */
+  draw() {
+    const { ctx, w, h } = this;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0D0B09'; ctx.fillRect(0, 0, w, h);
+    if (this.tilesOK) this.drawTiles();
+    this.drawVector(!this.tilesOK);
+    this.drawVignette();
+    this.updateScale();
+  },
+  drawTiles() {
+    const zi = clamp(Math.round(this.zoom), 9, 16);
+    const scale = Math.pow(2, this.zoom - zi);
+    const size = 256 * scale;
+    const c = this.project(this.center.lat, this.center.lng, zi);
+    const originX = c.x * scale - this.w / 2, originY = c.y * scale - this.h / 2;
+    const x0 = Math.floor(originX / size), x1 = Math.floor((originX + this.w) / size);
+    const y0 = Math.floor(originY / size), y1 = Math.floor((originY + this.h) / size);
+    const max = Math.pow(2, zi);
+    this.ctx.save(); this.ctx.globalAlpha = .88;
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+      if (y < 0 || y >= max) continue;
+      const tx = ((x % max) + max) % max;
+      const img = this.tile(zi, tx, y);
+      if (img && img.complete && img.naturalWidth) {
+        this.ctx.drawImage(img, Math.round(x * size - originX), Math.round(y * size - originY),
+          Math.ceil(size), Math.ceil(size));
+      }
+    }
+    this.ctx.restore();
+    /* warme filmische grade over de tegels */
+    this.ctx.save();
+    this.ctx.globalCompositeOperation = 'multiply';
+    this.ctx.fillStyle = 'rgba(70,45,22,.55)'; this.ctx.fillRect(0, 0, this.w, this.h);
+    this.ctx.globalCompositeOperation = 'source-over';
+    this.ctx.fillStyle = 'rgba(11,9,7,.34)'; this.ctx.fillRect(0, 0, this.w, this.h);
+    this.ctx.restore();
+  },
+  tile(z, x, y) {
+    const k = z + '/' + x + '/' + y;
+    if (this.cache.has(k)) return this.cache.get(k);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => { this.tileFails = 0; this.draw(); };
+    img.onerror = () => {
+      this.tileFails++;
+      if (this.tileFails >= 4 && this.tilesOK) {
+        this.tilesOK = false;
+        const b = $('#mapMode'); if (b) b.textContent = 'Vector';
+        this.draw();
+      }
+    };
+    img.src = TILE_URL(z).replace('{x}', x).replace('{y}', y);
+    this.cache.set(k, img);
+    return img;
+  },
+  /* Eigen vectorlaag: echte coördinaten, schematische verbindingen */
+  drawVector(asBase) {
+    const { ctx } = this;
+    if (asBase) {
+      const g = ctx.createLinearGradient(0, 0, 0, this.h);
+      g.addColorStop(0, '#12100D'); g.addColorStop(1, '#0A0806');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, this.w, this.h);
+      ctx.save(); ctx.globalAlpha = .18; ctx.strokeStyle = '#3A2E1C'; ctx.lineWidth = 1;
+      const step = 46 * Math.pow(2, this.zoom - 11);
+      const off = this.screenOf(51.0764, 4.7283);
+      for (let x = off.x % step; x < this.w; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.h); ctx.stroke(); }
+      for (let y = off.y % step; y < this.h; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.w, y); ctx.stroke(); }
+      ctx.restore();
+    }
+    ctx.save();
+    LINKS.forEach(([a, b, cls]) => {
+      const ta = townByName(a), tb = townByName(b); if (!ta || !tb) return;
+      const pa = this.screenOf(ta.lat, ta.lng), pb = this.screenOf(tb.lat, tb.lng);
+      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y);
+      ctx.strokeStyle = cls === 1 ? 'rgba(201,163,78,.55)' : 'rgba(201,163,78,.26)';
+      ctx.lineWidth = cls === 1 ? 2.1 : 1.2; ctx.lineCap = 'round'; ctx.stroke();
+    });
+    TOWNS.forEach(t => {
+      const p = this.screenOf(t.lat, t.lng);
+      if (p.x < -60 || p.x > this.w + 60 || p.y < -30 || p.y > this.h + 30) return;
+      if (t.rank === 2 && this.zoom < 10.4) return;
+      ctx.beginPath(); ctx.arc(p.x, p.y, t.rank === 1 ? 3.2 : 2.1, 0, 7);
+      ctx.fillStyle = t.rank === 1 ? 'rgba(246,236,223,.9)' : 'rgba(246,236,223,.55)'; ctx.fill();
+      ctx.font = `${t.rank === 1 ? 600 : 500} ${t.rank === 1 ? 12 : 10.5}px Montserrat, sans-serif`;
+      ctx.fillStyle = t.rank === 1 ? 'rgba(246,236,223,.94)' : 'rgba(246,236,223,.6)';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 6;
+      ctx.fillText(t.n, p.x, p.y - 8);
+      ctx.shadowBlur = 0;
+    });
+    ctx.restore();
+  },
+  drawVignette() {
+    const { ctx } = this;
+    const g = ctx.createRadialGradient(this.w / 2, this.h / 2, this.h * .35, this.w / 2, this.h / 2, this.h * .95);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(6,5,4,.62)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, this.w, this.h);
+  },
+  updateScale() {
+    const el = $('#mapScale'); if (!el) return;
+    const mpp = this.metersPerPx();
+    const targets = [100, 200, 500, 1000, 2000, 5000, 10000];
+    let best = targets[0];
+    targets.forEach(t => { if (Math.abs(t / mpp - 74) < Math.abs(best / mpp - 74)) best = t; });
+    el.querySelector('.rule').style.width = Math.round(best / mpp) + 'px';
+    el.querySelector('.lab').textContent = best >= 1000 ? (best / 1000) + ' km' : best + ' m';
+  },
+
+  /* --- markers --- */
+  setMarkers(pins) { this.markers = pins; this.renderMarkers(); },
+  renderMarkers() {
+    if (!this.layer) return;
+    this.layer.innerHTML = this.markers.map(p => {
+      const s = this.screenOf(p.lat, p.lng);
+      if (s.x < -60 || s.x > this.w + 60 || s.y < -80 || s.y > this.h + 60) return '';
+      const sel = S.ui.selectedPin === p.id;
+      return `<button class="mk ${sel ? 'sel' : ''} ${p.state === 'completed' ? 'done' : ''} ${p.state === 'locked' ? 'locked' : ''}"
+        style="left:${s.x}px;top:${s.y}px" data-pin="${p.id}"
+        aria-label="${esc(p.title)} — ${PIN_META[p.type].label}">${markerSvg(p, sel)}</button>`;
+    }).join('');
+  },
+  /* --- interactie --- */
+  bind() {
+    const el = this.el; let pts = new Map(), moved = 0, lastDist = 0, lpTimer = null, start = null;
+    const cancelLP = () => { clearTimeout(lpTimer); lpTimer = null; };
+
+    el.addEventListener('pointerdown', e => {
+      if (e.target.closest('.mk') || e.target.closest('.map-ctl')) return;
+      el.setPointerCapture(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      moved = 0; start = { x: e.clientX, y: e.clientY };
+      if (pts.size === 1) {
+        cancelLP();
+        lpTimer = setTimeout(() => {
+          const r = el.getBoundingClientRect();
+          const ll = this.latLngAt(start.x - r.left, start.y - r.top);
+          if (navigator.vibrate) navigator.vibrate(12);
+          this.onLongPress && this.onLongPress(ll);
+          pts.clear();
+        }, 550);
+      }
+    });
+    el.addEventListener('pointermove', e => {
+      if (!pts.has(e.pointerId)) return;
+      const prev = pts.get(e.pointerId);
+      const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      moved += Math.abs(dx) + Math.abs(dy);
+      if (moved > 8) cancelLP();
+      if (pts.size === 1) {
+        this.panBy(-dx, -dy);
+      } else if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (lastDist) this.zoomBy(Math.log2(d / lastDist));
+        lastDist = d;
+      }
+    });
+    const up = e => { pts.delete(e.pointerId); lastDist = 0; cancelLP(); };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', e => { e.preventDefault(); this.zoomBy(-e.deltaY * 0.0022); }, { passive:false });
+  },
+  panBy(dx, dy) {
+    const c = this.project(this.center.lat, this.center.lng, this.zoom);
+    const ll = this.unproject(c.x + dx, c.y + dy, this.zoom);
+    this.center = { lat: clamp(ll.lat, 50.5, 51.6), lng: clamp(ll.lng, 4.0, 5.5) };
+    this.draw(); this.renderMarkers();
+  },
+  zoomBy(d) { this.setZoom(this.zoom + d); },
+  setZoom(z) { this.zoom = clamp(z, 9.5, 16); this.draw(); this.renderMarkers(); },
+  flyTo(lat, lng, z) {
+    this.center = { lat, lng }; if (z) this.zoom = clamp(z, 9.5, 16);
+    this.draw(); this.renderMarkers();
+  }
+};
+
+/* Markerdefinitie — eigen iconenset, geen game-assets */
+const PIN_META = {
+  home:        { label:'Home Base',    icon:'home',  fill:'#1B3A2B', stroke:'#4FBF8B', glyph:'#9BE8C4' },
+  main:        { label:'Main Mission', icon:'target',fill:'#3A2A0E', stroke:'#C9A34E', glyph:'#F6ECDF' },
+  side:        { label:'Side Quest',   icon:'flag',  fill:'#241D12', stroke:'#8A6C2A', glyph:'#E4C782' },
+  boss:        { label:'Boss Mission', icon:'shield',fill:'#3A0F20', stroke:'#F05252', glyph:'#FFD7D7' },
+  contact:     { label:'Contact',      icon:'users', fill:'#221E19', stroke:'#F6ECDF', glyph:'#F6ECDF' },
+  company:     { label:'Bedrijf',      icon:'build', fill:'#2E1D0C', stroke:'#FF9A3C', glyph:'#FFD9AE' },
+  event:       { label:'Event',        icon:'cal',   fill:'#2A220E', stroke:'#C9A34E', glyph:'#F6ECDF' },
+  opportunity: { label:'Opportuniteit',icon:'gem',   fill:'#16291F', stroke:'#4FBF8B', glyph:'#BFF0D7' },
+  saved:       { label:'Eigen pin',    icon:'bookmark', fill:'#2B1A0B', stroke:'#FF9A3C', glyph:'#FFD9AE' }
+};
+function markerSvg(p, selected) {
+  const m = PIN_META[p.type] || PIN_META.saved;
+  const glow = (p.state === 'active' || selected)
+    ? `<circle class="glow" cx="19" cy="16" r="17" fill="${m.stroke}" opacity=".3"/>` : '';
+  const lock = p.state === 'locked'
+    ? `<g transform="translate(13,10) scale(.55)" stroke="${m.glyph}" fill="none" stroke-width="2.4"
+         stroke-linecap="round"><path d="${P.lock}"/></g>` : '';
+  return `<svg viewBox="0 0 38 46">${glow}
+    <path d="M19 45C19 45 34 28.5 34 17A15 15 0 1 0 4 17C4 28.5 19 45 19 45Z"
+      fill="${m.fill}" stroke="${m.stroke}" stroke-width="${selected ? 2.6 : 1.8}"/>
+    ${p.state === 'locked' ? lock : `<g transform="translate(9,6) scale(.84)" stroke="${m.glyph}" fill="none"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${P[m.icon]}"/></g>`}
+    ${p.state === 'completed' ? `<circle cx="30" cy="30" r="7" fill="#0B0907" stroke="${m.stroke}" stroke-width="1.4"/>
+      <path d="M27 30l2 2 4-4.4" stroke="${m.stroke}" stroke-width="1.8" fill="none" stroke-linecap="round"/>` : ''}
+  </svg>`;
+}
+
+/* Alle pins = missies + contacten + bedrijven + eigen pins */
+function allPins() {
+  const out = [];
+  S.pins.forEach(p => out.push(p));
+  S.missions.forEach(m => {
+    if (!m.location) return;
+    const type = m.kind === 'boss' ? 'boss' : m.kind === 'main' ? 'main'
+      : m.kind === 'event' ? 'event' : m.kind === 'opportunity' ? 'opportunity' : 'side';
+    out.push({ id:'mp-' + m.id, title:m.title, type, lat:m.location.lat, lng:m.location.lng,
+      missionId:m.id, kind:'mission',
+      state: m.status === 'completed' ? 'completed' : m.status === 'locked' ? 'locked'
+        : m.id === S.ui.activeMissionId ? 'active' : 'default' });
+  });
+  S.contacts.forEach(c => out.push({ id:'cp-' + c.id, title:c.name, type:'contact',
+    lat:c.lat, lng:c.lng, contactId:c.id, kind:'contact', state:'default' }));
+  S.companies.forEach(c => out.push({ id:'kp-' + c.id, title:c.name, type:'company',
+    lat:c.lat, lng:c.lng, kind:'company', state:'default' }));
+  return out;
+}
+function filterPins(pins, f) {
+  if (f === 'all') return pins;
+  if (f === 'missions') return pins.filter(p => p.kind === 'mission' || p.type === 'home');
+  if (f === 'contacts') return pins.filter(p => p.kind === 'contact');
+  if (f === 'companies') return pins.filter(p => p.kind === 'company');
+  if (f === 'events') return pins.filter(p => p.type === 'event');
+  if (f === 'mine') return pins.filter(p => p.custom);
+  return pins;
+}
+</script>
+
+<script>
+/* =================================================================================
+   [I] HOME  ->  src/screens/HomeScreen.tsx
+   ================================================================================= */
+function HomeScreen() {
+  const u = S.user, m = featuredMission();
+  const ch = u.chapter.economic;
+  const chPct = (ch.current - ch.from) / (ch.to - ch.from) * 100;
+  const mini = ['network','authority','optionality'].map(k => statByKey(k));
+  return `
+  <header class="hero" style="padding-bottom:22px">
+    ${heroArt(1)}
+    <div class="hero-corner">
+      <span class="eyebrow">A better you builds a larger tomorrow</span>
+      <div class="script" style="margin-top:26px;font-size:20px">Meer dan gisteren.</div>
+    </div>
+    <span class="eyebrow" style="display:block;max-width:90px;line-height:1.6">Discipline builds freedom</span>
+    <h1 class="display d-xl" style="margin:34px 0 4px;max-width:262px">${esc(u.name)}</h1>
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span class="display d-md" style="color:var(--gold)">Level ${u.level}</span>
+      <span class="eyebrow muted">${esc(u.title)}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+      <div style="flex:1">${Bar(u.xp / u.xpToNext * 100)}</div>
+      <span class="num" style="font-size:12px;font-weight:700">${u.xp.toLocaleString('nl-BE')} <span style="color:var(--ink-4)">/ ${u.xpToNext.toLocaleString('nl-BE')} XP</span></span>
+    </div>
+  </header>
+
+  <div class="section" style="margin-top:0">
+    <div class="card" data-go="#/profile">
+      <div class="card-head">
+        <h2 class="display d-sm">Chapter ${u.chapter.roman} — ${esc(u.chapter.name)}</h2>
+        <span class="eyebrow muted" style="text-align:right;max-width:110px;line-height:1.5">Financiële vrijheid begint met een beslissing</span>
+      </div>
+      ${Bar(chPct)}
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px">
+        <span style="color:var(--ink-3)">${eur(ch.from)}</span>
+        <span style="color:var(--gold);font-weight:800">${eur(ch.current)}</span>
+        <span style="color:var(--ink-3)">€100K</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="card tap" data-go="#/mission/${m.id}">
+      <div style="display:flex;gap:12px">
+        ${plate('mission','sq')}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="eyebrow">Current mission</span>
+            <span class="eyebrow muted" style="display:flex;gap:5px;align-items:center;color:var(--gold-soft)">
+              ${ico('star',12,2)} ${m.track === 'Main Story' ? 'Main story' : 'Side quest'}</span>
+          </div>
+          <h2 class="display d-lg" style="margin:6px 0 2px">${esc(m.title)}</h2>
+          <p class="body" style="margin:0 0 10px">${esc(m.why.split('.')[0])}.</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin:2px 0 12px">
+        <div style="flex:1">${Bar(doneCount(m) / reqCount(m) * 100, 'thin')}</div>
+        <span style="font-size:11px;color:var(--ink-2)">${doneCount(m)} / ${reqCount(m)} objectives</span>
+      </div>
+      <div class="grid-2" style="margin-bottom:10px">
+        ${Pill('zap', '+' + m.xp + ' XP', 'Reward')}
+        ${Pill('users', m.statReward.key.toUpperCase() + ' +' + m.statReward.amount, 'Stat increase')}
+      </div>
+      <button class="btn btn-gold btn-block" data-action="continue" data-id="${m.id}">
+        Continue mission ${ico('arrow',15,2.4)}</button>
+    </div>
+  </div>
+
+  <div class="section grid-2">
+    <div class="card tap" data-action="stat-detail" data-key="capital">
+      <div class="card-head"><span class="t eyebrow">${ico('chart',13,2)} Empire value</span></div>
+      <div class="display d-xl" style="font-size:30px">${eur(S.user.empire.value)}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+        <span style="color:var(--jade);font-weight:800;font-size:12px">▲ +${S.user.empire.deltaPct}%</span>
+        <span class="meta">${esc(S.user.empire.deltaLabel)}</span>
+      </div>
+      <svg viewBox="0 0 120 34" style="width:100%;height:34px;margin-top:8px" aria-hidden="true">
+        <polyline fill="none" stroke="var(--gold)" stroke-width="1.6"
+          points="${S.user.empire.trend.map((v,i)=>`${i*10.9},${34-(v-34)*0.85}`).join(' ')}"/>
+      </svg>
+      <p class="meta" style="margin:8px 0 0;font-style:italic">“Kapitaal geeft opties. Opties geven vrijheid.”</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="t eyebrow">${ico('chart',13,2)} Core stats</span>
+        <button class="eyebrow muted" data-go="#/profile">Details ${ico('arrow',11,2.4)}</button></div>
+      <div class="stack" style="gap:8px">
+        ${mini.map(s => `
+          <button class="card flat tap" style="padding:9px" data-action="stat-detail" data-key="${s.key}">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:var(--gold)">${ico(s.icon,15,2)}</span>
+              <span class="display d-sm">${s.value}</span>
+              <span class="eyebrow muted" style="margin-left:auto">${s.label}</span>
+            </div>
+            <div style="margin-top:7px">${Bar(s.value, s.tone === 'coral' ? 'coral thin' : 'thin')}</div>
+          </button>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="section grid-2">
+    <div class="card">
+      <div class="card-head"><span class="t eyebrow">${ico('sun',13,2)} Nyx // morning briefing</span></div>
+      <p class="body" style="margin:0 0 10px">Network blijft momenteel uw zwakste hefboom in verhouding tot uw doel. Aanbevolen vandaag: follow-up met Pieter.</p>
+      <button class="btn btn-gold btn-block btn-sm" data-action="start-suggested">Start mission ${ico('arrow',14,2.4)}</button>
+      <p class="eyebrow muted" style="margin:10px 0 0;line-height:1.7">Same mind. Higher standards.</p>
+    </div>
+    <div class="card tap" data-go="#/mission/m-voka">
+      <div class="card-head"><span class="t eyebrow">${ico('cal',13,2)} Upcoming event</span>
+        <span class="eyebrow muted">Bekijk ${ico('arrow',11,2.4)}</span></div>
+      ${plate('city','wide','Geel')}
+      <h3 class="display d-sm" style="margin:10px 0 6px">Voka event — Geel</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px 12px;font-size:11px;color:var(--ink-2)">
+        <span style="display:flex;gap:4px;align-items:center">${ico('cal',12,2)} morgen · 19:00</span>
+        <span style="display:flex;gap:4px;align-items:center">${ico('pin',12,2)} Geel</span>
+      </div>
+      <p class="meta" style="margin:10px 0 0;font-style:italic">“Goede gesprekken openen grotere deuren.”</p>
+    </div>
+  </div>
+
+  <div class="section" style="text-align:center;margin:22px 0 8px">
+    <span class="script" style="font-size:26px">Build Your Empire</span>
+  </div>`;
+}
+
+/* =================================================================================
+   [J] MAP  ->  src/screens/MapScreen.tsx
+   ================================================================================= */
+const MAP_FILTERS = [
+  { k:'all', label:'Alles', icon:'layers' }, { k:'missions', label:'Missies', icon:'target' },
+  { k:'contacts', label:'Contacten', icon:'users' }, { k:'companies', label:'Bedrijven', icon:'build' },
+  { k:'events', label:'Events', icon:'cal' }, { k:'mine', label:'Mijn pins', icon:'pin' }
+];
+function MapScreen() {
+  const pins = filterPins(allPins(), S.ui.mapFilter);
+  const nearby = pins.filter(p => p.kind === 'mission').slice(0, 4);
+  return `
+  <header style="padding:14px 16px 10px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+      <div>
+        <h1 class="display d-lg">Kempen <span style="color:var(--gold)">Vice</span></h1>
+        <span class="eyebrow muted">Real opportunities. No fiction.</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <div style="flex:1;display:flex;align-items:center;gap:8px;padding:0 12px;
+        border:1px solid var(--line);border-radius:var(--r-pill);background:rgba(0,0,0,.35)">
+        <span style="color:var(--ink-3)">${ico('search',16,2)}</span>
+        <input id="mapSearch" class="input" style="border:0;background:none;padding:10px 0"
+          placeholder="Zoek locatie, persoon, bedrijf…" aria-label="Zoek op de kaart">
+      </div>
+      <button class="btn btn-ghost btn-icon" data-action="map-filters" aria-label="Filters">${ico('filter',18,2)}</button>
+    </div>
+  </header>
+
+  <div class="chiprow" role="tablist" aria-label="Kaartfilters">
+    ${MAP_FILTERS.map(f => `<button class="chip" role="tab" aria-pressed="${S.ui.mapFilter===f.k}"
+      data-action="map-filter" data-value="${f.k}">${ico(f.icon,14,2)} ${f.label}</button>`).join('')}
+  </div>
+
+  <div class="mapwrap" id="mapWrap" style="margin-top:10px">
+    <canvas id="mapCanvas"></canvas>
+    <div class="marker-layer" id="markerLayer"></div>
+    <div class="map-hint">Sleep om te pannen · lang indrukken = pin</div>
+    <div class="map-ctl" style="top:12px">
+      <button class="map-btn" data-action="map-home" aria-label="Terug naar Home Base">${ico('locate',18,2)}</button>
+      <button class="map-btn" data-action="map-layers" aria-label="Kaartlaag wisselen">${ico('layers',18,2)}</button>
+    </div>
+    <div class="map-ctl" style="top:116px">
+      <button class="map-btn" data-action="map-zoom" data-value="1" aria-label="Inzoomen">${ico('plus',18,2.2)}</button>
+      <button class="map-btn" data-action="map-zoom" data-value="-1" aria-label="Uitzoomen">
+        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+    </div>
+    <div class="map-badge"><span id="mapMode">${MapEngine.tilesOK ? 'Satelliet-raster' : 'Vector'}</span></div>
+    <div class="map-scale" id="mapScale"><span class="lab">2 km</span><div class="rule" style="width:74px"></div></div>
+  </div>
+
+  <div class="section" style="margin-top:12px">
+    <button class="btn btn-gold btn-block" data-action="new-pin">${ico('pin',15,2.2)} Eigen pin toevoegen</button>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2 class="display d-sm">Doelwitten in beeld</h2>
+      <span class="eyebrow muted">${pins.length} markers</span>
+    </div>
+    <div class="stack">
+      ${nearby.map(p => {
+        const m = missionById(p.missionId); const meta = PIN_META[p.type];
+        return `<button class="card flat tap" style="display:flex;gap:12px;align-items:center;text-align:left"
+          data-action="focus-pin" data-id="${p.id}">
+          <span style="width:34px;height:40px;flex:0 0 auto">${markerSvg(p,false)}</span>
+          <span style="flex:1;min-width:0">
+            <span class="eyebrow" style="color:${meta.stroke}">${meta.label}</span>
+            <span class="display d-sm" style="display:block;margin:3px 0">${esc(p.title)}</span>
+            <span class="meta">${m ? esc(m.location.name) + ' · +' + m.xp + ' XP' : ''}</span>
+          </span>
+          <span style="color:var(--ink-3)">${ico('right',16,2.2)}</span>
+        </button>`;
+      }).join('')}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="card flat">
+      <span class="eyebrow">Legenda</span>
+      <div style="display:flex;flex-wrap:wrap;gap:10px 14px;margin-top:10px">
+        ${Object.entries(PIN_META).map(([k,v]) => `
+          <span style="display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--ink-2)">
+            <span style="width:11px;height:11px;border-radius:50%;background:${v.fill};border:1.6px solid ${v.stroke}"></span>
+            ${v.label}</span>`).join('')}
+      </div>
+      <p class="meta" style="margin:10px 0 0">Status wordt ook zonder kleur aangeduid: voltooid krijgt een vinkje, vergrendeld een slot.</p>
+    </div>
+  </div>`;
+}
+function mountMap() {
+  const wrap = $('#mapWrap'); if (!wrap) return;
+  MapEngine.mount(wrap, $('#markerLayer'));
+  MapEngine.setMarkers(filterPins(allPins(), S.ui.mapFilter));
+  MapEngine.onLongPress = ll => openPinSheet(ll);
+  $('#markerLayer').addEventListener('click', e => {
+    const b = e.target.closest('[data-pin]'); if (!b) return;
+    const pin = MapEngine.markers.find(p => p.id === b.dataset.pin); if (!pin) return;
+    S.ui.selectedPin = pin.id; MapEngine.renderMarkers();
+    openMarkerSheet(pin);
+  });
+  const s = $('#mapSearch');
+  s && s.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const q = s.value.trim().toLowerCase(); if (!q) return;
+    const hit = allPins().find(p => p.title.toLowerCase().includes(q))
+      || TOWNS.find(t => t.n.toLowerCase().includes(q));
+    if (!hit) { toast('Niets gevonden voor “' + s.value + '”'); return; }
+    MapEngine.flyTo(hit.lat, hit.lng, 13);
+    if (hit.id) { S.ui.selectedPin = hit.id; MapEngine.renderMarkers(); openMarkerSheet(hit); }
+  });
+}
+
+/* =================================================================================
+   [K] MISSIONS  ->  src/screens/MissionsScreen.tsx
+   ================================================================================= */
+const KIND_LABEL = { main:'Main story', boss:'Boss', event:'Event', business:'Business',
+  content:'Content', network:'Network', opportunity:'Opportunity' };
+const DIFF_TONE = { Low:'alt', Medium:'', High:'warn', Boss:'risk' };
+
+function missionRow(m) {
+  const accent = m.kind === 'boss' ? 'var(--coral)' : m.kind === 'event' ? 'var(--jade)'
+    : m.kind === 'content' ? 'var(--coral)' : 'var(--gold)';
+  return `<button class="card flat tap" style="display:flex;gap:0;padding:0;text-align:left;overflow:hidden"
+    data-go="#/mission/${m.id}">
+    <span style="width:4px;background:${accent};flex:0 0 auto"></span>
+    <span style="width:74px;flex:0 0 auto;align-self:stretch;position:relative">
+      ${plate(m.kind === 'event' ? 'city' : m.kind === 'content' ? 'note' : 'mission','fill')}</span>
+    <span style="flex:1;min-width:0;padding:11px 12px">
+      <span style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span class="eyebrow muted" style="display:flex;gap:5px;align-items:center">
+          ${ico(m.kind === 'boss' ? 'shield' : m.kind === 'event' ? 'cal' : 'target',12,2)} ${KIND_LABEL[m.kind]||m.kind}</span>
+        ${Tag(m.status === 'completed' ? 'Voltooid' : m.status === 'locked' ? 'Vergrendeld' : 'In progress',
+             m.status === 'completed' ? 'alt' : m.status === 'locked' ? 'alt' : '')}
+      </span>
+      <span class="display d-sm" style="display:block;margin:5px 0 4px">${esc(m.title)}</span>
+      <span class="body" style="display:block;font-size:12px;margin-bottom:8px">${esc(m.why.split('.')[0])}.</span>
+      <span style="display:flex;flex-wrap:wrap;gap:6px">
+        ${Tag((m.when || (doneCount(m) + '/' + reqCount(m) + ' taken')), 'alt')}
+        ${m.location ? Tag(m.location.name, 'alt') : ''}
+        ${Tag('+' + m.xp + ' XP')}
+      </span>
+    </span>
+    <span style="align-self:center;padding-right:10px;color:var(--ink-3)">${ico('right',16,2.2)}</span>
+  </button>`;
+}
+
+function MissionsScreen() {
+  const f = S.ui.missionFilter;
+  const counts = {
+    active: S.missions.filter(m => m.status === 'active').length,
+    main: S.missions.filter(m => m.track === 'Main Story').length,
+    side: S.missions.filter(m => m.track === 'Side Quest').length,
+    done: S.missions.filter(m => m.status === 'completed').length
+  };
+  const list = f === 'active' ? S.missions.filter(m => m.status === 'active')
+    : f === 'main' ? S.missions.filter(m => m.track === 'Main Story')
+    : f === 'side' ? S.missions.filter(m => m.track === 'Side Quest')
+    : S.missions.filter(m => m.status === 'completed');
+  const m = featuredMission();
+  const suggested = S.missions.filter(x => x.status === 'suggested');
+
+  return `
+  <header class="hero">
+    ${heroArt(2)}
+    <div class="hero-corner"><span class="eyebrow">A better you builds a larger tomorrow</span></div>
+    <span class="eyebrow" style="display:block;max-width:90px;line-height:1.6">Discipline builds freedom</span>
+    <h1 class="display d-xl" style="margin:26px 0 4px">Missions</h1>
+    <span class="eyebrow muted">Real opportunities. Real progress.</span>
+    <div class="script" style="position:absolute;right:16px;top:96px;text-align:right">Execution<br>changes everything.</div>
+  </header>
+
+  <div class="chiprow" style="margin-top:12px" role="tablist" aria-label="Missiefilters">
+    ${[['active','Active','target',counts.active],['main','Main story','star',counts.main],
+       ['side','Side quests','flag',counts.side],['done','Completed','check',counts.done]]
+      .map(([k,l,i,c]) => `<button class="chip" role="tab" aria-pressed="${f===k}"
+        data-action="mission-filter" data-value="${k}">${ico(i,14,2)} ${l} <span class="cnt">${c}</span></button>`).join('')}
+  </div>
+
+  <div class="section">
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="display:flex">
+        <div style="width:118px;flex:0 0 auto;position:relative">${plate('mission','fill')}</div>
+        <div style="flex:1;min-width:0;padding:13px 13px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span class="eyebrow" style="display:flex;gap:5px;align-items:center">${ico('star',12,2)} ${m.track}</span>
+            ${Tag('High impact','alt')}
+          </div>
+          <h2 class="display d-lg" style="margin:7px 0 4px">${esc(m.title)}</h2>
+          <p class="body" style="margin:0">${esc(m.why.split('.')[0])}.</p>
+        </div>
+      </div>
+      <div style="padding:12px 13px 13px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px">
+          <div style="flex:1">${Bar(doneCount(m)/reqCount(m)*100,'thin')}</div>
+          <span style="font-size:11px;color:var(--ink-2)">${doneCount(m)} / ${reqCount(m)} objectives</span>
+        </div>
+        <div class="grid-2" style="margin-bottom:11px">
+          ${Pill('zap','+' + m.xp + ' XP','Reward')}
+          ${Pill('users', m.statReward.key.toUpperCase() + ' +' + m.statReward.amount,'Stat increase')}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-gold" style="flex:1" data-action="continue" data-id="${m.id}">
+            Continue mission ${ico('arrow',15,2.4)}</button>
+          <button class="btn btn-ghost btn-icon" data-go="#/mission/${m.id}" aria-label="Missiedetail">${ico('dots',18,2.6)}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2 class="display d-sm">${f === 'done' ? 'Voltooide missies' : 'Active missions'}</h2>
+      <span class="eyebrow muted" style="display:flex;gap:5px;align-items:center">Sort: priority ${ico('sort',12,2)}</span>
+    </div>
+    <div class="stack">
+      ${list.length ? list.map(missionRow).join('')
+        : `<div class="card flat" style="text-align:center;padding:26px 16px">
+             <p class="body" style="margin:0 0 12px">Nog niets in deze lijst. Vraag Nyx om een missie of neem er een uit de suggesties.</p>
+             <button class="btn btn-ghost btn-sm" data-action="open-nyx">Vraag het aan Nyx</button></div>`}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2 class="display d-sm">Suggested missions</h2>
+      <button class="eyebrow muted" data-action="open-nyx">Bekijk alles ${ico('arrow',11,2.4)}</button>
+    </div>
+    <div class="grid-2">
+      ${suggested.map(s => `
+        <div class="card flat" style="padding:0;overflow:hidden">
+          <div style="height:58px;position:relative">${plate(s.kind === 'network' ? 'meet' : 'city','fill')}</div>
+          <div style="padding:10px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+              <span class="eyebrow">${KIND_LABEL[s.kind] || s.kind}</span>
+              <button class="btn btn-quiet btn-sm" style="min-height:30px;padding:0 8px"
+                data-action="activate" data-id="${s.id}" aria-label="Activeer ${esc(s.title)}">${ico('plus',13,2.4)}</button>
+            </div>
+            <h3 class="display d-sm" style="margin:6px 0 4px;font-size:14px">${esc(s.title)}</h3>
+            <p class="body" style="font-size:11.5px;margin:0 0 8px">${esc(s.mainObjective)}.</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">${Tag('+' + s.xp + ' XP')}${Tag(s.statReward.key + ' +' + s.statReward.amount,'alt')}</div>
+          </div>
+        </div>`).join('') || '<p class="body">Alle suggesties zijn geactiveerd.</p>'}
+    </div>
+  </div>
+
+  <div class="section" style="margin-bottom:8px">
+    <div class="card">
+      <div class="card-head"><span class="t eyebrow">Nyx insight</span>
+        <span class="eyebrow muted" style="text-align:right;max-width:120px;line-height:1.6">3 high impact opportunities in uw regio</span></div>
+      <p class="body" style="margin:0 0 10px;font-style:italic">“Deze week ligt uw grootste hefboom in netwerk. Ik zou prioriteit geven aan The Connector.”</p>
+      <button class="btn btn-ghost btn-sm" data-action="open-nyx">${ico('arrow',14,2.4)} Open Nyx</button>
+    </div>
+  </div>`;
+}
+
+/* =================================================================================
+   [L] MISSION DETAIL  ->  src/screens/MissionDetail.tsx
+   ================================================================================= */
+function MissionDetail(id) {
+  const m = missionById(id);
+  if (!m) return `<div class="section" style="padding-top:60px"><p class="body">Deze missie bestaat niet meer.</p>
+    <button class="btn btn-ghost" data-go="#/missions">Terug naar missies</button></div>`;
+  const req = m.objectives.filter(o => !o.optional), opt = m.objectives.filter(o => o.optional);
+  const people = m.people.map(contactById).filter(Boolean);
+  const meta = [
+    ['Locatie', m.location ? m.location.name + (m.location.address ? ' · ' + m.location.address : '') : '—', 'pin'],
+    ['Tijdsinschatting', m.estimate, 'clock'],
+    ['Moeilijkheid', m.difficulty, 'shield'],
+    ['Verwachte impact', m.impact, 'chart'],
+    ['Bewijs vereist', m.evidence, 'file'],
+    ['Status', m.status === 'active' ? 'Actief' : m.status === 'completed' ? 'Voltooid'
+      : m.status === 'locked' ? 'Vergrendeld' : 'Voorgesteld', 'check']
+  ];
+  return `
+  <header style="padding:14px 16px 8px;display:flex;align-items:center;gap:10px">
+    <button class="btn btn-ghost btn-icon" data-action="back" aria-label="Terug">${ico('left',18,2.2)}</button>
+    <span class="eyebrow muted">Mission file</span>
+    <button class="btn btn-ghost btn-icon" style="margin-left:auto" data-action="open-nyx" aria-label="Vraag Nyx">${ico('brain',18,2)}</button>
+  </header>
+
+  <div class="section" style="margin-top:0">
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="height:104px;position:relative">${plate(m.kind === 'event' ? 'city' : 'mission','fill')}
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,transparent,rgba(11,9,7,.9))"></div>
+        <div style="position:absolute;left:13px;bottom:10px;right:13px">
+          <span class="eyebrow">${KIND_LABEL[m.kind] || m.kind} · ${m.track}</span>
+          <h1 class="display d-lg" style="margin:5px 0 0">${esc(m.title)}</h1>
+        </div>
+      </div>
+      <div style="padding:13px">
+        <span class="eyebrow muted">Waarom dit telt</span>
+        <p class="body" style="margin:6px 0 12px">${esc(m.why)}</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          ${Tag('+' + m.xp + ' XP')}
+          ${Tag(m.statReward.key.toUpperCase() + ' +' + m.statReward.amount,'alt')}
+          ${Tag(m.difficulty, DIFF_TONE[m.difficulty] || 'alt')}
+        </div>
+        <div class="card flat" style="padding:11px">
+          <span class="eyebrow">Hoofddoel</span>
+          <p style="margin:5px 0 0;font-size:14.5px;font-weight:600">${esc(m.mainObjective)}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2 class="display d-sm">Objectives</h2>
+      <span class="eyebrow muted">${doneCount(m)} / ${reqCount(m)} klaar</span>
+    </div>
+    <div class="card stack" style="gap:2px">
+      ${req.map(o => objectiveRow(m, o)).join('')}
+      ${opt.length ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)">
+        <span class="eyebrow muted">Optioneel</span></div>` + opt.map(o => objectiveRow(m, o)).join('') : ''}
+      <div style="margin-top:12px">${Bar(doneCount(m)/reqCount(m)*100,'thin')}</div>
+    </div>
+  </div>
+
+  ${people.length ? `<div class="section">
+    <div class="section-head"><h2 class="display d-sm">Betrokken mensen</h2></div>
+    <div class="stack">${people.map(c => `
+      <div class="card flat" style="display:flex;align-items:center;gap:11px">
+        <span style="width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+          border:1px solid var(--line);color:var(--gold);font-weight:800">${esc(c.name[0])}</span>
+        <span style="flex:1"><b style="font-size:13.5px">${esc(c.name)}</b>
+          <span class="meta" style="display:block">${esc(c.role)}</span></span>
+        <button class="btn btn-quiet btn-sm" data-action="focus-contact" data-id="${c.id}">Op kaart</button>
+      </div>`).join('')}</div></div>` : ''}
+
+  <div class="section">
+    <div class="card stack" style="gap:0">
+      ${meta.map(([k, v, i], idx) => `
+        <div style="display:flex;gap:11px;padding:10px 0;${idx ? 'border-top:1px solid var(--line-soft)' : ''}">
+          <span style="color:var(--gold);flex:0 0 auto">${ico(i,15,2)}</span>
+          <span style="flex:1"><span class="eyebrow muted" style="display:block;margin-bottom:2px">${k}</span>
+            <span style="font-size:13px">${esc(v)}</span></span>
+        </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="section" style="margin-bottom:10px">
+    <div class="stack">
+      ${m.status === 'completed'
+        ? `<div class="card flat" style="text-align:center;padding:18px">
+             <span style="color:var(--gold)">${ico('check',26,1.8)}</span>
+             <p class="body" style="margin:8px 0 0">Voltooid. +${m.xp} XP en ${m.statReward.key} +${m.statReward.amount} zijn toegekend.</p></div>`
+        : `<button class="btn btn-gold btn-block" data-action="continue" data-id="${m.id}">
+             Continue mission ${ico('arrow',15,2.4)}</button>`}
+      <div class="grid-2">
+        <button class="btn btn-ghost" data-action="open-on-map" data-id="${m.id}">${ico('nav',15,2.2)} Open map</button>
+        <button class="btn btn-ghost" data-action="open-nyx" data-id="${m.id}">${ico('brain',15,2.2)} Ask Nyx</button>
+      </div>
+    </div>
+  </div>`;
+}
+function objectiveRow(m, o) {
+  const dis = m.status === 'completed' || m.status === 'locked';
+  return `<label style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;min-height:44px;cursor:pointer">
+    <input type="checkbox" ${o.done ? 'checked' : ''} ${dis ? 'disabled' : ''}
+      data-action="toggle-obj" data-mission="${m.id}" data-obj="${o.id}"
+      style="appearance:none;width:22px;height:22px;flex:0 0 auto;margin-top:1px;border-radius:6px;
+      border:1.6px solid ${o.done ? 'var(--gold)' : 'var(--line)'};background:${o.done ? 'var(--gold)' : 'transparent'};
+      background-image:${o.done ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231A1206' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E\")" : 'none'};
+      background-size:15px;background-repeat:no-repeat;background-position:center">
+    <span style="flex:1;font-size:13.5px;${o.done ? 'color:var(--ink-3);text-decoration:line-through' : ''}">
+      ${esc(o.label)}${o.optional ? ' <span class="meta">· optioneel</span>' : ''}</span>
+  </label>`;
+}
+</script>
+
+<script>
+/* =================================================================================
+   [M] JOURNAL  ->  src/screens/JournalScreen.tsx
+   Geen aparte "Add entry"-knop: de Quick Note-composer onderaan is de invoer.
+   ================================================================================= */
+const JFILTERS = [['today','Vandaag'],['week','Deze week'],['month','Deze maand'],['all','All time']];
+function viewedDate() { const d = new Date(); d.setDate(d.getDate() + (S.ui.dayOffset || 0)); return d; }
+function journalList() {
+  const f = S.ui.journalFilter, d = viewedDate();
+  const sameDay = ts => { const t = new Date(ts);
+    return t.getDate() === d.getDate() && t.getMonth() === d.getMonth() && t.getFullYear() === d.getFullYear(); };
+  const now = Date.now();
+  return S.journal.filter(e =>
+    f === 'today' ? sameDay(e.ts)
+    : f === 'week' ? now - e.ts < 7 * 864e5
+    : f === 'month' ? monthId(e.ts) === monthId(now) : true
+  ).sort((a, b) => b.ts - a.ts);
+}
+function journalCard(e) {
+  const people = (e.people || []).map(contactById).filter(Boolean);
+  return `<article class="tl-item">
+    <span class="tl-time">${hhmm(e.ts)}</span><span class="tl-dot"></span>
+    <div class="card flat">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="tl-ico">${ico(e.icon || 'edit',17,1.9)}</span>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+            <b style="font-size:13.5px">${esc(e.title)}</b>
+            ${(e.tags || []).map(t => Tag(t, 'alt')).join('')}
+          </div>
+          <p class="body" style="margin:5px 0 0;font-size:12.5px">${esc(e.text)}</p>
+          ${people.length ? `<p class="meta" style="margin:6px 0 0">${ico('users',11,2)} ${people.map(p => esc(p.name)).join(', ')}</p>` : ''}
+          ${e.location ? `<p class="meta" style="margin:4px 0 0">${ico('pin',11,2)} ${esc(e.location)}</p>` : ''}
+          ${e.missionId && missionById(e.missionId) ? `<button class="meta" style="margin-top:6px;color:var(--gold)"
+            data-go="#/mission/${e.missionId}">${ico('target',11,2)} ${esc(missionById(e.missionId).title)}</button>` : ''}
+        </div>
+        <button class="btn btn-icon" style="min-height:32px;width:32px;color:var(--ink-3)"
+          data-action="entry-menu" data-id="${e.id}" aria-label="Opties">${ico('dots',16,2.6)}</button>
+      </div>
+      ${(e.media && e.media.length) ? `<div class="media-row">
+        ${e.media.slice(0,3).map(m => plate(m.kind, '', m.label)).join('')}
+        ${e.extraMedia ? `<span class="media-more">+${e.extraMedia}</span>` : ''}</div>` : ''}
+    </div>
+  </article>`;
+}
+function JournalScreen() {
+  const list = journalList(), d = viewedDate();
+  const todays = S.journal.filter(e => monthId(e.ts) === monthId(Date.now()));
+  return `
+  <header class="hero" style="padding-bottom:14px">
+    ${heroArt(3)}
+    <div class="hero-corner"><span class="eyebrow">Discipline turns moments into outcomes</span></div>
+    <h1 class="display d-xl" style="margin:16px 0 4px">Journal</h1>
+    <span class="eyebrow muted">Capture today. Build tomorrow.</span>
+  </header>
+
+  <div style="display:flex;gap:8px;align-items:center;padding:12px 16px 0">
+    <div class="chiprow" style="padding:0;flex:1" role="tablist" aria-label="Periode">
+      ${JFILTERS.map(([k,l]) => `<button class="chip" role="tab" aria-pressed="${S.ui.journalFilter===k}"
+        data-action="journal-filter" data-value="${k}">${l}</button>`).join('')}
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 16px 0">
+    <span class="card flat" style="flex:1;display:flex;align-items:center;gap:8px;padding:9px 12px">
+      <span style="color:var(--gold)">${ico('cal',15,2)}</span>
+      <span style="font-size:12px;font-weight:600">${dateLabel(d.getTime())}</span>
+      <span style="margin-left:auto;display:flex;gap:2px">
+        <button class="btn btn-icon" style="min-height:32px;width:30px;color:var(--ink-3)"
+          data-action="day" data-value="-1" aria-label="Vorige dag">${ico('left',15,2.2)}</button>
+        <button class="btn btn-icon" style="min-height:32px;width:30px;color:var(--ink-3)"
+          data-action="day" data-value="1" aria-label="Volgende dag">${ico('right',15,2.2)}</button>
+      </span>
+    </span>
+  </div>
+
+  <div class="section grid-2">
+    <div class="card flat" style="display:flex;flex-direction:column;justify-content:center">
+      <p style="margin:0;font-family:Caveat,cursive;font-size:19px;line-height:1.25;color:var(--ivory)">
+        “Small logs make big fires. Keep stacking the right ones.”</p>
+      <span class="script" style="margin-top:6px;text-align:right">Nyx</span>
+    </div>
+    <button class="btn btn-gold" style="height:100%;flex-direction:column;gap:4px;padding:14px 10px"
+      data-action="create-wrap">
+      <span style="display:flex;align-items:center;gap:7px">${ico('chart',16,2.2)} Create wrap</span>
+      <span style="font-size:9px;letter-spacing:.14em;opacity:.8">Month so far · ${todays.length} entries</span>
+    </button>
+  </div>
+
+  <div class="section">
+    <div class="tl">
+      ${list.length ? list.map(journalCard).join('')
+        : `<div class="card flat" style="text-align:center;padding:24px 16px">
+             <p class="body" style="margin:0">Nog niets gelogd voor deze periode. Schrijf hieronder wat er vandaag echt bewoog.</p></div>`}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="card">
+      <div class="card-head"><span class="t eyebrow">${ico('chart',13,2)} Daily impact</span></div>
+      <div class="stack" style="gap:7px">
+        ${SEED.dailyImpact.map(s => `
+          <div style="display:grid;grid-template-columns:82px 1fr 28px;align-items:center;gap:9px">
+            <span class="eyebrow muted" style="font-size:9px">${s.label}</span>
+            ${Bar(s.v * 14, s.key === 'wellbeing' ? 'coral thin' : 'thin')}
+            <span style="font-size:11px;font-weight:800;color:var(--gold-soft);text-align:right">+${s.v}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="section grid-2">
+    <div class="card">
+      <div class="card-head"><span class="t eyebrow">${ico('chart',13,2)} Today's stats</span></div>
+      <div class="stack" style="gap:9px">
+        ${[['file', list.length, 'Entries'], ['clock','4 u 20', 'Deep work'],
+           ['users', (list.filter(e => (e.people||[]).length).length), 'Gesprekken'],
+           ['gem', 1, 'Opportunity']].map(([i,v,l]) => `
+          <div style="display:flex;align-items:center;gap:9px">
+            <span style="color:var(--gold)">${ico(i,15,2)}</span>
+            <b style="font-size:13px">${v}</b><span class="meta">${l}</span></div>`).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="t eyebrow">${ico('cal',13,2)} Upcoming</span></div>
+      <div class="stack" style="gap:10px">
+        ${SEED.upcoming.map(u => `<div style="display:flex;gap:9px">
+          <span style="width:7px;height:7px;border-radius:50%;background:var(--gold);margin-top:6px;flex:0 0 auto"></span>
+          <span><span class="meta" style="display:block">${esc(u.when)}</span>
+            <b style="font-size:12.5px">${esc(u.title)}</b>
+            <span class="meta" style="display:block">${esc(u.detail)}</span></span></div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="text-align:center;margin:18px 0 92px">
+    <span class="script" style="font-size:24px">Kempen Vice</span>
+    <p class="eyebrow muted" style="margin:2px 0 0">Real opportunities. No fiction.</p>
+  </div>
+
+  <div class="composer">
+    <button class="ic" data-action="attach" aria-label="Beeld toevoegen">${ico('image',19,1.9)}</button>
+    <textarea id="qnote" rows="1" placeholder="Wat bewoog er vandaag?" aria-label="Quick note"></textarea>
+    <button class="ic" data-action="voice" aria-label="Spraaknotitie">${ico('mic',19,1.9)}</button>
+    <button class="send" data-action="save-note" aria-label="Notitie opslaan">${ico('send',18,2.1)}</button>
+  </div>`;
+}
+function mountJournal() {
+  const ta = $('#qnote'); if (!ta) return;
+  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 92) + 'px'; });
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveQuickNote(); }
+  });
+}
+let pendingMedia = [];
+function saveQuickNote() {
+  const ta = $('#qnote'); if (!ta) return;
+  const text = ta.value.trim();
+  if (!text) { toast('Schrijf eerst iets — ook één zin telt.'); ta.focus(); return; }
+  addJournalEntry({ text, media: pendingMedia });
+  pendingMedia = [];
+  S.ui.journalFilter = 'today'; S.ui.dayOffset = 0;
+  render();
+  toast('Entry opgeslagen');
+  requestAnimationFrame(() => { const first = $('.tl-item'); first && first.scrollIntoView({ block:'center', behavior:'smooth' }); });
+}
+
+/* =================================================================================
+   [N] MONTHLY WRAP  ->  src/screens/MonthlyWrap.tsx
+   ================================================================================= */
+function WrapScreen(id) {
+  const wrap = S.wraps.find(w => w.id === id) || S.wraps[0];
+  if (!wrap) return `<div class="section" style="padding-top:60px"><p class="body">Nog geen wrap. Genereer er een in Journal.</p></div>`;
+  const shots = (wrap.entryIds || []).map(i => S.journal.find(j => j.id === i)).filter(Boolean)
+    .flatMap(j => j.media || []).slice(0, 6);
+  const blocks = [
+    ['Grootste overwinning', wrap.biggestWin], ['Grootste fout', wrap.biggestMistake],
+    ['Meest waardevolle relatie', wrap.bestRelationship], ['Belangrijkste beslissing', wrap.keyDecision],
+    ['Meest waardevolle missie', wrap.bestMission], ['Waar te veel tijd naartoe ging', wrap.timeSink],
+    ['Wat er echt veranderd is', wrap.whatChanged]
+  ];
+  return `
+  <header class="hero wrap-hero">
+    ${heroArt(4)}
+    <button class="btn btn-ghost btn-icon" data-action="back" aria-label="Terug" style="margin-bottom:18px">${ico('left',18,2.2)}</button>
+    <span class="eyebrow">Campaign wrap</span>
+    <h1 class="display d-xl" style="margin:8px 0 2px;font-size:38px">${esc(wrap.label)}</h1>
+    <p class="script" style="font-size:24px;margin:2px 0 0">Month so far</p>
+  </header>
+
+  <div class="section" style="margin-top:4px">
+    <div class="grid-2" style="gap:9px">
+      ${[['Events', wrap.events, 'cal'], ['Nieuwe contacten', wrap.newContacts, 'users'],
+         ['Missies voltooid', wrap.missionsCompleted, 'check'], ['Empire value', '+' + eur(wrap.empireDelta), 'chart']]
+        .map(([k, v, i]) => `<div class="metric"><span style="color:var(--gold)">${ico(i,15,2)}</span>
+          <span class="v">${v}</span><span class="k">${k}</span></div>`).join('')}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="card">
+      <span class="eyebrow">Statverschuiving</span>
+      <div class="stack" style="gap:8px;margin-top:10px">
+        ${Object.entries(wrap.deltas).map(([k, v]) => `
+          <div style="display:grid;grid-template-columns:90px 1fr 34px;align-items:center;gap:9px">
+            <span class="eyebrow muted" style="font-size:9px">${k.toUpperCase()}</span>
+            ${Bar(v * 9, 'thin')}
+            <span style="font-size:12px;font-weight:800;color:var(--gold-soft);text-align:right">+${v}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  ${shots.length ? `<div class="section">
+    <div class="section-head"><h2 class="display d-sm">Beeld uit de maand</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+      ${shots.map(m => `<div style="aspect-ratio:1;position:relative">${plate(m.kind,'fill',m.label)}</div>`).join('')}
+    </div></div>` : ''}
+
+  <div class="section">
+    <div class="card">
+      ${blocks.map(([k, v]) => `<div class="wrap-block"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('')}
+    </div>
+  </div>
+
+  <div class="section" style="margin-bottom:12px">
+    <div class="card" style="background:linear-gradient(180deg,#241A0E,#141110)">
+      <span class="eyebrow">Conclusie van Nyx</span>
+      <p style="margin:10px 0 0;font-family:Caveat,cursive;font-size:25px;line-height:1.3;color:var(--gold-soft)">
+        “${esc(wrap.nyx)}”</p>
+      ${wrap.generatedAt ? `<p class="meta" style="margin:12px 0 0">Gegenereerd op ${dateLabel(wrap.generatedAt)} om ${hhmm(wrap.generatedAt)}</p>` : ''}
+    </div>
+  </div>`;
+}
+
+/* =================================================================================
+   [O] PROFILE  ->  src/screens/ProfileScreen.tsx
+   ================================================================================= */
+function ProfileScreen() {
+  const u = S.user;
+  return `
+  <header class="hero" style="padding-bottom:20px">
+    ${heroArt(5)}
+    <div class="hero-corner"><span class="eyebrow">Discipline creates freedom</span></div>
+    <span class="eyebrow" style="display:block;line-height:1.7">Hardwig<br>Empire mode</span>
+    <h1 class="display d-xl" style="margin:26px 0 2px">${esc(u.name)}</h1>
+    <div class="display d-md" style="color:var(--gold)">Level ${u.level}</div>
+    <div class="eyebrow muted" style="margin-top:4px">${esc(u.title)}</div>
+    <p style="margin:12px 0 0;font-family:Caveat,cursive;font-size:22px;line-height:1.25;max-width:230px">
+      “A better man builds a brighter Belgium.”</p>
+  </header>
+
+  <div class="section grid-2" style="margin-top:0">
+    <button class="card tap" style="text-align:left" data-action="chapter-detail">
+      <span style="color:var(--gold)">${ico('bookopen',18,1.9)}</span>
+      <span class="eyebrow muted" style="display:block;margin-top:8px">Current chapter</span>
+      <span class="display d-md" style="display:block;margin:4px 0 4px">${esc(u.chapter.name)}</span>
+      <span class="meta">${esc(u.chapter.tagline)}</span>
+    </button>
+    <button class="card tap" style="text-align:left" data-action="xp-detail">
+      <span style="color:var(--gold)">${ico('star',18,1.9)}</span>
+      <span class="eyebrow muted" style="display:block;margin-top:8px">Lifetime XP</span>
+      <span class="display d-md" style="display:block;margin:4px 0 4px">${u.lifetimeXp.toLocaleString('nl-BE')} XP</span>
+      <span class="meta">Experience builds options</span>
+    </button>
+  </div>
+
+  <div class="section">
+    <div class="card">
+      <div class="card-head"><h2 class="display d-sm">Core stats</h2>
+        <span class="eyebrow muted">Improve today</span></div>
+      ${u.stats.map(s => `
+        <button class="statrow" style="width:100%;text-align:left" data-action="stat-detail" data-key="${s.key}">
+          <span style="color:var(--gold)">${ico(s.icon,15,2)}</span>
+          <span class="nm">${s.label}</span>
+          ${Bar(s.value, s.tone === 'coral' ? 'coral thin' : 'thin')}
+          <span class="vl">${s.value} <small>/ 100</small></span>
+        </button>`).join('')}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><h2 class="display d-sm">Campaign metrics</h2>
+      <span class="eyebrow muted">Small steps compound</span></div>
+    <div class="grid-2" style="gap:9px">
+      ${[['Missions completed', u.counters.missionsCompleted, 'flag'],
+         ['Boss missions', u.counters.bossCompleted, 'shield'],
+         ['Network size', u.counters.networkSize, 'users'],
+         ['Achievements', u.counters.achievements, 'trophy']]
+        .map(([k, v, i]) => `<div class="metric"><span style="color:var(--gold)">${ico(i,15,2)}</span>
+          <span class="v">${v}</span><span class="k">${k}</span></div>`).join('')}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><h2 class="display d-sm">Campaign highlights</h2>
+      <span class="eyebrow muted">Momenten stapelen</span></div>
+    <div class="stack">
+      ${S.wraps.map(w => `
+        <button class="card tap" style="padding:0;overflow:hidden;text-align:left" data-go="#/wrap/${w.id}">
+          <span style="display:block;height:76px;position:relative">${plate('city','fill')}
+            <span style="position:absolute;inset:0;background:linear-gradient(180deg,transparent,rgba(11,9,7,.92))"></span>
+            <span class="display d-md" style="position:absolute;left:13px;bottom:9px">${esc(w.label)}</span></span>
+          <span style="display:block;padding:11px 13px">
+            <span style="display:flex;flex-wrap:wrap;gap:8px 14px;font-size:11.5px;color:var(--ink-2)">
+              <span>${ico('cal',12,2)} ${w.events} events</span>
+              <span>${ico('users',12,2)} ${w.newContacts} nieuwe contacten</span>
+              <span>${ico('check',12,2)} ${w.missionsCompleted} missies</span>
+            </span>
+            <span style="display:flex;align-items:center;justify-content:space-between;margin-top:11px">
+              <span style="display:flex;gap:6px">${Object.entries(w.deltas).slice(0,2).map(([k,v]) => Tag(k + ' +' + v,'alt')).join('')}</span>
+              <span class="btn btn-ghost btn-sm">View wrap ${ico('right',13,2.4)}</span>
+            </span>
+          </span>
+        </button>`).join('')}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><h2 class="display d-sm">Recente achievements</h2>
+      <span class="eyebrow muted">Always a higher level</span></div>
+    <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">
+      ${S.achievements.map(a => `
+        <div class="ach ${a.unlocked ? '' : 'locked'}">
+          <span class="hex"><svg viewBox="0 0 56 62" width="56" height="62" aria-hidden="true">
+            <path d="M28 1.8 53 16v30L28 60.2 3 46V16z" fill="#1A150F" stroke="${a.unlocked ? 'var(--gold)' : 'var(--ink-4)'}" stroke-width="1.6"/>
+            <g transform="translate(16,19) scale(1)" stroke="${a.unlocked ? 'var(--gold)' : 'var(--ink-4)'}" fill="none"
+              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${P[a.icon] || P.trophy}"/></g>
+          </svg></span>
+          <span class="an">${esc(a.name)}</span><span class="ad">${esc(a.detail)}</span>
+        </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="section" style="margin-bottom:14px">
+    <div class="card flat">
+      <span class="eyebrow muted">Prototype</span>
+      <p class="body" style="margin:6px 0 10px">Journal, pins, missievoortgang en wraps worden lokaal bewaard in deze browser.</p>
+      <button class="btn btn-ghost btn-sm" data-action="reset">${ico('x',14,2.2)} Demo-data resetten</button>
+    </div>
+  </div>`;
+}
+
+/* =================================================================================
+   [P] NYX — MISSION CONTROL  ->  src/features/nyx/NyxSheet.tsx
+   ================================================================================= */
+const NYX_SHORTCUTS = [
+  'Wat moet ik vandaag doen?',
+  'Waarom loopt Network achter?',
+  'Geef me één high-impact move.'
+];
+let nyxLog = [{ from:'nyx', text:'Goedemorgen. Uw hefboom van vandaag ligt in netwerk, niet in output. Waar wilt u beginnen?' }];
+
+function nyxReply(q) {
+  const t = q.toLowerCase();
+  const m = featuredMission();
+  if (/vandaag|today|doen/.test(t))
+    return `Eén ding: objectief 3 van ${m.title}. Iemand fysiek ontmoeten weegt zwaarder dan drie berichten. Zet het vandaag nog in de agenda.`;
+  if (/network|netwerk/.test(t))
+    return 'Network staat op 86, maar uw bereik blijft binnen dezelfde cirkel. U spreekt mensen die u al kent. Connectors — mensen met eigen kringen — ontbreken. Daarom stel ik de missie hieronder voor.';
+  if (/impact|move|hefboom|belangrijk/.test(t))
+    return 'Bel Pieter vandaag en bied aan zijn capaciteitsprobleem uit te tekenen. Waarde vooraf, zonder factuur. Dat is de goedkoopste manier om een connector te maken.';
+  if (/geld|omzet|tarief|prijs/.test(t))
+    return 'U zit op €64.800 van €100K in hoofdstuk I. Op €180/u is dat 196 uur. Sneller gaat enkel via retainers of via een tweede klant op hetzelfde aanbod.';
+  if (/pin|kaart|map/.test(t))
+    return 'Zet een pin op elke plek waar u iemand ontmoet hebt. Na drie maanden ziet u waar uw netwerk echt zit — en waar het gat is.';
+  return 'Genoteerd. Zet het om in een missie met één meetbaar doel en één bewijsstuk, anders blijft het een intentie.';
+}
+function NyxSheetHTML(ctxMissionId) {
+  const sug = S.nyxSuggestions[0];
+  return `
+  <div class="sheet-body">
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">
+      <img src="${NYX_SRC}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;
+        box-shadow:0 0 0 2px var(--gold)">
+      <div><h2 class="display d-md" style="margin:0">Nyx</h2>
+        <span class="eyebrow muted">Mission control · altijd aan je zijde</span></div>
+      <button class="btn btn-ghost btn-icon" style="margin-left:auto" data-action="close-sheet" aria-label="Sluiten">${ico('x',17,2.2)}</button>
+    </div>
+
+    <div id="nyxLog" class="stack" style="gap:8px;margin-bottom:12px">
+      ${nyxLog.map(m => `<div class="card flat" style="padding:11px;${m.from === 'me'
+        ? 'background:rgba(201,163,78,.12);border-color:rgba(201,163,78,.3);margin-left:32px'
+        : 'margin-right:24px'}">
+        <span class="eyebrow ${m.from === 'me' ? 'muted' : ''}">${m.from === 'me' ? 'U' : 'Nyx'}</span>
+        <p class="body" style="margin:5px 0 0;color:var(--ink-1)">${esc(m.text)}</p></div>`).join('')}
+    </div>
+
+    <div class="chiprow" style="padding:0 0 12px">
+      ${NYX_SHORTCUTS.map(s => `<button class="chip" data-action="nyx-ask" data-q="${esc(s)}">${esc(s)}</button>`).join('')}
+    </div>
+
+    ${sug ? `<div class="card" style="border-color:rgba(201,163,78,.4)">
+      <span class="eyebrow">Voorgestelde missie</span>
+      <h3 class="display d-md" style="margin:7px 0 8px">${esc(sug.title)}</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px">
+        ${Tag(sug.duration,'alt')}${Tag('Difficulty: ' + sug.difficulty,'alt')}${Tag('+' + sug.xp + ' XP')}${Tag(sug.impact,'alt')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-gold btn-sm" style="flex:1" data-action="accept-sug" data-id="${sug.id}">Accept</button>
+        <button class="btn btn-ghost btn-sm" data-action="edit-sug" data-id="${sug.id}">Edit</button>
+        <button class="btn btn-quiet btn-sm" data-action="ignore-sug" data-id="${sug.id}">Ignore</button>
+      </div>
+    </div>` : `<p class="body">Geen open voorstellen. Vraag iets en ik maak er een missie van.</p>`}
+  </div>
+  <div class="sheet-foot">
+    <div style="display:flex;gap:8px">
+      <input id="nyxInput" class="input" placeholder="Vraag Nyx iets…" aria-label="Bericht aan Nyx">
+      <button class="btn btn-gold btn-icon" data-action="nyx-send" aria-label="Versturen">${ico('send',17,2.1)}</button>
+    </div>
+  </div>`;
+}
+function openNyx(ctx) {
+  openSheet(NyxSheetHTML(ctx), 'Nyx mission control');
+  const i = $('#nyxInput');
+  i && i.addEventListener('keydown', e => { if (e.key === 'Enter') nyxSend(); });
+}
+function nyxAsk(q) {
+  nyxLog.push({ from:'me', text:q });
+  nyxLog.push({ from:'nyx', text: nyxReply(q) });
+  openNyx();
+  const log = $('#nyxLog'); if (log) log.lastElementChild.scrollIntoView({ block:'nearest' });
+}
+function nyxSend() { const i = $('#nyxInput'); if (!i || !i.value.trim()) return; nyxAsk(i.value.trim()); }
+</script>
+
+<script>
+/* =================================================================================
+   [G] SHEETS  ->  src/components/Sheet.tsx
+   ================================================================================= */
+const NYX_SRC = 'data:image/jpeg;base64,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';
+const sheetEl = $('#sheet'), scrimEl = $('#scrim');
+function openSheet(html, label) {
+  sheetEl.setAttribute('aria-label', label || 'Detail');
+  sheetEl.innerHTML = '<div class="grip"></div>' + html;
+  sheetEl.hidden = false; scrimEl.hidden = false;
+  requestAnimationFrame(() => { scrimEl.classList.add('open'); sheetEl.classList.add('open'); animateBars(sheetEl); });
+}
+function closeSheet() {
+  sheetEl.classList.remove('open'); scrimEl.classList.remove('open');
+  setTimeout(() => { sheetEl.hidden = true; scrimEl.hidden = true; sheetEl.innerHTML = ''; }, 260);
+}
+const HOME_BASE = { lat:51.0764, lng:4.7283 };
+function distanceKm(a, b) {
+  const R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
+  const s = Math.sin(dLat/2) ** 2 + Math.cos(a.lat * Math.PI/180) * Math.cos(b.lat * Math.PI/180) * Math.sin(dLng/2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(s)) * 10) / 10;
+}
+
+function openMarkerSheet(pin) {
+  const meta = PIN_META[pin.type] || PIN_META.saved;
+  const m = pin.missionId ? missionById(pin.missionId) : null;
+  const c = pin.contactId ? contactById(pin.contactId) : null;
+  const dist = distanceKm(HOME_BASE, pin);
+  let body = '';
+  if (m) {
+    body = `
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <span style="width:104px;height:104px;flex:0 0 auto;position:relative">${plate(m.kind === 'event' ? 'city' : 'mission','fill')}</span>
+        <span style="flex:1;min-width:0">
+          <span class="eyebrow" style="color:${meta.stroke}">${meta.label}</span>
+          <h2 class="display d-lg" style="margin:6px 0 4px">${esc(m.title)}</h2>
+          <p class="meta" style="margin:0 0 6px">${ico('pin',11,2)} ${esc(m.location.address || m.location.name)}</p>
+          <p class="body" style="margin:0;font-size:12.5px">${esc(m.why.split('.')[0])}.</p>
+        </span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:13px">
+        ${Tag(m.when || m.estimate,'alt')}${Tag(m.people.length + ' contacten','alt')}${Tag('+' + m.xp + ' XP')}${Tag(dist + ' km van Home Base','alt')}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gold" style="flex:1 1 130px" data-action="go-mission" data-id="${m.id}">View mission</button>
+        <button class="btn btn-ghost" data-action="route" data-lat="${pin.lat}" data-lng="${pin.lng}">${ico('nav',14,2.2)} Route</button>
+        <button class="btn btn-ghost" data-action="note-for" data-title="${esc(m.title)}">${ico('file',14,2.2)} Add note</button>
+      </div>`;
+  } else if (c) {
+    body = `
+      <span class="eyebrow" style="color:${meta.stroke}">${meta.label}</span>
+      <h2 class="display d-lg" style="margin:6px 0 4px">${esc(c.name)}</h2>
+      <p class="body" style="margin:0 0 8px">${esc(c.role)}${c.note ? ' — ' + esc(c.note) : ''}</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:13px">
+        ${Tag(c.tier,'alt')}${Tag(dist + ' km van Home Base','alt')}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gold" style="flex:1 1 130px" data-action="note-for" data-title="Gesprek met ${esc(c.name)}">Notitie toevoegen</button>
+        <button class="btn btn-ghost" data-action="route" data-lat="${pin.lat}" data-lng="${pin.lng}">${ico('nav',14,2.2)} Route</button>
+      </div>`;
+  } else {
+    body = `
+      <span class="eyebrow" style="color:${meta.stroke}">${meta.label}</span>
+      <h2 class="display d-lg" style="margin:6px 0 4px">${esc(pin.title)}</h2>
+      ${pin.note ? `<p class="body" style="margin:0 0 8px">${esc(pin.note)}</p>` : ''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:13px">
+        ${Tag(pin.lat.toFixed(4) + ', ' + pin.lng.toFixed(4),'alt')}${Tag(dist + ' km van Home Base','alt')}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gold" style="flex:1 1 120px" data-action="note-for" data-title="${esc(pin.title)}">Notitie</button>
+        <button class="btn btn-ghost" data-action="route" data-lat="${pin.lat}" data-lng="${pin.lng}">${ico('nav',14,2.2)} Route</button>
+        ${pin.custom ? `<button class="btn btn-quiet" data-action="del-pin" data-id="${pin.id}">Verwijder</button>` : ''}
+      </div>`;
+  }
+  openSheet(`<div class="sheet-body">${body}</div>`, pin.title);
+}
+
+let newPinType = 'saved', newPinLL = null;
+function openPinSheet(ll) {
+  newPinLL = ll; newPinType = 'saved';
+  const types = ['saved','contact','company','event','opportunity','side'];
+  openSheet(`<div class="sheet-body">
+    <h2 class="display d-md" style="margin:0 0 3px">Nieuwe pin</h2>
+    <p class="meta" style="margin:0 0 14px">${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)} · ${distanceKm(HOME_BASE, ll)} km van Home Base</p>
+    <div class="field"><label for="pinTitle">Titel</label>
+      <input id="pinTitle" class="input" placeholder="Bv. Locatie bezocht met Kevin"></div>
+    <div class="field"><label>Type pin</label>
+      <div class="seg" id="pinTypes">${types.map(t => `<button class="${t === 'saved' ? 'is-on' : ''}"
+        data-action="pin-type" data-value="${t}">${PIN_META[t].label}</button>`).join('')}</div></div>
+    <div class="field"><label for="pinNote">Notitie (optioneel)</label>
+      <textarea id="pinNote" class="input" placeholder="Wat maakt deze plek relevant?"></textarea></div>
+    <div class="grid-2">
+      <div class="field"><label for="pinContact">Contact koppelen</label>
+        <select id="pinContact" class="input"><option value="">—</option>
+          ${S.contacts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="pinMission">Missie koppelen</label>
+        <select id="pinMission" class="input"><option value="">—</option>
+          ${S.missions.filter(m => m.status !== 'completed').map(m => `<option value="${m.id}">${esc(m.title)}</option>`).join('')}</select></div>
+    </div>
+  </div>
+  <div class="sheet-foot" style="display:flex;gap:8px">
+    <button class="btn btn-quiet" data-action="close-sheet">Annuleer</button>
+    <button class="btn btn-gold" style="flex:1" data-action="save-pin">Save pin</button>
+  </div>`, 'Nieuwe pin');
+  setTimeout(() => $('#pinTitle') && $('#pinTitle').focus(), 300);
+}
+function savePin() {
+  const title = ($('#pinTitle').value || '').trim() || 'Eigen pin';
+  const p = addPin({
+    title, type:newPinType, lat:newPinLL.lat, lng:newPinLL.lng,
+    note: ($('#pinNote').value || '').trim(),
+    contactId: $('#pinContact').value || undefined,
+    missionId: $('#pinMission').value || undefined,
+    state:'default'
+  });
+  closeSheet();
+  S.ui.mapFilter = 'mine'; S.ui.selectedPin = p.id;
+  if (location.hash.startsWith('#/map')) {
+    render();
+    setTimeout(() => { MapEngine.flyTo(p.lat, p.lng); }, 60);
+  } else { location.hash = '#/map'; }
+  toast('Pin opgeslagen');
+}
+
+function openStatSheet(key) {
+  const s = statByKey(key); if (!s) return;
+  const related = S.missions.filter(m => m.statReward.key === key && m.status !== 'completed');
+  openSheet(`<div class="sheet-body">
+    <span class="eyebrow">Core stat</span>
+    <h2 class="display d-lg" style="margin:6px 0 10px">${s.label}</h2>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+      <span class="display d-xl">${s.value}</span><span class="meta">/ 100</span>
+      <span style="flex:1">${Bar(s.value, s.tone === 'coral' ? 'coral' : '')}</span>
+    </div>
+    <p class="body">${STAT_NOTE[key] || ''}</p>
+    <div class="section-head" style="margin-top:14px"><h3 class="display d-sm">Wat deze stat beweegt</h3></div>
+    <div class="stack">${related.length ? related.map(m => `
+      <button class="card flat tap" style="text-align:left;display:flex;gap:10px;align-items:center"
+        data-action="go-mission" data-id="${m.id}">
+        <span style="color:var(--gold)">${ico('target',16,2)}</span>
+        <span style="flex:1"><b style="font-size:13px">${esc(m.title)}</b>
+          <span class="meta" style="display:block">+${m.statReward.amount} ${key} · +${m.xp} XP</span></span>
+        <span style="color:var(--ink-3)">${ico('right',15,2.2)}</span></button>`).join('')
+      : '<p class="body">Geen open missie voor deze stat. Vraag Nyx om er een voor te stellen.</p>'}</div>
+  </div>`, s.label);
+}
+const STAT_NOTE = {
+  capital:'Wat u bezit minus wat u schuldig bent. Stijgt door marge, niet door omzet.',
+  income:'Herhaalbare inkomsten per maand. Eén klant meer telt minder dan één klant die blijft.',
+  ownership:'Het deel van de waarde dat van u blijft als u stopt met werken.',
+  network:'Bereik buiten uw eigen cirkel. Connectors tellen zwaarder dan contacten.',
+  authority:'Of mensen u vinden zonder dat u belt. Content en resultaten voeden dit.',
+  strategy:'Hoe scherp de keuzes zijn. Minder richtingen is hier hoger.',
+  execution:'Wat er werkelijk afgewerkt raakt per week.',
+  optionality:'Hoeveel deuren openstaan als één pad wegvalt. Uw zwakste stat.'
+};
+function openMapFilterSheet() {
+  openSheet(`<div class="sheet-body">
+    <h2 class="display d-md" style="margin:0 0 12px">Filters</h2>
+    <div class="stack">${MAP_FILTERS.map(f => `
+      <button class="card flat tap" style="display:flex;gap:11px;align-items:center;text-align:left"
+        data-action="map-filter" data-value="${f.k}">
+        <span style="color:var(--gold)">${ico(f.icon,17,2)}</span>
+        <b style="flex:1;font-size:13px">${f.label}</b>
+        ${S.ui.mapFilter === f.k ? `<span style="color:var(--gold)">${ico('check',17,2)}</span>` : ''}
+      </button>`).join('')}</div>
+  </div>`, 'Kaartfilters');
+}
+
+/* =================================================================================
+   [Q] ROUTER + EVENTS  ->  src/app/router.tsx
+   ================================================================================= */
+const NAV = [['home','Home','home'],['map','Map','map'],['missions','Missions','target'],
+             ['journal','Journal','book'],['profile','Profile','user']];
+const TAB_OF = { home:'home', map:'map', missions:'missions', mission:'missions',
+                 journal:'journal', wrap:'journal', profile:'profile' };
+function renderNav(active) {
+  $('#nav').innerHTML = NAV.map(([k, l, i]) => `
+    <button data-go="#/${k}" ${active === k ? 'aria-current="page"' : ''}>
+      ${ico(i, 22, active === k ? 2.1 : 1.7)}<span>${l}</span></button>`).join('');
+}
+function parseRoute() {
+  const h = (location.hash || '#/home').replace(/^#\/?/, '');
+  const [name, param] = h.split('/');
+  return { name: name || 'home', param };
+}
+let pendingMapFocus = null;
+function render() {
+  const r = parseRoute();
+  const view = $('#view');
+  const html =
+    r.name === 'map' ? MapScreen() :
+    r.name === 'missions' ? MissionsScreen() :
+    r.name === 'mission' ? MissionDetail(r.param) :
+    r.name === 'journal' ? JournalScreen() :
+    r.name === 'wrap' ? WrapScreen(r.param) :
+    r.name === 'profile' ? ProfileScreen() : HomeScreen();
+  view.innerHTML = html;
+  renderNav(TAB_OF[r.name] || 'home');
+  animateBars(view);
+  if (r.name === 'map') {
+    mountMap();
+    if (pendingMapFocus) {
+      const { lat, lng, id } = pendingMapFocus; pendingMapFocus = null;
+      setTimeout(() => {
+        MapEngine.flyTo(lat, lng, 13);
+        if (id) { S.ui.selectedPin = id; MapEngine.renderMarkers();
+          const p = MapEngine.markers.find(x => x.id === id); p && openMarkerSheet(p); }
+      }, 80);
+    }
+  }
+  if (r.name === 'journal') mountJournal();
+  window.scrollTo({ top: 0 });
+}
+
+/* Eén gedelegeerde handler — in React worden dit gewoon onClick-props */
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]');
+  const act = e.target.closest('[data-action]');
+  if (act) { e.stopPropagation(); handleAction(act.dataset.action, act); return; }
+  if (go) { location.hash = go.dataset.go; return; }
+});
+document.addEventListener('change', e => {
+  const cb = e.target.closest('[data-action="toggle-obj"]'); if (!cb) return;
+  toggleObjective(cb.dataset.mission, cb.dataset.obj);
+  render();
+});
+$('#scrim').addEventListener('click', closeSheet);
+$('#nyxFab').addEventListener('click', () => openNyx());
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+function handleAction(a, el) {
+  const id = el.dataset.id;
+  switch (a) {
+    case 'back': history.length > 1 ? history.back() : (location.hash = '#/missions'); break;
+
+    /* Missies */
+    case 'continue': {
+      const r = parseRoute();
+      if (r.name === 'mission' && r.param === id) {
+        const m = missionById(id);
+        const next = m.objectives.find(o => !o.optional && !o.done);
+        if (next) { toggleObjective(id, next.id); toast('Objectief afgevinkt · ' + next.label); render(); }
+        else { completeMission(id); render(); }
+      } else { S.ui.activeMissionId = id; location.hash = '#/mission/' + id; }
+      break;
+    }
+    case 'go-mission': closeSheet(); location.hash = '#/mission/' + id; break;
+    case 'activate': {
+      const m = missionById(id); if (!m) break;
+      m.status = 'active'; S.ui.activeMissionId = m.id; persist(); render();
+      toast('Missie geactiveerd'); break;
+    }
+    case 'start-suggested': {
+      const m = missionById('m-lunch');
+      if (m && m.status === 'suggested') { m.status = 'active'; persist(); }
+      S.ui.activeMissionId = 'm-lunch'; location.hash = '#/mission/m-lunch'; break;
+    }
+    case 'open-on-map': {
+      const m = missionById(id); if (!m || !m.location) break;
+      S.ui.mapFilter = 'all';
+      pendingMapFocus = { lat:m.location.lat, lng:m.location.lng, id:'mp-' + m.id };
+      location.hash = '#/map'; break;
+    }
+    case 'focus-contact': {
+      const c = contactById(id); if (!c) break;
+      S.ui.mapFilter = 'all';
+      pendingMapFocus = { lat:c.lat, lng:c.lng, id:'cp-' + c.id };
+      location.hash = '#/map'; break;
+    }
+    case 'focus-pin': {
+      const p = allPins().find(x => x.id === id); if (!p) break;
+      MapEngine.flyTo(p.lat, p.lng, 13);
+      S.ui.selectedPin = p.id; MapEngine.renderMarkers(); openMarkerSheet(p); break;
+    }
+    case 'mission-filter': S.ui.missionFilter = el.dataset.value; render(); break;
+
+    /* Kaart */
+    case 'map-filter':
+      S.ui.mapFilter = el.dataset.value; closeSheet(); render(); break;
+    case 'map-filters': openMapFilterSheet(); break;
+    case 'map-zoom': MapEngine.zoomBy(+el.dataset.value * 0.8); break;
+    case 'map-home': MapEngine.flyTo(HOME_BASE.lat, HOME_BASE.lng, 11.6); toast('Terug naar Home Base'); break;
+    case 'map-layers':
+      MapEngine.tilesOK = !MapEngine.tilesOK; MapEngine.tileFails = 0;
+      $('#mapMode').textContent = MapEngine.tilesOK ? 'Satelliet-raster' : 'Vector';
+      MapEngine.draw(); break;
+    case 'new-pin': openPinSheet(MapEngine.center); break;
+    case 'pin-type':
+      newPinType = el.dataset.value;
+      $$('#pinTypes button').forEach(b => b.classList.toggle('is-on', b === el)); break;
+    case 'save-pin': savePin(); break;
+    case 'del-pin': removePin(id); closeSheet(); render(); toast('Pin verwijderd'); break;
+    case 'route': {
+      const d = distanceKm(HOME_BASE, { lat:+el.dataset.lat, lng:+el.dataset.lng });
+      MapEngine.flyTo(+el.dataset.lat, +el.dataset.lng, 13);
+      closeSheet(); toast(`${d} km vanaf Home Base · route opent in Maps in de echte app`); break;
+    }
+
+    /* Journal */
+    case 'journal-filter': S.ui.journalFilter = el.dataset.value; render(); break;
+    case 'day': S.ui.dayOffset = (S.ui.dayOffset || 0) + (+el.dataset.value); S.ui.journalFilter = 'today'; render(); break;
+    case 'save-note': saveQuickNote(); break;
+    case 'attach': {
+      const kinds = ['meet','city','room','note','gym'];
+      pendingMedia.push({ kind: kinds[pendingMedia.length % kinds.length], label:'Beeld' });
+      toast(pendingMedia.length + ' beeld' + (pendingMedia.length > 1 ? 'en' : '') + ' gekoppeld aan deze notitie'); break;
+    }
+    case 'voice': toast('Spraaknotities komen in de echte app — typ hier voorlopig'); break;
+    case 'entry-menu': {
+      openSheet(`<div class="sheet-body">
+        <h2 class="display d-md" style="margin:0 0 12px">Entry</h2>
+        <div class="stack">
+          <button class="card flat tap" style="text-align:left" data-action="close-sheet">Bewerken (binnenkort)</button>
+          <button class="card flat tap" style="text-align:left;color:var(--coral)" data-action="del-entry" data-id="${id}">Verwijderen</button>
+        </div></div>`, 'Entry-opties'); break;
+    }
+    case 'del-entry':
+      S.journal = S.journal.filter(j => j.id !== id); persist(); closeSheet(); render(); toast('Entry verwijderd'); break;
+    case 'create-wrap': {
+      const w = generateWrap(); location.hash = '#/wrap/' + w.id; toast('Wrap gegenereerd'); break;
+    }
+
+    /* Profiel + stats */
+    case 'stat-detail': openStatSheet(el.dataset.key); break;
+    case 'chapter-detail': openSheet(`<div class="sheet-body">
+        <span class="eyebrow">Chapter ${S.user.chapter.roman}</span>
+        <h2 class="display d-lg" style="margin:6px 0 10px">${esc(S.user.chapter.name)}</h2>
+        <p class="body">Hoofdstuk I loopt van €0 tot €100.000 opgebouwde empire value. Het sluit wanneer de eerste €10K-maand een feit is.</p>
+        <div style="margin:14px 0 8px">${Bar((S.user.chapter.economic.current) / S.user.chapter.economic.to * 100)}</div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3)">
+          <span>€0</span><span style="color:var(--gold);font-weight:800">${eur(S.user.chapter.economic.current)}</span><span>€100K</span></div>
+        <button class="btn btn-ghost btn-block" style="margin-top:14px" data-action="go-mission" data-id="m-boss10k">Bekijk de boss-missie</button>
+      </div>`, 'Chapter'); break;
+    case 'xp-detail': openSheet(`<div class="sheet-body">
+        <span class="eyebrow">Lifetime XP</span>
+        <h2 class="display d-lg" style="margin:6px 0 10px">${S.user.lifetimeXp.toLocaleString('nl-BE')} XP</h2>
+        <p class="body">XP komt enkel uit voltooide objectieven met bewijs. Bezig zijn levert niets op; afgewerkte beweging wel.</p>
+        <div style="margin:14px 0 6px">${Bar(S.user.xp / S.user.xpToNext * 100)}</div>
+        <p class="meta">Level ${S.user.level} · nog ${(S.user.xpToNext - S.user.xp).toLocaleString('nl-BE')} XP tot level ${S.user.level + 1}</p>
+      </div>`, 'XP'); break;
+    case 'reset': resetDemo(); break;
+
+    /* Nyx */
+    case 'open-nyx': openNyx(id); break;
+    case 'close-sheet': closeSheet(); break;
+    case 'nyx-ask': nyxAsk(el.dataset.q); break;
+    case 'nyx-send': nyxSend(); break;
+    case 'accept-sug': {
+      const m = acceptSuggestion(id); closeSheet();
+      if (m) { S.ui.activeMissionId = m.id; location.hash = '#/missions'; render();
+        toast('Missie toegevoegd · ' + m.title); }
+      break;
+    }
+    case 'edit-sug': {
+      const s = S.nyxSuggestions.find(x => x.id === id); if (!s) break;
+      openSheet(`<div class="sheet-body">
+        <h2 class="display d-md" style="margin:0 0 12px">Voorstel aanpassen</h2>
+        <div class="field"><label for="sugTitle">Titel</label>
+          <input id="sugTitle" class="input" value="${esc(s.title)}"></div>
+        <div class="field"><label for="sugXp">XP</label>
+          <input id="sugXp" class="input" type="number" value="${s.xp}"></div>
+      </div>
+      <div class="sheet-foot" style="display:flex;gap:8px">
+        <button class="btn btn-quiet" data-action="close-sheet">Annuleer</button>
+        <button class="btn btn-gold" style="flex:1" data-action="save-sug" data-id="${id}">Bewaar en accepteer</button>
+      </div>`, 'Voorstel aanpassen');
+      break;
+    }
+    case 'save-sug': {
+      const s = S.nyxSuggestions.find(x => x.id === id); if (!s) break;
+      s.title = ($('#sugTitle').value || s.title).toUpperCase();
+      s.xp = +$('#sugXp').value || s.xp;
+      const m = acceptSuggestion(id); closeSheet();
+      if (m) { location.hash = '#/missions'; render(); toast('Missie toegevoegd · ' + m.title); }
+      break;
+    }
+    case 'ignore-sug':
+      S.nyxSuggestions = S.nyxSuggestions.filter(x => x.id !== id); persist();
+      openNyx(); toast('Voorstel genegeerd'); break;
+    case 'note-for': {
+      closeSheet();
+      setTimeout(() => {
+        location.hash = '#/journal';
+        setTimeout(() => { const ta = $('#qnote');
+          if (ta) { ta.value = el.dataset.title + ' — '; ta.focus();
+            ta.setSelectionRange(ta.value.length, ta.value.length); } }, 120);
+      }, 180);
+      break;
+    }
+  }
+}
+
+/* --- Init ----------------------------------------------------------------- */
+$('#nyxAvatar').src = NYX_SRC;
+window.addEventListener('hashchange', render);
+if (!location.hash) location.hash = '#/home';
+render();
+setTimeout(() => $('#nyxFab').classList.remove('pulse'), 9000);
+</script>
+</body>
+</html>

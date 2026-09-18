@@ -1,0 +1,20 @@
+:root {
+  color-scheme: dark;
+
+  --night: #0b0907;
+  --charcoal: #171411;
+  --charcoal-2: #1f1b16;
+  --gold: #c9a34e;
+  --gold-soft: #e4c782;
+  --ivory: #f6ecdf;
+  --jade: #4fbf8b;
+  --coral: #f05252;
+
+  --ink-1: var(--ivory);
+  --ink-2: rgba(246, 236, 223, 0.72);
+  --ink-3: rgba(246, 236, 223, 0.48);
+  --line: rgba(201, 163, 78, 0.2);
+  --gold-grad: linear-gradient(180deg, #e9ce8c 0%, #c9a34e 52%, #a8813a 100%);
+  --col: 430px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
