@@ -6,8 +6,27 @@ import "leaflet/dist/leaflet.css";
 import { markerSvg } from "@/features/map/pinMeta";
 import { HOME_BASE, type MapPin } from "@/server/domain/map/types";
 
-const CARTO_ALL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-const CARTO_PLAIN = "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png";
+type CartoTiles = { all: string; plain: string };
+
+function fallbackTiles(): CartoTiles {
+  const key = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+  const query = key ? `?key=${encodeURIComponent(key)}` : "";
+  return {
+    all: `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png${query}`,
+    plain: `https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}.png${query}`,
+  };
+}
+
+async function loadTiles(): Promise<CartoTiles> {
+  try {
+    const response = await fetch("/api/map/config", { cache: "no-store" });
+    const data = (await response.json()) as { ok?: boolean; tiles?: CartoTiles };
+    if (response.ok && data.tiles?.all) return data.tiles;
+  } catch {
+    /* use fallback */
+  }
+  return fallbackTiles();
+}
 
 export type MapHandle = {
   flyTo: (lat: number, lng: number, zoom?: number) => void;
@@ -36,6 +55,7 @@ export function MapCanvas({
   const mapRef = useRef<L.Map | null>(null);
   const tilesRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
+  const urlsRef = useRef<CartoTiles>(fallbackTiles());
   const onSelectRef = useRef(onSelect);
   const onLongPressRef = useRef(onLongPress);
   const onViewRef = useRef(onViewChange);
@@ -48,6 +68,7 @@ export function MapCanvas({
   useEffect(() => {
     const el = hostRef.current;
     if (!el || mapRef.current) return;
+    let cancelled = false;
 
     const map = L.map(el, {
       zoomControl: false,
@@ -56,12 +77,18 @@ export function MapCanvas({
       maxZoom: 16,
     }).setView([HOME_BASE.lat, HOME_BASE.lng], 11.2);
 
-    tilesRef.current = L.tileLayer(CARTO_ALL, { maxZoom: 19, subdomains: "abcd" }).addTo(map);
-    markersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+    markersRef.current = L.layerGroup().addTo(map);
     L.DomUtil.create("div", "map-film", map.getContainer());
     L.DomUtil.create("div", "map-film-2", map.getContainer());
     L.DomUtil.create("div", "map-vignette", map.getContainer());
+
+    void loadTiles().then((urls) => {
+      if (cancelled || !mapRef.current) return;
+      urlsRef.current = urls;
+      tilesRef.current?.remove();
+      tilesRef.current = L.tileLayer(urls.all, { maxZoom: 20, subdomains: "abcd" }).addTo(map);
+    });
 
     const handle: MapHandle = {
       flyTo(lat, lng, zoom) {
@@ -127,6 +154,7 @@ export function MapCanvas({
     window.setTimeout(() => map.invalidateSize(), 80);
 
     return () => {
+      cancelled = true;
       el.removeEventListener("pointerdown", down);
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
@@ -149,8 +177,8 @@ export function MapCanvas({
       return;
     }
     tilesRef.current?.remove();
-    tilesRef.current = L.tileLayer(labels ? CARTO_ALL : CARTO_PLAIN, {
-      maxZoom: 19,
+    tilesRef.current = L.tileLayer(labels ? urlsRef.current.all : urlsRef.current.plain, {
+      maxZoom: 20,
       subdomains: "abcd",
     }).addTo(map);
   }, [labels]);
