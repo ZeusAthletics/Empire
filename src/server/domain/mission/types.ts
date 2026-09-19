@@ -50,6 +50,8 @@ export type PublicMission = {
   whenLabel: string | null;
   objectives: PublicObjective[];
   contacts: PublicContactRef[];
+  coverSrc: string | null;
+  coverApproved: boolean;
 };
 
 export function requiredCount(mission: { objectives: PublicObjective[] }) {

@@ -43,8 +43,7 @@ export function HomeScreen({
   const featuredRequired = featured ? requiredCount(featured) : 0;
   const featuredDone = featured ? doneCount(featured) : 0;
   const upcoming =
-    missions.find((mission) => mission.seedKey === "m-voka") ??
-    missions.find((mission) => mission.kind === "EVENT" && mission.status === "ACTIVE") ??
+    missions.find((mission) => mission.kind === "EVENT" && mission.status === "ACTIVE" && mission.id !== featured?.id) ??
     null;
   const trendDelta =
     empireTrend.length >= 2 ? empireTrend[empireTrend.length - 1] - empireTrend[0] : 0;
@@ -89,7 +88,7 @@ export function HomeScreen({
                 Chapter {chapter.roman} — {chapter.name}
               </h2>
               <span className="eyebrow muted" style={{ textAlign: "right", maxWidth: 110, lineHeight: 1.5 }}>
-                {campaign?.northStar ?? "Financiële vrijheid begint met een beslissing"}
+                {campaign?.northStar ?? "North star volgt uit uw intake."}
               </span>
             </div>
             <Bar pct={chapterPct} />
@@ -115,7 +114,12 @@ export function HomeScreen({
         {featured ? (
           <div className="card">
             <div style={{ display: "flex", gap: 12 }}>
-              <Plate kind="mission" className="sq" />
+              <Plate
+                kind="mission"
+                className="sq"
+                src={featured.coverSrc ?? undefined}
+                approved={featured.coverApproved}
+              />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span className="eyebrow">Current mission</span>
@@ -305,7 +309,13 @@ export function HomeScreen({
                   Bekijk <ArrowRight size={11} strokeWidth={2.4} />
                 </span>
               </div>
-              <Plate kind="city" className="wide" label={upcoming.locationName ?? undefined} />
+              <Plate
+                kind="city"
+                className="wide"
+                label={upcoming.locationName ?? undefined}
+                src={upcoming.coverSrc ?? undefined}
+                approved={upcoming.coverApproved}
+              />
               <h3 className="display d-sm" style={{ margin: "10px 0 6px" }}>
                 {upcoming.title}
               </h3>

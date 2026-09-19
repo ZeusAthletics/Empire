@@ -31,7 +31,12 @@ export function MarkerSheet({
       <div className="sheet-body">
         <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
           <span style={{ width: 104, height: 104, flex: "0 0 auto", position: "relative" }}>
-            <Plate kind={missionPlate(mission.kind)} className="fill" />
+            <Plate
+              kind={missionPlate(mission.kind)}
+              className="fill"
+              src={mission.coverSrc ?? undefined}
+              approved={mission.coverApproved}
+            />
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span className="eyebrow" style={{ color: meta.stroke }}>

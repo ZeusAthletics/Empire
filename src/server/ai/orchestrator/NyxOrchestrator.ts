@@ -3,6 +3,7 @@ import { callOpenAIResponses, openaiConfigured } from "@/server/ai/client/openai
 import { buildNyxContext } from "@/server/ai/context/NyxContextBuilder";
 import { writeNyxRun } from "@/server/ai/orchestrator/nyxRuns";
 import { MISSION_PLANNER } from "@/server/ai/prompts/mission-planner";
+import { INTAKE_GUIDE } from "@/server/ai/prompts/intake";
 import { loadNyxCore } from "@/server/ai/prompts/nyx-core";
 import { routeIntelligenceTask, type ModelRoutingDecision } from "@/server/ai/routing/AIModelRouter";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
@@ -69,7 +70,9 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
       const extra =
         task === "SIDE_QUEST_GENERATION" || task === "HIGH_IMPACT_SIDE_QUEST" || task === "MAIN_QUEST_GENERATION"
           ? `\n\n${MISSION_PLANNER}`
-          : "";
+          : task === "PLAYER_INTAKE"
+            ? `\n\n${INTAKE_GUIDE}`
+            : "";
       const prompt = `${core}\n\n${version}\nTaak: ${task}\nContext: ${JSON.stringify(context)}\n\n${input.text ?? ""}${extra}`;
       const attempt = async () =>
         callOpenAIResponses({

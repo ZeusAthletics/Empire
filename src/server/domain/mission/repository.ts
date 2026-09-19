@@ -11,6 +11,7 @@ import {
   type PublicObjective,
 } from "@/server/domain/mission/types";
 import type { StatKey } from "@/server/domain/player/types";
+import { coverMapForMediaIds } from "@/server/domain/media/missionCover";
 import { RestrictedContactError, assertNoRestrictedTargets } from "@/server/validation/missionRuleEngine";
 import {
   MissionClosedError,
@@ -43,6 +44,7 @@ type MissionRow = {
   location_address: string | null;
   featured: boolean;
   when_label: string | null;
+  media_id?: string | null;
 };
 
 type ObjectiveRow = {
@@ -79,6 +81,8 @@ function mapMission(
     locationAddress: row.location_address,
     featured: row.featured,
     whenLabel: row.when_label,
+    coverSrc: null,
+    coverApproved: false,
     objectives: [...objectives]
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((objective) => ({
@@ -89,6 +93,15 @@ function mapMission(
       })),
     contacts,
   };
+}
+
+async function withCovers(missions: PublicMission[], rows: MissionRow[]): Promise<PublicMission[]> {
+  const covers = await coverMapForMediaIds(rows.map((row) => row.media_id ?? "").filter(Boolean));
+  return missions.map((mission, index) => {
+    const mediaId = rows[index]?.media_id;
+    const cover = mediaId ? covers.get(mediaId) : undefined;
+    return cover ? { ...mission, coverSrc: cover.src, coverApproved: cover.approved } : mission;
+  });
 }
 
 async function loadMission(playerId: string, missionId: string): Promise<{
@@ -136,7 +149,8 @@ async function loadMission(playerId: string, missionId: string): Promise<{
 
   const missionRow = row as MissionRow;
   const objectiveRows = (objectives ?? []) as ObjectiveRow[];
-  return { row: missionRow, objectives: objectiveRows, mission: mapMission(missionRow, objectiveRows, contacts) };
+  const [mission] = await withCovers([mapMission(missionRow, objectiveRows, contacts)], [missionRow]);
+  return { row: missionRow, objectives: objectiveRows, mission };
 }
 
 export async function listMissions(playerId: string): Promise<PublicMission[]> {
@@ -173,15 +187,18 @@ export async function listMissions(playerId: string): Promise<PublicMission[]> {
       .map((contact) => [contact.id as string, { id: contact.id as string, name: contact.name as string, role: (contact.role as string | null) ?? null }]),
   );
 
-  return missions.map((row) =>
-    mapMission(
-      row,
-      ((objectives ?? []) as ObjectiveRow[]).filter((objective) => objective.mission_id === row.id),
-      (links ?? [])
-        .filter((link) => link.mission_id === row.id)
-        .map((link) => contactsById.get(link.contact_id as string))
-        .filter((contact): contact is { id: string; name: string; role: string | null } => Boolean(contact)),
+  return withCovers(
+    missions.map((row) =>
+      mapMission(
+        row,
+        ((objectives ?? []) as ObjectiveRow[]).filter((objective) => objective.mission_id === row.id),
+        (links ?? [])
+          .filter((link) => link.mission_id === row.id)
+          .map((link) => contactsById.get(link.contact_id as string))
+          .filter((contact): contact is { id: string; name: string; role: string | null } => Boolean(contact)),
+      ),
     ),
+    missions,
   );
 }
 

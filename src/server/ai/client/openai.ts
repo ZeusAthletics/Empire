@@ -28,6 +28,10 @@ export function openaiConfigured() {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
+export function getOpenAIClient() {
+  return getClient();
+}
+
 /** Server-only. All model calls go through this wrapper. */
 export async function callOpenAIResponses(input: OpenAICallInput): Promise<OpenAICallResult> {
   const response = await getClient().responses.create({

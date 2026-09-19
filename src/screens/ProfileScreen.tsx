@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, Calendar, Check, ChevronRight, MapPin, Star, Users } from "lucide-react";
+import { BookOpen, Calendar, Check, ChevronDown, ChevronRight, MapPin, Star, Trash2, Users } from "lucide-react";
 import { Bar } from "@/components/ui/Bar";
 import { EmptyInvite } from "@/components/ui/EmptyInvite";
 import { HeroArt } from "@/components/ui/HeroArt";
@@ -31,6 +31,8 @@ export function ProfileScreen({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [openContacts, setOpenContacts] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   const { toast } = useEmpireUI();
 
   async function logout() {
@@ -58,6 +60,18 @@ export function ProfileScreen({
       throw new Error(message);
     }
     toast(data.contact?.lat != null ? "Contact op de kaart" : "Contact bewaard");
+    router.refresh();
+  }
+
+  async function deleteContact(id: string) {
+    const response = await fetch(`/api/contacts/${id}`, { method: "DELETE" });
+    const data = (await response.json()) as { ok: boolean; error?: string };
+    if (!response.ok || !data.ok) {
+      toast(data.error ?? "Contact kon niet worden verwijderd.");
+      return;
+    }
+    setConfirmId(null);
+    toast("Contact verwijderd");
     router.refresh();
   }
 
@@ -186,45 +200,83 @@ export function ProfileScreen({
           <h2 className="display d-sm">Contacten</h2>
           <span className="eyebrow muted">{contacts.length} zichtbaar</span>
         </div>
-        {contacts.length ? (
-          <div className="stack" style={{ marginBottom: 12 }}>
-            {contacts.map((contact) => (
-              <div key={contact.id} className="card flat" style={{ display: "flex", alignItems: "center", gap: 11 }}>
-                <span
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: "50%",
-                    display: "grid",
-                    placeItems: "center",
-                    border: "1px solid var(--line)",
-                    color: "var(--gold)",
-                    fontWeight: 800,
-                    flex: "0 0 auto",
-                  }}
-                >
-                  {contact.name[0]}
-                </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <b style={{ fontSize: 13.5 }}>{contact.name}</b>
-                  <span className="meta" style={{ display: "block" }}>
-                    {contact.address ?? contact.role ?? "Geen adres"}
-                    {contact.address && contact.role ? ` · ${contact.role}` : ""}
-                    {contact.lat != null ? " · op de kaart" : ""}
-                  </span>
-                </span>
-                {contact.lat != null ? (
-                  <Link href={`/map?contact=${contact.id}`} className="btn btn-quiet btn-sm">
-                    <MapPin size={13} strokeWidth={2.2} /> Kaart
-                  </Link>
-                ) : null}
+        <button
+          className="card tap"
+          type="button"
+          onClick={() => setOpenContacts((open) => !open)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", textAlign: "left" }}
+        >
+          <span>
+            <span className="display d-sm" style={{ display: "block" }}>
+              {openContacts ? "Verberg contacten" : "Bekijk contacten"}
+            </span>
+            <span className="meta">{contacts.length ? "Lijst en toevoegen" : "Nog leeg · voeg er een toe"}</span>
+          </span>
+          {openContacts ? <ChevronDown size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.2} />}
+        </button>
+        {openContacts ? (
+          <div style={{ marginTop: 12 }}>
+            {contacts.length ? (
+              <div className="stack" style={{ marginBottom: 12 }}>
+                {contacts.map((contact) => (
+                  <div key={contact.id} className="card flat" style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                    <span
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: "50%",
+                        display: "grid",
+                        placeItems: "center",
+                        border: "1px solid var(--line)",
+                        color: "var(--gold)",
+                        fontWeight: 800,
+                        flex: "0 0 auto",
+                      }}
+                    >
+                      {contact.name[0]}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b style={{ fontSize: 13.5 }}>{contact.name}</b>
+                      <span className="meta" style={{ display: "block" }}>
+                        {contact.address ?? contact.role ?? "Geen adres"}
+                        {contact.address && contact.role ? ` · ${contact.role}` : ""}
+                        {contact.lat != null ? " · op de kaart" : ""}
+                      </span>
+                    </span>
+                    {contact.lat != null ? (
+                      <Link href={`/map?contact=${contact.id}`} className="btn btn-quiet btn-sm">
+                        <MapPin size={13} strokeWidth={2.2} /> Kaart
+                      </Link>
+                    ) : null}
+                    {confirmId === contact.id ? (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        type="button"
+                        style={{ color: "var(--coral)" }}
+                        disabled={pending}
+                        onClick={() => void deleteContact(contact.id)}
+                      >
+                        Zeker?
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-ghost btn-icon"
+                        type="button"
+                        aria-label={`Verwijder ${contact.name}`}
+                        onClick={() => setConfirmId(contact.id)}
+                      >
+                        <Trash2 size={15} strokeWidth={2.1} />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <EmptyInvite body="Nog geen contacten. Voeg er een toe, of zet een pin van het type Contact op de kaart." />
+            )}
+            <ContactComposer pending={pending} onSave={(input) => void addContact(input)} />
           </div>
-        ) : (
-          <EmptyInvite body="Nog geen contacten. Voeg er een toe, of zet een pin van het type Contact op de kaart." />
-        )}
-        <ContactComposer pending={pending} onSave={(input) => void addContact(input)} />
+        ) : null}
       </div>
 
       <div className="section">

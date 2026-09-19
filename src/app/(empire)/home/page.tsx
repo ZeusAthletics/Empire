@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { getSessionPlayer, toPublicPlayer } from "@/server/auth/session";
+import { playerNeedsIntake } from "@/server/auth/intakeGate";
 import { findPublicCampaignByPlayerId } from "@/server/domain/campaign/repository";
 import { getEmpireValueState } from "@/server/domain/empire/repository";
 import { listLiveOpportunities } from "@/server/domain/opportunity/repository";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const player = await getSessionPlayer();
   if (!player) redirect("/");
+  if (playerNeedsIntake(player)) redirect("/intake");
   const [campaign, missions, radar, empire] = await Promise.all([
     findPublicCampaignByPlayerId(player.id),
     listMissions(player.id),

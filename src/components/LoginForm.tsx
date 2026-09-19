@@ -1,10 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 
 export function LoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +23,7 @@ export function LoginForm() {
         setError(payload.error ?? "Aanmelden mislukt.");
         return;
       }
-      router.push(payload.next ?? "/home");
-      router.refresh();
+      window.location.assign(payload.next ?? "/intake");
     } catch {
       setError("Geen verbinding. Probeer het opnieuw.");
     } finally {

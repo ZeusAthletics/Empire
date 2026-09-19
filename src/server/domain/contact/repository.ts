@@ -131,3 +131,23 @@ export async function setContactCoords(playerId: string, contactId: string, lat:
   if (error || !data) throw error ?? new Error("Contact kon niet worden geplaatst.");
   return mapContact(data as Record<string, unknown>);
 }
+
+export async function softDeleteContact(playerId: string, contactId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("contacts")
+    .select("id, restricted")
+    .eq("id", contactId)
+    .eq("player_id", playerId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Contact niet gevonden.");
+  if (data.restricted) throw new Error("Dit contact mag niet worden verwijderd.");
+  const { error: delError } = await admin
+    .from("contacts")
+    .update({ deleted_at: new Date().toISOString() } as never)
+    .eq("id", contactId)
+    .eq("player_id", playerId);
+  if (delError) throw delError;
+}

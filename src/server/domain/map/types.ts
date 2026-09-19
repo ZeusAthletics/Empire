@@ -26,6 +26,8 @@ export type MapPinMission = {
   xpReward: number;
   contactCount: number;
   kind: "MAIN" | "BOSS" | "EVENT" | "BUSINESS" | "CONTENT" | "NETWORK" | "OPPORTUNITY";
+  coverSrc?: string | null;
+  coverApproved?: boolean;
 };
 
 export type MapPinContact = {

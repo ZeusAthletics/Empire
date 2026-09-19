@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getSessionPlayer } from "@/server/auth/session";
+import { attachMissionCover } from "@/server/domain/media/missionCover";
 import { approveProposal } from "@/server/domain/nyx/proposalRepository";
 
 export const runtime = "nodejs";
@@ -16,6 +17,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const mission = await approveProposal(player.id, id, edits);
+    after(() =>
+      attachMissionCover(player.id, mission.id, {
+        title: mission.title,
+        locationName: mission.locationName,
+        locationAddress: mission.locationAddress,
+        kind: mission.kind,
+      }).catch(() => null),
+    );
     return NextResponse.json({ ok: true, mission });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Voorstel kon niet worden aanvaard.";

@@ -1,15 +1,14 @@
-import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
+import { IntakeScreen } from "@/features/intake/IntakeScreen";
 import { getSessionPlayer } from "@/server/auth/session";
 import { playerNeedsIntake } from "@/server/auth/intakeGate";
 
 export const dynamic = "force-dynamic";
 
-export default async function EmpireLayout({ children }: { children: ReactNode }) {
+export default async function IntakePage() {
   const player = await getSessionPlayer();
   if (!player) redirect("/");
   if (player.role === "ADMIN") redirect("/admin");
-  if (playerNeedsIntake(player)) redirect("/intake");
-  return <AppShell>{children}</AppShell>;
+  if (!playerNeedsIntake(player)) redirect("/home");
+  return <IntakeScreen />;
 }

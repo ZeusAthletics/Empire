@@ -58,7 +58,7 @@ export function EmpireValueScreen({ initial }: { initial: EmpireValueState }) {
 
   return (
     <>
-      <header style={{ padding: "14px 16px 8px", display: "flex", alignItems: "center", gap: 10 }}>
+      <header className="page-head" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Link href="/home" className="btn btn-ghost btn-icon" aria-label="Terug">
           <ArrowLeft size={18} strokeWidth={2.2} />
         </Link>

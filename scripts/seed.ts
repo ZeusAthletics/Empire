@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema, applyPhase8Schema, applyPhase9Schema, applyPhase10Schema, applyPhase11Schema } from "./apply-schema";
+import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema, applyPhase8Schema, applyPhase9Schema, applyPhase10Schema, applyPhase11Schema, applyIntakeSchema } from "./apply-schema";
 import { compilePersona, DEFAULT_PERSONA } from "../src/server/ai/prompts/persona";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
 import { SEED_MEMORY_PROPOSALS, SEED_MEMORIES } from "./seed-memory";
@@ -253,6 +253,36 @@ async function snapshotStats(
     })) as never,
   );
   if (error && error.code !== "23505" && !/duplicate|unique/i.test(error.message)) throw error;
+}
+
+async function seedRestrictedContact(admin: Admin, playerId: string) {
+  const contact = SEED_CONTACTS.find((item) => item.seedKey === "c-jdi");
+  if (!contact) return;
+  const { data: existing, error: lookupError } = await admin
+    .from("contacts")
+    .select("id")
+    .eq("player_id", playerId)
+    .eq("seed_key", contact.seedKey)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  const fields = {
+    player_id: playerId,
+    seed_key: contact.seedKey,
+    name: contact.name,
+    role: contact.role,
+    tier: contact.tier,
+    lat: contact.lat,
+    lng: contact.lng,
+    note: contact.note,
+    restricted: true,
+    source: "ADMIN",
+    deleted_at: null,
+  };
+  const { error } = existing
+    ? await admin.from("contacts").update(fields as never).eq("id", existing.id)
+    : await admin.from("contacts").insert(fields as never);
+  if (error) throw error;
 }
 
 async function seedContactsAndMissions(admin: Admin, playerId: string, chapterId: string) {
@@ -816,21 +846,36 @@ async function main() {
     applyPhase11Schema,
     "supabase/migrations/20260919060000_phase11_ops.sql",
   );
+  await ensureTable(
+    admin,
+    "player_models",
+    applyIntakeSchema,
+    "supabase/migrations/20260919180000_intake_and_covers.sql",
+  );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
   const adminAuth = await ensureAuthUser(admin, adminEmail, adminPassword);
 
-  const player = await upsertPlayer(admin, {
-    authUserId: playerAuth.id,
-    role: "PLAYER",
-    displayName: "HARDWIG AERTS",
-    title: "STRATEGIC OPERATOR",
-    level: 12,
-    xp: 7420,
-    xpToNext: 10000,
-    lifetimeXp: 24860,
-    stats: PLAYER_STATS,
-  });
+  const { data: existingPlayer } = await admin
+    .from("players")
+    .select("id, display_name, intake_completed_at")
+    .eq("auth_user_id", playerAuth.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  const player = existingPlayer?.intake_completed_at
+    ? { id: existingPlayer.id as string, display_name: existingPlayer.display_name as string }
+    : await upsertPlayer(admin, {
+        authUserId: playerAuth.id,
+        role: "PLAYER",
+        displayName: "HARDWIG AERTS",
+        title: "OPERATOR",
+        level: 1,
+        xp: 0,
+        xpToNext: 1000,
+        lifetimeXp: 0,
+        stats: STAT_KEYS.map((key) => ({ key, value: 0 })),
+      });
 
   const operator = await upsertPlayer(admin, {
     authUserId: adminAuth.id,
@@ -844,40 +889,12 @@ async function main() {
     stats: STAT_KEYS.map((key) => ({ key, value: 0 })),
   });
 
-  const chapter = await upsertChapterOne(admin, player.id, {
-    title: "€0 → €100.000.000",
-    northStar: "Financiële vrijheid begint met een beslissing",
-    bottleneckStat: "optionality",
-    bottleneckReason: "Optionality is de rem: te weinig paden naast het huidige aanbod.",
-    roman: "I",
-    name: "ESCAPE VELOCITY",
-    tagline: "Groter denken. Verder gaan.",
-    economicFrom: 0,
-    economicTo: 100000,
-    economicCurrent: 64800,
-    exitCriteria: ["De eerste €10.000-maand is een feit."],
-  });
-  await snapshotStats(admin, player.id, PLAYER_STATS);
-  const { chapterId } = chapter;
-  await seedContactsAndMissions(admin, player.id, chapterId);
-  await seedCompaniesAndPins(admin, player.id);
-  await seedJournalAndWraps(admin, player.id);
-  await seedNyxProposals(admin, player.id);
-  await seedMemories(admin, player.id);
-  await seedThink(admin, player.id);
-  await seedRadar(admin, player.id);
+  await seedRestrictedContact(admin, player.id);
   await seedPersona(admin);
 
-  console.log(`Seeded player ${player.display_name} (${playerEmail})`);
+  console.log(`Bootstrapped player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
-  console.log(`Seeded chapter I ${chapter.chapterId}`);
-  console.log(`Seeded ${SEED_CONTACTS.length} contacts and ${SEED_MISSIONS.length} missions`);
-  console.log(`Seeded ${SEED_COMPANIES.length} companies and ${SEED_MAP_PINS.length} map pins`);
-  console.log(`Seeded ${SEED_JOURNAL.length} journal entries and wrap ${SEED_WRAP_AUGUST.label}`);
-  console.log(`Seeded ${SEED_NYX_PROPOSALS.length} Nyx side-quest proposals`);
-  console.log(`Seeded ${SEED_MEMORIES.length} memories and ${SEED_MEMORY_PROPOSALS.length} Onthouden chip`);
-  console.log("Seeded optionality pattern and campaign review");
-  console.log(`Seeded ${SEED_OPPORTUNITIES.length} radar items`);
+  console.log("Restricted contact c-jdi kept. No demo missions, stats, or campaign.");
   console.log(`Seeded persona@${DEFAULT_PERSONA.version}`);
 }
 

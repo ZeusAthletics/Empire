@@ -42,16 +42,46 @@ export async function findPlayerByDisplayName(displayName: string): Promise<Sess
 
 export async function findPlayerByAuthUserId(authUserId: string): Promise<SessionPlayer | null> {
   const admin = createSupabaseAdminClient();
-  const { data: player, error } = await admin
+  const full = await admin
     .from("players")
     .select("*")
     .eq("auth_user_id", authUserId)
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error) throw error;
-  if (!player) return null;
-  return withStats(player as PlayerRow);
+  if (full.error && /intake_completed_at|schema cache|column/i.test(full.error.message)) {
+    const fallback = await admin
+      .from("players")
+      .select(
+        "id, auth_user_id, role, display_name, title, level, xp, xp_to_next, lifetime_xp, created_at, updated_at, deleted_at, home_address, home_lat, home_lng",
+      )
+      .eq("auth_user_id", authUserId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (fallback.error) throw fallback.error;
+    if (!fallback.data) return null;
+    return withStats({ ...(fallback.data as PlayerRow), intake_completed_at: null });
+  }
+
+  if (full.error) throw full.error;
+  if (!full.data) return null;
+  return withStats(full.data as PlayerRow);
+}
+
+export async function completeIntake(playerId: string, title: string): Promise<SessionPlayer> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("players")
+    .update({
+      title: title.trim().slice(0, 48) || "OPERATOR",
+      intake_completed_at: new Date().toISOString(),
+    } as never)
+    .eq("id", playerId)
+    .is("deleted_at", null)
+    .select("*")
+    .single();
+  if (error || !data) throw error ?? new Error("Intake kon niet worden afgesloten.");
+  return withStats(data as PlayerRow);
 }
 
 export async function updateHomeAddress(playerId: string, raw: string): Promise<SessionPlayer> {

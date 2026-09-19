@@ -106,3 +106,7 @@ export async function applyPhase10Schema() {
 export async function applyPhase11Schema() {
   await applySqlFile("supabase/migrations/20260919060000_phase11_ops.sql", "phase 11 ops schema");
 }
+
+export async function applyIntakeSchema() {
+  await applySqlFile("supabase/migrations/20260919180000_intake_and_covers.sql", "intake and covers schema");
+}

@@ -9,6 +9,7 @@ import {
   type MapPinType,
   type MapState,
 } from "@/server/domain/map/types";
+import { coverMapForMediaIds } from "@/server/domain/media/missionCover";
 import type { MissionKind } from "@/server/domain/mission/types";
 
 const PIN_TYPES = new Set<MapPinType>([
@@ -29,7 +30,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
     await Promise.all([
       admin
         .from("missions")
-        .select("id, title, why, kind, status, featured, xp_reward, location_name, location_address, when_label, estimate_label, lat, lng")
+        .select("id, title, why, kind, status, featured, xp_reward, location_name, location_address, when_label, estimate_label, lat, lng, media_id")
         .eq("player_id", playerId)
         .is("deleted_at", null),
       admin
@@ -45,7 +46,18 @@ export async function getMapState(playerId: string): Promise<MapState> {
         .is("deleted_at", null),
       admin.from("players").select("home_address, home_lat, home_lng").eq("id", playerId).maybeSingle(),
     ]);
-  if (missionError) throw missionError;
+  let missionRows = missions as Record<string, unknown>[] | null;
+  let missionQueryError = missionError;
+  if (missionQueryError && /media_id|schema cache|column/i.test(missionQueryError.message)) {
+    const retry = await admin
+      .from("missions")
+      .select("id, title, why, kind, status, featured, xp_reward, location_name, location_address, when_label, estimate_label, lat, lng")
+      .eq("player_id", playerId)
+      .is("deleted_at", null);
+    missionRows = (retry.data ?? null) as Record<string, unknown>[] | null;
+    missionQueryError = retry.error;
+  }
+  if (missionQueryError) throw missionQueryError;
   if (contactError) {
     if (!/address|schema cache|column/i.test(contactError.message)) throw contactError;
   }
@@ -75,7 +87,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
   }));
 
   const visibleContacts = contactRows.filter((contact) => !contact.restricted);
-  const missionIds = (missions ?? []).map((mission) => mission.id as string);
+  const missionIds = (missionRows ?? []).map((mission) => mission.id as string);
   const { data: links } = missionIds.length
     ? await admin.from("mission_contacts").select("mission_id").in("mission_id", missionIds)
     : { data: [] };
@@ -97,6 +109,9 @@ export async function getMapState(playerId: string): Promise<MapState> {
       : null;
 
   const assembled: MapPin[] = [];
+  const covers = await coverMapForMediaIds(
+    (missionRows ?? []).map((row) => (row.media_id as string | null) ?? "").filter(Boolean),
+  );
 
   if (home) {
     assembled.push({
@@ -135,13 +150,14 @@ export async function getMapState(playerId: string): Promise<MapState> {
     });
   }
 
-  for (const mission of missions ?? []) {
+  for (const mission of missionRows ?? []) {
     const resolved = resolveMissionPin(
       mission.lat as number | null,
       mission.lng as number | null,
       (mission.location_address as string | null) ?? (mission.location_name as string | null),
     );
     if (!resolved) continue;
+    const cover = mission.media_id ? covers.get(mission.media_id as string) : undefined;
     assembled.push({
       id: `mp-${mission.id}`,
       title: mission.title as string,
@@ -165,6 +181,8 @@ export async function getMapState(playerId: string): Promise<MapState> {
         xpReward: mission.xp_reward as number,
         contactCount: contactCount.get(mission.id as string) ?? 0,
         kind: mission.kind as MissionKind,
+        coverSrc: cover?.src ?? null,
+        coverApproved: cover?.approved ?? false,
       },
       contact: null,
     });
@@ -219,7 +237,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
     pins: assembled,
     home,
     contactOptions: visibleContacts.map((contact) => ({ id: contact.id as string, title: contact.name as string })),
-    missionOptions: (missions ?? [])
+    missionOptions: (missionRows ?? [])
       .filter((mission) => mission.status !== "COMPLETED" && mission.status !== "COMPLETED_UNVERIFIED")
       .map((mission) => ({ id: mission.id as string, title: mission.title as string })),
   };

@@ -307,6 +307,20 @@ export async function createMainQuestProposal(playerId: string, payload: Record<
   });
 }
 
+export async function createSideQuestProposal(
+  playerId: string,
+  payload: SideQuestProposalPayload,
+  rationale: string,
+) {
+  await insertKindedProposal(playerId, {
+    seedKey: `sq:${Date.now()}:${payload.title.slice(0, 32)}`,
+    kind: "SIDE_QUEST",
+    payload,
+    rationale: rationale || payload.blueprint.why,
+    importance: "HIGH",
+  });
+}
+
 export async function approvePatternProposal(playerId: string, proposalId: string) {
   const proposal = await getProposal(playerId, proposalId);
   if (proposal.status !== "PENDING") throw new Error("Dit voorstel is al afgehandeld.");

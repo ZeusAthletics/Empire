@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findPlayerByAuthUserId } from "@/server/domain/player/repository";
+import { afterLoginPath } from "@/server/auth/intakeGate";
 
 export const runtime = "nodejs";
 
@@ -32,5 +33,5 @@ export async function POST(request: Request) {
   }
 
   const player = await findPlayerByAuthUserId(data.user.id).catch(() => null);
-  return NextResponse.json({ ok: true, next: player?.role === "ADMIN" ? "/admin" : "/home" });
+  return NextResponse.json({ ok: true, next: afterLoginPath(player) });
 }

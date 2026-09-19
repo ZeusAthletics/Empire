@@ -67,7 +67,12 @@ function MissionRow({ mission }: { mission: PublicMission }) {
     >
       <span style={{ width: 4, background: missionAccent(mission.kind), flex: "0 0 auto" }} />
       <span style={{ width: 74, flex: "0 0 auto", alignSelf: "stretch", position: "relative" }}>
-        <Plate kind={missionPlate(mission.kind)} className="fill" />
+        <Plate
+          kind={missionPlate(mission.kind)}
+          className="fill"
+          src={mission.coverSrc ?? undefined}
+          approved={mission.coverApproved}
+        />
       </span>
       <span style={{ flex: 1, minWidth: 0, padding: "11px 12px" }}>
         <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -174,7 +179,12 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
           <div className="card" style={{ padding: 0, overflow: "hidden" }}>
             <div style={{ display: "flex" }}>
               <div style={{ width: 118, flex: "0 0 auto", position: "relative" }}>
-                <Plate kind="mission" className="fill" />
+                <Plate
+                  kind="mission"
+                  className="fill"
+                  src={featured.coverSrc ?? undefined}
+                  approved={featured.coverApproved}
+                />
               </div>
               <div style={{ flex: 1, minWidth: 0, padding: "13px 13px 0" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -264,7 +274,12 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
             {suggested.map((mission) => (
               <div key={mission.id} className="card flat" style={{ padding: 0, overflow: "hidden" }}>
                 <div style={{ height: 58, position: "relative" }}>
-                  <Plate kind={missionPlate(mission.kind)} className="fill" />
+                  <Plate
+          kind={missionPlate(mission.kind)}
+          className="fill"
+          src={mission.coverSrc ?? undefined}
+          approved={mission.coverApproved}
+        />
                 </div>
                 <div style={{ padding: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>

@@ -185,7 +185,7 @@ export function MapScreen({
 
   return (
     <>
-      <header style={{ padding: "14px 16px 10px" }}>
+      <header className="page-head" style={{ paddingBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
           <div>
             <h1 className="display d-lg">
@@ -269,7 +269,7 @@ export function MapScreen({
           }}
         />
         <div className="map-hint">Sleep om te pannen · lang indrukken = pin</div>
-        <div className="map-ctl" style={{ top: 12 }}>
+        <div className="map-ctl" style={{ top: "calc(12px + var(--safe-t))" }}>
           <button
             className="map-btn"
             type="button"
@@ -294,7 +294,7 @@ export function MapScreen({
             <Layers size={18} strokeWidth={2} />
           </button>
         </div>
-        <div className="map-ctl" style={{ top: 116 }}>
+        <div className="map-ctl" style={{ top: "calc(116px + var(--safe-t))" }}>
           <button className="map-btn" type="button" aria-label="Inzoomen" onClick={() => mapRef.current?.zoomBy(1)}>
             <Plus size={18} strokeWidth={2.2} />
           </button>

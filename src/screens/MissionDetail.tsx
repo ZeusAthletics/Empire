@@ -110,7 +110,7 @@ export function MissionDetail({ mission }: { mission: PublicMission }) {
 
   return (
     <>
-      <header style={{ padding: "14px 16px 8px", display: "flex", alignItems: "center", gap: 10 }}>
+      <header className="page-head" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Link href="/missions" className="btn btn-ghost btn-icon" aria-label="Terug">
           <ArrowLeft size={18} strokeWidth={2.2} />
         </Link>
@@ -123,7 +123,12 @@ export function MissionDetail({ mission }: { mission: PublicMission }) {
       <div className="section" style={{ marginTop: 0 }}>
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ height: 104, position: "relative" }}>
-            <Plate kind={missionPlate(mission.kind)} className="fill" />
+            <Plate
+              kind={missionPlate(mission.kind)}
+              className="fill"
+              src={mission.coverSrc ?? undefined}
+              approved={mission.coverApproved}
+            />
             <div
               style={{
                 position: "absolute",

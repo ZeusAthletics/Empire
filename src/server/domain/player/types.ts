@@ -21,6 +21,17 @@ export const STAT_KEYS: StatKey[] = [
   "optionality",
 ];
 
+export const DEFAULT_STAT_WEIGHTS: Record<StatKey, number> = {
+  capital: 1,
+  income: 1,
+  ownership: 1,
+  network: 1,
+  authority: 1,
+  strategy: 1,
+  execution: 1,
+  optionality: 1,
+};
+
 export type PlayerRow = {
   id: string;
   auth_user_id: string;
@@ -37,6 +48,7 @@ export type PlayerRow = {
   home_address?: string | null;
   home_lat?: number | null;
   home_lng?: number | null;
+  intake_completed_at?: string | null;
 };
 
 export type StatValueRow = {
@@ -64,6 +76,7 @@ export type PublicPlayer = {
 
 export type SessionPlayer = PublicPlayer & {
   authUserId: string;
+  intakeCompletedAt: string | null;
 };
 
 export function mapPlayer(row: PlayerRow, stats: StatValueRow[]): SessionPlayer {
@@ -79,6 +92,7 @@ export function mapPlayer(row: PlayerRow, stats: StatValueRow[]): SessionPlayer 
     xpToNext: row.xp_to_next,
     lifetimeXp: row.lifetime_xp,
     homeAddress: row.home_address ?? null,
+    intakeCompletedAt: row.intake_completed_at ?? null,
     stats: STAT_KEYS.map((key) => ({ key, value: byKey.get(key) ?? 0 })),
   };
 }
