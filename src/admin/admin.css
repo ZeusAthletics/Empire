@@ -115,12 +115,22 @@
 .ops .td-sub { font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ops .empty { padding: 40px 16px; text-align: center; color: var(--ink-3); }
 
-.ops pre.code {
+.ops pre.code, .ops textarea.code {
   background: #0D0B09; border: 1px solid var(--line); border-radius: 8px; padding: 11px; overflow: auto;
   font-family: var(--ops-mono); font-size: 11px; line-height: 1.55; color: var(--ink-2); margin: 0; max-height: 360px; white-space: pre-wrap;
 }
-.ops .quote { border-left: 2px solid var(--gold); padding: 2px 0 2px 11px; color: var(--ink-2); font-size: 12.5px; }
+.ops textarea.code.prompt-editor {
+  width: 100%;
+  min-height: 420px;
+  max-height: none;
+  resize: vertical;
+  display: block;
+  color: var(--ink-1);
+}
+.ops textarea.code.prompt-editor:focus { border-color: var(--gold); outline: none; }
 .ops .split { display: grid; grid-template-columns: 1fr 392px; gap: 12px; align-items: start; }
+.ops .split.persona-split { grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.2fr); }
+.ops .quote { border-left: 2px solid var(--gold); padding: 2px 0 2px 11px; color: var(--ink-2); font-size: 12.5px; }
 .ops .srow { display: grid; grid-template-columns: 118px 1fr 40px; gap: 12px; align-items: center; padding: 7px 0; }
 .ops .srow .lab { font-size: 11.5px; font-weight: 600; }
 .ops .srow .val { font-family: var(--ops-mono); font-size: 11px; text-align: right; color: var(--ink-2); }

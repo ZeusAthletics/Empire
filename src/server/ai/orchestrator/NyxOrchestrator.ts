@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { callOpenAIResponses, openaiConfigured } from "@/server/ai/client/openai";
 import { buildNyxContext } from "@/server/ai/context/NyxContextBuilder";
 import { writeNyxRun } from "@/server/ai/orchestrator/nyxRuns";
-import { NYX_CORE, NYX_CORE_VERSION } from "@/server/ai/prompts/nyx-core";
+import { loadNyxCore } from "@/server/ai/prompts/nyx-core";
 import { routeIntelligenceTask, type ModelRoutingDecision } from "@/server/ai/routing/AIModelRouter";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
 import type { IntelligenceTask } from "@/server/ai/routing/IntelligenceTask";
@@ -50,6 +50,7 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
   const requestId = randomUUID();
   const { task, decision } = planNyxTask(input);
   const context = await buildNyxContext(input.playerId, task);
+  const { core, version } = await loadNyxCore();
   const started = Date.now();
   let fallbackUsed = false;
   let text: string | null = null;
@@ -64,7 +65,7 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
       success = false;
       errorMessage = "OPENAI_API_KEY ontbreekt.";
     } else {
-      const prompt = `${NYX_CORE}\n\n${NYX_CORE_VERSION}\nTaak: ${task}\nContext: ${JSON.stringify(context)}\n\n${input.text ?? ""}`;
+      const prompt = `${core}\n\n${version}\nTaak: ${task}\nContext: ${JSON.stringify(context)}\n\n${input.text ?? ""}`;
       const attempt = async () =>
         callOpenAIResponses({
           model: decision.model,
@@ -112,6 +113,7 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
       fallbackUsed,
       structuredOutputValid,
       error: errorMessage,
+      promptVersion: version,
     });
   } catch {
     runId = null;

@@ -7,6 +7,7 @@ import { getNotificationBudget } from "@/server/domain/notify/repository";
 import { listAllOpportunities } from "@/server/domain/opportunity/repository";
 import { listPatterns } from "@/server/domain/pattern/repository";
 import { listProposals } from "@/server/domain/nyx/proposalRepository";
+import { getActivePersona } from "@/server/domain/persona/repository";
 import { NYX_CORE, NYX_CORE_VERSION } from "@/server/ai/prompts/nyx-core";
 import { DEFAULT_PERSONA } from "@/server/ai/prompts/persona";
 import type { SessionPlayer } from "@/server/domain/player/types";
@@ -163,9 +164,10 @@ export async function loadCampaignPage(player: SessionPlayer) {
 }
 
 export async function loadPromptsPage() {
+  const active = await getActivePersona().catch(() => null);
   return {
-    version: NYX_CORE_VERSION,
-    compiled: NYX_CORE,
+    version: active ? `persona@${active.version}` : NYX_CORE_VERSION,
+    compiled: active?.compiledPrompt || NYX_CORE,
     persona: DEFAULT_PERSONA,
   };
 }

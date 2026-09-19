@@ -13,6 +13,7 @@ export type NyxRunWrite = {
   fallbackUsed: boolean;
   structuredOutputValid: boolean | null;
   error?: string;
+  promptVersion?: string;
 };
 
 export async function writeNyxRun(input: NyxRunWrite) {
@@ -26,7 +27,7 @@ export async function writeNyxRun(input: NyxRunWrite) {
       service: "ORCHESTRATOR",
       model: input.decision.model,
       model_tier: input.decision.modelTier,
-      prompt_version: NYX_CORE_VERSION,
+      prompt_version: input.promptVersion ?? NYX_CORE_VERSION,
       routing_reason: input.decision.reason,
       reasoning_effort: input.decision.reasoningEffort,
       context_refs: [],
