@@ -1,6 +1,7 @@
 import { findPublicCampaignByPlayerId } from "@/server/domain/campaign/repository";
 import { getJournalState } from "@/server/domain/journal/repository";
 import { retrieveRelevantMemories } from "@/server/domain/memory/repository";
+import { listOpenPatterns } from "@/server/domain/pattern/repository";
 import { listMissions } from "@/server/domain/mission/repository";
 import { featuredMission } from "@/server/domain/mission/types";
 import { findPlayerById } from "@/server/domain/player/repository";
@@ -14,6 +15,7 @@ export type NyxContext = {
   currentMainQuest: string | null;
   relevantJournalEntries: string[];
   relevantMemories: string[];
+  openPatterns: string[];
 };
 
 export async function buildNyxContext(playerId: string, task: IntelligenceTask): Promise<NyxContext> {
@@ -28,6 +30,7 @@ export async function buildNyxContext(playerId: string, task: IntelligenceTask):
       ? await getJournalState(playerId).catch(() => null)
       : null;
   const memories = await retrieveRelevantMemories(playerId).catch(() => []);
+  const patterns = await listOpenPatterns(playerId).catch(() => []);
 
   return {
     task,
@@ -37,5 +40,6 @@ export async function buildNyxContext(playerId: string, task: IntelligenceTask):
     currentMainQuest: featuredMission(missions)?.title ?? null,
     relevantJournalEntries: (journal?.entries ?? []).slice(0, 10).map((entry) => entry.title),
     relevantMemories: memories.map((memory) => memory.normalizedFact),
+    openPatterns: patterns.map((pattern) => pattern.title),
   };
 }

@@ -85,6 +85,9 @@ export function escalateFromRisk(task: IntelligenceTask, profile: IntelligenceRi
   if (task === "SIDE_QUEST_GENERATION" && profile.strategicImpact >= ESCALATION.SIDE_QUEST_SOL_IMPACT) {
     return "STRATEGIC";
   }
+  if (task === "PATTERN_DETECTION" && profile.strategicImpact >= ESCALATION.SIDE_QUEST_SOL_IMPACT) {
+    return "STRATEGIC";
+  }
   if (profile.campaignChanging) return "STRATEGIC";
   if (
     profile.strategicImpact >= ESCALATION.CAMPAIGN_CHANGING_IMPACT &&

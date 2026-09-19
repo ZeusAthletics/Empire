@@ -8,10 +8,12 @@ import type { NyxChatMessage, NyxTalkState } from "@/server/domain/nyx/types";
 import { chipFromProposal } from "@/server/domain/memory/repository";
 import { isMemoryPayload, isSideQuestPayload } from "@/server/domain/nyx/proposalTypes";
 import {
+  listPendingByKind,
   listPendingMemoryProposals,
   listPendingSideQuest,
   type PublicProposal,
 } from "@/server/domain/nyx/proposalRepository";
+import { isPatternPayload, isReviewPayload } from "@/server/domain/nyx/proposalTypes";
 
 function mapMessages(
   rows: { id: string; role: string; content: string }[],
@@ -87,9 +89,11 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
     .order("created_at", { ascending: true });
   if (msgError) throw msgError;
 
-  const [pending, memoryProposals] = await Promise.all([
+  const [pending, memoryProposals, patternProposal, reviewProposal] = await Promise.all([
     listPendingSideQuest(playerId),
     listPendingMemoryProposals(playerId),
+    listPendingByKind(playerId, "PATTERN"),
+    listPendingByKind(playerId, "CAMPAIGN_REVIEW"),
   ]);
   return {
     conversationId,
@@ -99,6 +103,22 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
       if (!isMemoryPayload(item.payload)) return [];
       return [chipFromProposal(item.id, item.payload.normalizedFact, item.payload.content)];
     }),
+    pattern:
+      patternProposal && isPatternPayload(patternProposal.payload)
+        ? {
+            id: patternProposal.id,
+            title: patternProposal.payload.title,
+            description: patternProposal.payload.description,
+          }
+        : null,
+    review:
+      reviewProposal && isReviewPayload(reviewProposal.payload)
+        ? {
+            id: reviewProposal.id,
+            bottleneck: reviewProposal.payload.proposedBottleneck ?? "ongewijzigd",
+            whatStays: reviewProposal.payload.whatStays,
+          }
+        : null,
   };
 }
 

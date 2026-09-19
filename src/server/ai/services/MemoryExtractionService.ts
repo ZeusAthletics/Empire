@@ -9,6 +9,7 @@ import { MEMORY_CANDIDATES_SCHEMA, type MemoryCandidate } from "@/server/ai/sche
 import { insertMemory, bumpObservation, listActiveMemories } from "@/server/domain/memory/repository";
 import type { Memory } from "@/server/domain/memory/types";
 import { createMemoryProposal } from "@/server/domain/nyx/proposalRepository";
+import { afterHighMemory } from "@/server/ai/services/StrategicPatternService";
 import { applyMemoryDecision } from "@/server/validation/MemoryValidationService";
 
 const EXTRACT_PROMPT = `Haal 0 tot 3 memories uit deze beurt. Nul is normaal.
@@ -102,6 +103,9 @@ export async function afterNyxReply(input: {
         ...draft,
         supersedesMemoryId: decision.store === "REVISION" ? decision.existingId : undefined,
       });
+      if (candidate.importance === "HIGH" || candidate.importance === "CRITICAL") {
+        await afterHighMemory(input.playerId).catch(() => undefined);
+      }
     }
   }
 

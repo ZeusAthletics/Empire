@@ -22,9 +22,23 @@ export type NyxMemoryChip = {
   fact: string;
 };
 
+export type NyxPatternCard = {
+  id: string;
+  title: string;
+  description: string;
+};
+
+export type NyxReviewCard = {
+  id: string;
+  bottleneck: string;
+  whatStays: string;
+};
+
 export type NyxTalkState = {
   conversationId: string;
   messages: NyxChatMessage[];
   proposal: NyxProposalCard | null;
   memoryChips: NyxMemoryChip[];
+  pattern: NyxPatternCard | null;
+  review: NyxReviewCard | null;
 };

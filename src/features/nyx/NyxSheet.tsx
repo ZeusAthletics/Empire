@@ -120,8 +120,66 @@ export function NyxSheet() {
     toast("Niet onthouden");
   }
 
+  async function confirmPattern() {
+    if (!talk?.pattern) return;
+    setPending(true);
+    const response = await fetch(`/api/nyx/patterns/${talk.pattern.id}/confirm`, { method: "POST" });
+    const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+    setPending(false);
+    if (!response.ok || !data.ok || !data.talk) {
+      toast(data.error ?? "Patroon kon niet worden bevestigd.");
+      return;
+    }
+    setTalk(data.talk);
+    toast("Patroon bevestigd");
+  }
+
+  async function dismissPattern() {
+    if (!talk?.pattern) return;
+    setPending(true);
+    const response = await fetch(`/api/nyx/patterns/${talk.pattern.id}/dismiss`, { method: "POST" });
+    const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+    setPending(false);
+    if (!response.ok || !data.ok || !data.talk) {
+      toast(data.error ?? "Patroon kon niet worden genegeerd.");
+      return;
+    }
+    setTalk(data.talk);
+    toast("Patroon genegeerd");
+  }
+
+  async function acceptReview() {
+    if (!talk?.review) return;
+    setPending(true);
+    const response = await fetch(`/api/nyx/reviews/${talk.review.id}/accept`, { method: "POST" });
+    const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+    setPending(false);
+    if (!response.ok || !data.ok || !data.talk) {
+      toast(data.error ?? "Review kon niet worden aanvaard.");
+      return;
+    }
+    setTalk(data.talk);
+    toast("Bottleneck bijgewerkt · hoofdstuk blijft");
+  }
+
+  async function ignoreReview() {
+    if (!talk?.review) return;
+    setPending(true);
+    const response = await fetch(`/api/nyx/reviews/${talk.review.id}/ignore`, { method: "POST" });
+    const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+    setPending(false);
+    if (!response.ok || !data.ok || !data.talk) {
+      toast(data.error ?? "Review kon niet worden genegeerd.");
+      return;
+    }
+    setTalk(data.talk);
+    toast("Review genegeerd");
+  }
+
   const proposal = talk?.proposal;
   const memoryChips = talk?.memoryChips ?? [];
+  const pattern = talk?.pattern ?? null;
+  const review = talk?.review ?? null;
 
   return (
     <>
@@ -206,6 +264,46 @@ export function NyxSheet() {
                 </button>
               </span>
             ))}
+          </div>
+        ) : null}
+
+        {pattern ? (
+          <div className="card" style={{ borderColor: "rgba(201,163,78,.4)", marginBottom: 12 }}>
+            <span className="eyebrow">Patroon</span>
+            <h3 className="display d-md" style={{ margin: "7px 0 8px" }}>
+              {pattern.title}
+            </h3>
+            <p className="body" style={{ margin: "0 0 11px", color: "var(--ink-2)" }}>
+              {pattern.description}
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-gold btn-sm" style={{ flex: 1 }} type="button" disabled={pending} onClick={() => void confirmPattern()}>
+                Bevestig
+              </button>
+              <button className="btn btn-quiet btn-sm" type="button" disabled={pending} onClick={() => void dismissPattern()}>
+                Ignore
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {review ? (
+          <div className="card" style={{ borderColor: "rgba(201,163,78,.4)", marginBottom: 12 }}>
+            <span className="eyebrow">Campagne-review</span>
+            <h3 className="display d-md" style={{ margin: "7px 0 8px" }}>
+              Bottleneck → {review.bottleneck}
+            </h3>
+            <p className="body" style={{ margin: "0 0 11px", color: "var(--ink-2)" }}>
+              {review.whatStays}
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-gold btn-sm" style={{ flex: 1 }} type="button" disabled={pending} onClick={() => void acceptReview()}>
+                Accept
+              </button>
+              <button className="btn btn-quiet btn-sm" type="button" disabled={pending} onClick={() => void ignoreReview()}>
+                Ignore
+              </button>
+            </div>
           </div>
         ) : null}
 

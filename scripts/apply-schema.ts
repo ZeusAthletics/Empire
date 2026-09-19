@@ -94,3 +94,7 @@ export async function applyPhase7Schema() {
 export async function applyPhase8Schema() {
   await applySqlFile("supabase/migrations/20260919030000_phase8_memory.sql", "phase 8 memory schema");
 }
+
+export async function applyPhase9Schema() {
+  await applySqlFile("supabase/migrations/20260919040000_phase9_think.sql", "phase 9 think schema");
+}

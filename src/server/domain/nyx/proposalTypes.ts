@@ -1,6 +1,8 @@
+import type { CampaignReviewPayload } from "@/server/ai/schemas/campaign-review.schema";
 import type { StatKey } from "@/server/domain/player/types";
 import type { MissionKind, MissionTrack } from "@/server/domain/mission/types";
 import type { MemoryProposalPayload } from "@/server/domain/memory/types";
+import type { PatternProposalPayload } from "@/server/domain/pattern/types";
 
 export type SideQuestProposalPayload = {
   title: string;
@@ -30,7 +32,7 @@ export type PublicProposal = {
   kind: string;
   status: string;
   rationale: string;
-  payload: SideQuestProposalPayload | MemoryProposalPayload;
+  payload: SideQuestProposalPayload | MemoryProposalPayload | PatternProposalPayload | CampaignReviewPayload | Record<string, unknown>;
 };
 
 export function isSideQuestPayload(payload: PublicProposal["payload"]): payload is SideQuestProposalPayload {
@@ -39,4 +41,12 @@ export function isSideQuestPayload(payload: PublicProposal["payload"]): payload 
 
 export function isMemoryPayload(payload: PublicProposal["payload"]): payload is MemoryProposalPayload {
   return "normalizedFact" in payload && "domain" in payload;
+}
+
+export function isPatternPayload(payload: PublicProposal["payload"]): payload is PatternProposalPayload {
+  return "evidenceRefs" in payload && "strategicImpact" in payload && "title" in payload;
+}
+
+export function isReviewPayload(payload: PublicProposal["payload"]): payload is CampaignReviewPayload {
+  return "whatStays" in payload && "keepBottleneck" in payload;
 }
