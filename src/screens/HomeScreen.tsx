@@ -11,16 +11,19 @@ import { CORE_STAT_KEYS, STAT_META, formatEuro, formatXp } from "@/lib/stats";
 import { TRACK_LABEL, firstSentence } from "@/lib/missions";
 import type { PublicCampaign } from "@/server/domain/campaign/types";
 import { doneCount, featuredMission, requiredCount, type PublicMission } from "@/server/domain/mission/types";
+import type { Opportunity } from "@/server/domain/opportunity/types";
 import type { PublicPlayer } from "@/server/domain/player/types";
 
 export function HomeScreen({
   player,
   campaign,
   missions,
+  radarTop,
 }: {
   player: PublicPlayer;
   campaign: PublicCampaign | null;
   missions: PublicMission[];
+  radarTop?: Opportunity | null;
 }) {
   const { openNyx } = useEmpireUI();
   const xpPct = player.xpToNext > 0 ? (player.xp / player.xpToNext) * 100 : 0;
@@ -249,6 +252,24 @@ export function HomeScreen({
           </p>
         </div>
         <div className="card">
+          {radarTop ? (
+            <Link href="/radar" className="tap" style={{ display: "block", marginBottom: 14 }}>
+              <div className="card-head">
+                <span className="t eyebrow">
+                  <Star size={13} strokeWidth={2} /> Radar
+                </span>
+                <span className="eyebrow muted">
+                  {radarTop.relevanceScore} <ArrowRight size={11} strokeWidth={2.4} />
+                </span>
+              </div>
+              <h3 className="display d-sm" style={{ margin: "0 0 6px" }}>
+                {radarTop.title}
+              </h3>
+              <p className="meta" style={{ margin: 0 }}>
+                {radarTop.reasonsForRelevance[0]}
+              </p>
+            </Link>
+          ) : null}
           {upcoming ? (
             <Link href={`/missions/${upcoming.id}`} className="tap" style={{ display: "block" }}>
               <div className="card-head">

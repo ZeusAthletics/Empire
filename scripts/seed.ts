@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema, applyPhase8Schema, applyPhase9Schema } from "./apply-schema";
+import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema, applyPhase8Schema, applyPhase9Schema, applyPhase10Schema } from "./apply-schema";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
 import { SEED_MEMORY_PROPOSALS, SEED_MEMORIES } from "./seed-memory";
 import { SEED_NYX_PROPOSALS } from "./seed-nyx";
 import { SEED_PATTERN, SEED_PATTERN_PROPOSAL, SEED_REVIEW_PROPOSAL } from "./seed-patterns";
+import { SEED_OPPORTUNITIES } from "./seed-opportunities";
+import { defaultReasons, scoreOpportunity } from "../src/server/domain/opportunity/score";
 import { SEED_COMPANIES, SEED_CONTACTS, SEED_MAP_PINS, SEED_MISSIONS } from "./seed-missions";
 import { STAT_KEYS, type Role, type StatKey } from "../src/server/domain/player/types";
 
@@ -635,6 +637,64 @@ async function seedThink(admin: Admin, playerId: string) {
   }
 }
 
+async function seedRadar(admin: Admin, playerId: string) {
+  const context = {
+    bottleneckStat: "optionality" as const,
+    agenda: SEED_OPPORTUNITIES.filter((item) => item.lat != null && item.lng != null && item.availableFrom).map((item) => ({
+      lat: item.lat as number,
+      lng: item.lng as number,
+      at: item.availableFrom as string,
+    })),
+    knownContactKeys: ["c-frans", "c-pieter", "c-mike"],
+    restrictedContactKeys: ["c-jdi"],
+    dismissedCategories: [] as const,
+    categoryWeight: 0,
+    similarCount: 0,
+  };
+
+  for (const draft of SEED_OPPORTUNITIES) {
+    const { data: existing, error: lookupError } = await admin
+      .from("opportunities")
+      .select("id, status")
+      .eq("player_id", playerId)
+      .eq("seed_key", draft.seedKey)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing && existing.status === "DISMISSED") continue;
+    const scored = scoreOpportunity(draft, context);
+    const reasons = defaultReasons(draft, context, scored);
+    if (draft.relatedStats.includes("network") && !reasons.some((reason) => /netwerk/i.test(reason))) {
+      reasons.unshift("Netwerk is de rem. Dit event ligt in Geel, bij connectors die u al kent.");
+    }
+    const fields = {
+      player_id: playerId,
+      seed_key: draft.seedKey,
+      title: draft.title,
+      summary: draft.summary,
+      category: draft.category,
+      source_type: draft.sourceType ?? "MANUAL",
+      available_from: draft.availableFrom ?? null,
+      location_name: draft.locationName ?? null,
+      lat: draft.lat ?? null,
+      lng: draft.lng ?? null,
+      relevance_score: scored.score,
+      base_score: scored.base,
+      score_adjustment: 0,
+      score_breakdown: scored,
+      reasons_for_relevance: reasons,
+      related_stats: draft.relatedStats,
+      related_contact_keys: draft.relatedContactKeys ?? [],
+      type: draft.type ?? "STRATEGIC",
+      campaign_changing: Boolean(draft.campaignChanging),
+      status: scored.score === 0 ? "EXPIRED" : "NEW",
+    };
+    const { error } = existing
+      ? await admin.from("opportunities").update(fields as never).eq("id", existing.id)
+      : await admin.from("opportunities").insert(fields as never);
+    if (error) throw error;
+  }
+}
+
 async function seedNyxProposals(admin: Admin, playerId: string) {
   for (const proposal of SEED_NYX_PROPOSALS) {
     const { data: existing, error: lookupError } = await admin
@@ -722,6 +782,12 @@ async function main() {
     applyPhase9Schema,
     "supabase/migrations/20260919040000_phase9_think.sql",
   );
+  await ensureTable(
+    admin,
+    "opportunities",
+    applyPhase10Schema,
+    "supabase/migrations/20260919050000_phase10_radar.sql",
+  );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
   const adminAuth = await ensureAuthUser(admin, adminEmail, adminPassword);
@@ -771,6 +837,7 @@ async function main() {
   await seedNyxProposals(admin, player.id);
   await seedMemories(admin, player.id);
   await seedThink(admin, player.id);
+  await seedRadar(admin, player.id);
 
   console.log(`Seeded player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
@@ -781,6 +848,7 @@ async function main() {
   console.log(`Seeded ${SEED_NYX_PROPOSALS.length} Nyx side-quest proposals`);
   console.log(`Seeded ${SEED_MEMORIES.length} memories and ${SEED_MEMORY_PROPOSALS.length} Onthouden chip`);
   console.log("Seeded optionality pattern and campaign review");
+  console.log(`Seeded ${SEED_OPPORTUNITIES.length} radar items`);
 }
 
 main().catch((error) => {
