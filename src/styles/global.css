@@ -54,7 +54,7 @@
   isolation: isolate;
 }
 .hero-art { position: absolute; inset: 0; z-index: -1; }
-.hero-art svg { width: 100%; height: 100%; display: block; }
+.hero-art svg, .hero-art img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: 38% 42%; }
 .hero-fade {
   position: absolute;
   inset: 0;

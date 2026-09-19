@@ -47,7 +47,7 @@ export function HomeScreen({
   return (
     <>
       <header className="hero" style={{ paddingBottom: 22 }}>
-        <HeroArt seed={1} />
+        <HeroArt src="/home-header.jpg" />
         <div className="hero-corner">
           <span className="eyebrow">A better you builds a larger tomorrow</span>
           <div className="script" style={{ marginTop: 26, fontSize: 20 }}>
