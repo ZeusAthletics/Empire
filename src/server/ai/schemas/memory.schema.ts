@@ -33,3 +33,15 @@ export const MEMORY_CANDIDATE_SCHEMA = {
     reasoningSummary: { type: "string" },
   },
 } as const;
+
+export const MEMORY_CANDIDATES_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["candidates"],
+  properties: {
+    candidates: {
+      type: "array",
+      items: MEMORY_CANDIDATE_SCHEMA,
+    },
+  },
+} as const;

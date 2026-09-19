@@ -1,5 +1,6 @@
 import type { StatKey } from "@/server/domain/player/types";
-import type { MissionDifficulty, MissionKind, MissionTrack } from "@/server/domain/mission/types";
+import type { MissionKind, MissionTrack } from "@/server/domain/mission/types";
+import type { MemoryProposalPayload } from "@/server/domain/memory/types";
 
 export type SideQuestProposalPayload = {
   title: string;
@@ -29,5 +30,13 @@ export type PublicProposal = {
   kind: string;
   status: string;
   rationale: string;
-  payload: SideQuestProposalPayload;
+  payload: SideQuestProposalPayload | MemoryProposalPayload;
 };
+
+export function isSideQuestPayload(payload: PublicProposal["payload"]): payload is SideQuestProposalPayload {
+  return "title" in payload && "blueprint" in payload;
+}
+
+export function isMemoryPayload(payload: PublicProposal["payload"]): payload is MemoryProposalPayload {
+  return "normalizedFact" in payload && "domain" in payload;
+}

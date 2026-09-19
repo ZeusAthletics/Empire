@@ -16,8 +16,15 @@ export type NyxProposalCard = {
   impact: string;
 };
 
+export type NyxMemoryChip = {
+  id: string;
+  label: string;
+  fact: string;
+};
+
 export type NyxTalkState = {
   conversationId: string;
   messages: NyxChatMessage[];
   proposal: NyxProposalCard | null;
+  memoryChips: NyxMemoryChip[];
 };

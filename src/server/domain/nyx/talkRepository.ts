@@ -5,7 +5,13 @@ import { findPublicCampaignByPlayerId } from "@/server/domain/campaign/repositor
 import { findPlayerById } from "@/server/domain/player/repository";
 import { NYX_GREETING } from "@/server/ai/fallback/nyxReply";
 import type { NyxChatMessage, NyxTalkState } from "@/server/domain/nyx/types";
-import { listPendingSideQuest, type PublicProposal } from "@/server/domain/nyx/proposalRepository";
+import { chipFromProposal } from "@/server/domain/memory/repository";
+import { isMemoryPayload, isSideQuestPayload } from "@/server/domain/nyx/proposalTypes";
+import {
+  listPendingMemoryProposals,
+  listPendingSideQuest,
+  type PublicProposal,
+} from "@/server/domain/nyx/proposalRepository";
 
 function mapMessages(
   rows: { id: string; role: string; content: string }[],
@@ -18,7 +24,7 @@ function mapMessages(
 }
 
 function cardOf(proposal: PublicProposal | null) {
-  if (!proposal) return null;
+  if (!proposal || !isSideQuestPayload(proposal.payload)) return null;
   return {
     id: proposal.id,
     title: proposal.payload.title,
@@ -81,11 +87,18 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
     .order("created_at", { ascending: true });
   if (msgError) throw msgError;
 
-  const pending = await listPendingSideQuest(playerId);
+  const [pending, memoryProposals] = await Promise.all([
+    listPendingSideQuest(playerId),
+    listPendingMemoryProposals(playerId),
+  ]);
   return {
     conversationId,
     messages: mapMessages(rows ?? []),
     proposal: cardOf(pending),
+    memoryChips: memoryProposals.flatMap((item) => {
+      if (!isMemoryPayload(item.payload)) return [];
+      return [chipFromProposal(item.id, item.payload.normalizedFact, item.payload.content)];
+    }),
   };
 }
 

@@ -90,3 +90,7 @@ export async function applyPhase6Schema() {
 export async function applyPhase7Schema() {
   await applySqlFile("supabase/migrations/20260919020000_phase7_nyx_talk.sql", "phase 7 nyx talk schema");
 }
+
+export async function applyPhase8Schema() {
+  await applySqlFile("supabase/migrations/20260919030000_phase8_memory.sql", "phase 8 memory schema");
+}

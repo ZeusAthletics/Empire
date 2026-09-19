@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema } from "./apply-schema";
+import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema, applyPhase8Schema } from "./apply-schema";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
+import { SEED_MEMORY_PROPOSALS, SEED_MEMORIES } from "./seed-memory";
 import { SEED_NYX_PROPOSALS } from "./seed-nyx";
 import { SEED_COMPANIES, SEED_CONTACTS, SEED_MAP_PINS, SEED_MISSIONS } from "./seed-missions";
 import { STAT_KEYS, type Role, type StatKey } from "../src/server/domain/player/types";
@@ -497,6 +498,76 @@ async function seedJournalAndWraps(admin: Admin, playerId: string) {
   if (wrapError) throw wrapError;
 }
 
+async function seedMemories(admin: Admin, playerId: string) {
+  for (const memory of SEED_MEMORIES) {
+    const { data: existing, error: lookupError } = await admin
+      .from("memories")
+      .select("id, user_confirmed")
+      .eq("player_id", playerId)
+      .eq("seed_key", memory.seedKey)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing?.user_confirmed) continue;
+    const fields = {
+      player_id: playerId,
+      seed_key: memory.seedKey,
+      domain: memory.domain,
+      category: memory.category,
+      content: memory.content,
+      normalized_fact: memory.normalizedFact,
+      confidence: memory.confidence,
+      importance: memory.importance,
+      status: "ACTIVE",
+      source_type: memory.sourceType,
+      user_confirmed: memory.userConfirmed,
+    };
+    const { data, error } = existing
+      ? await admin.from("memories").update(fields as never).eq("id", existing.id).select("id").single()
+      : await admin.from("memories").insert(fields as never).select("id").single();
+    if (error || !data) throw error ?? new Error("Memory seed mislukt.");
+    const { data: version } = await admin
+      .from("memory_versions")
+      .select("id")
+      .eq("memory_id", data.id)
+      .limit(1)
+      .maybeSingle();
+    if (!version) {
+      const { error: versionError } = await admin.from("memory_versions").insert({
+        memory_id: data.id,
+        snapshot: { ...memory, playerId, status: "ACTIVE" },
+        changed_by: "SYSTEM",
+        reason: "seed",
+      } as never);
+      if (versionError) throw versionError;
+    }
+  }
+
+  for (const proposal of SEED_MEMORY_PROPOSALS) {
+    const { data: existing, error: lookupError } = await admin
+      .from("proposals")
+      .select("id, status")
+      .eq("player_id", playerId)
+      .eq("seed_key", proposal.seedKey)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing && existing.status !== "PENDING") continue;
+    const fields = {
+      player_id: playerId,
+      seed_key: proposal.seedKey,
+      kind: "MEMORY",
+      payload: proposal.payload,
+      rationale: proposal.rationale,
+      confidence: proposal.payload.confidence,
+      importance: proposal.payload.importance,
+      status: "PENDING",
+    };
+    const { error } = existing
+      ? await admin.from("proposals").update(fields as never).eq("id", existing.id)
+      : await admin.from("proposals").insert(fields as never);
+    if (error) throw error;
+  }
+}
+
 async function seedNyxProposals(admin: Admin, playerId: string) {
   for (const proposal of SEED_NYX_PROPOSALS) {
     const { data: existing, error: lookupError } = await admin
@@ -572,6 +643,12 @@ async function main() {
     applyPhase7Schema,
     "supabase/migrations/20260919020000_phase7_nyx_talk.sql",
   );
+  await ensureTable(
+    admin,
+    "memories",
+    applyPhase8Schema,
+    "supabase/migrations/20260919030000_phase8_memory.sql",
+  );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
   const adminAuth = await ensureAuthUser(admin, adminEmail, adminPassword);
@@ -619,6 +696,7 @@ async function main() {
   await seedCompaniesAndPins(admin, player.id);
   await seedJournalAndWraps(admin, player.id);
   await seedNyxProposals(admin, player.id);
+  await seedMemories(admin, player.id);
 
   console.log(`Seeded player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
@@ -627,6 +705,7 @@ async function main() {
   console.log(`Seeded ${SEED_COMPANIES.length} companies and ${SEED_MAP_PINS.length} map pins`);
   console.log(`Seeded ${SEED_JOURNAL.length} journal entries and wrap ${SEED_WRAP_AUGUST.label}`);
   console.log(`Seeded ${SEED_NYX_PROPOSALS.length} Nyx side-quest proposals`);
+  console.log(`Seeded ${SEED_MEMORIES.length} memories and ${SEED_MEMORY_PROPOSALS.length} Onthouden chip`);
 }
 
 main().catch((error) => {

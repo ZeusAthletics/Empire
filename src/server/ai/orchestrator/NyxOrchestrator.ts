@@ -21,6 +21,7 @@ export type OrchestratorInput = {
   text?: string;
   risk?: Partial<IntelligenceRiskProfile>;
   invokeModel?: boolean;
+  jsonSchema?: Record<string, unknown>;
 };
 
 export type OrchestratorResult = {
@@ -69,6 +70,7 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
           model: decision.model,
           input: prompt,
           reasoningEffort: decision.reasoningEffort,
+          jsonSchema: input.jsonSchema,
         });
       try {
         const first = await attempt();

@@ -28,8 +28,6 @@ export function NyxSheet() {
 
   useEffect(() => {
     void loadTalk();
-    // Load once when the sheet opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -96,7 +94,34 @@ export function NyxSheet() {
     toast("Voorstel genegeerd");
   }
 
+  async function remember(id: string) {
+    setPending(true);
+    const response = await fetch(`/api/nyx/memories/${id}/confirm`, { method: "POST" });
+    const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+    setPending(false);
+    if (!response.ok || !data.ok || !data.talk) {
+      toast(data.error ?? "Kon dit niet onthouden.");
+      return;
+    }
+    setTalk(data.talk);
+    toast("Onthouden");
+  }
+
+  async function forget(id: string) {
+    setPending(true);
+    const response = await fetch(`/api/nyx/memories/${id}/reject`, { method: "POST" });
+    const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+    setPending(false);
+    if (!response.ok || !data.ok || !data.talk) {
+      toast(data.error ?? "Kon dit niet weigeren.");
+      return;
+    }
+    setTalk(data.talk);
+    toast("Niet onthouden");
+  }
+
   const proposal = talk?.proposal;
+  const memoryChips = talk?.memoryChips ?? [];
 
   return (
     <>
@@ -157,6 +182,32 @@ export function NyxSheet() {
             </button>
           ))}
         </div>
+
+        {memoryChips.length > 0 ? (
+          <div className="chiprow" style={{ padding: "0 0 12px" }}>
+            {memoryChips.map((chip) => (
+              <span key={chip.id} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <button
+                  className="chip is-on"
+                  type="button"
+                  disabled={pending}
+                  onClick={() => void remember(chip.id)}
+                >
+                  Onthouden · {chip.label}
+                </button>
+                <button
+                  className="chip"
+                  type="button"
+                  disabled={pending}
+                  aria-label="Niet onthouden"
+                  onClick={() => void forget(chip.id)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
 
         {proposal ? (
           <div className="card" style={{ borderColor: "rgba(201,163,78,.4)" }}>

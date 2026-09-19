@@ -1,6 +1,7 @@
 import { openaiConfigured } from "@/server/ai/client/openai";
 import { planNyxTask, runNyxTask } from "@/server/ai/orchestrator/NyxOrchestrator";
 import { handleCasualUserTurn, stripModelNames } from "@/server/ai/fallback/nyxReply";
+import { afterNyxReply } from "@/server/ai/services/MemoryExtractionService";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
 import {
   appendMessage,
@@ -54,7 +55,7 @@ export async function sendNyxMessage(playerId: string, text: string): Promise<Ny
     fallbackUsed = true;
   }
 
-  await appendMessage({
+  const saved = await appendMessage({
     playerId,
     conversationId: talk.conversationId,
     role: "NYX",
@@ -63,5 +64,13 @@ export async function sendNyxMessage(playerId: string, text: string): Promise<Ny
   });
 
   void fallbackUsed;
+  await afterNyxReply({
+    playerId,
+    userText: trimmed,
+    nyxText: reply,
+    sourceId: saved.id as string,
+    useModel: false,
+  }).catch(() => undefined);
+
   return getOrCreateTalk(playerId);
 }

@@ -1,5 +1,6 @@
 import { findPublicCampaignByPlayerId } from "@/server/domain/campaign/repository";
 import { getJournalState } from "@/server/domain/journal/repository";
+import { retrieveRelevantMemories } from "@/server/domain/memory/repository";
 import { listMissions } from "@/server/domain/mission/repository";
 import { featuredMission } from "@/server/domain/mission/types";
 import { findPlayerById } from "@/server/domain/player/repository";
@@ -12,6 +13,7 @@ export type NyxContext = {
   currentChapter: string | null;
   currentMainQuest: string | null;
   relevantJournalEntries: string[];
+  relevantMemories: string[];
 };
 
 export async function buildNyxContext(playerId: string, task: IntelligenceTask): Promise<NyxContext> {
@@ -25,6 +27,7 @@ export async function buildNyxContext(playerId: string, task: IntelligenceTask):
     task === "MEMORY_EXTRACTION" || task === "JOURNAL_CLASSIFICATION" || task === "MONTHLY_WRAP_ANALYSIS"
       ? await getJournalState(playerId).catch(() => null)
       : null;
+  const memories = await retrieveRelevantMemories(playerId).catch(() => []);
 
   return {
     task,
@@ -33,5 +36,6 @@ export async function buildNyxContext(playerId: string, task: IntelligenceTask):
     currentChapter: campaign?.chapter ? `${campaign.chapter.roman} ${campaign.chapter.name}` : null,
     currentMainQuest: featuredMission(missions)?.title ?? null,
     relevantJournalEntries: (journal?.entries ?? []).slice(0, 10).map((entry) => entry.title),
+    relevantMemories: memories.map((memory) => memory.normalizedFact),
   };
 }
