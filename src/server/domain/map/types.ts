@@ -34,6 +34,7 @@ export type MapPinContact = {
   role: string | null;
   note: string | null;
   tier: string | null;
+  address: string | null;
 };
 
 export type MapPin = {
@@ -54,8 +55,11 @@ export type MapPin = {
 
 export type MapOption = { id: string; title: string };
 
+export type HomeBase = { lat: number; lng: number; address: string };
+
 export type MapState = {
   pins: MapPin[];
+  home: HomeBase | null;
   contactOptions: MapOption[];
   missionOptions: MapOption[];
 };

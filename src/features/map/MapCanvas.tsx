@@ -38,6 +38,7 @@ export function MapCanvas({
   pins,
   selectedId,
   labels,
+  center,
   onSelect,
   onLongPress,
   onViewChange,
@@ -46,6 +47,7 @@ export function MapCanvas({
   pins: MapPin[];
   selectedId: string | null;
   labels: boolean;
+  center?: { lat: number; lng: number };
   onSelect: (pin: MapPin) => void;
   onLongPress: (ll: { lat: number; lng: number }) => void;
   onViewChange?: (view: { mpp: number }) => void;
@@ -74,8 +76,8 @@ export function MapCanvas({
       zoomControl: false,
       attributionControl: false,
       minZoom: 9.5,
-      maxZoom: 16,
-    }).setView([HOME_BASE.lat, HOME_BASE.lng], 11.2);
+      maxZoom: 18,
+    }).setView([center?.lat ?? HOME_BASE.lat, center?.lng ?? HOME_BASE.lng], center ? 15 : 11.2);
 
     mapRef.current = map;
     markersRef.current = L.layerGroup().addTo(map);
@@ -95,7 +97,7 @@ export function MapCanvas({
         map.flyTo([lat, lng], zoom ?? map.getZoom(), { duration: 0.6 });
       },
       zoomBy(delta) {
-        map.setZoom(Math.max(9.5, Math.min(16, map.getZoom() + delta)));
+        map.setZoom(Math.max(9.5, Math.min(18, map.getZoom() + delta)));
       },
       getCenter() {
         const c = map.getCenter();

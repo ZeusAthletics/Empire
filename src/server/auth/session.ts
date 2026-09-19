@@ -34,6 +34,7 @@ export function toPublicPlayer(player: SessionPlayer): PublicPlayer {
     xp: player.xp,
     xpToNext: player.xpToNext,
     lifetimeXp: player.lifetimeXp,
+    homeAddress: player.homeAddress,
     stats: player.stats,
   };
 }

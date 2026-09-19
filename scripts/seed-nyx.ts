@@ -79,6 +79,7 @@ export const SEED_NYX_PROPOSALS: {
         mainObjective: "Tarief herzien met de eerste klant",
         objectives: [{ label: "Resultaten van 6 maanden op papier" }, { label: "Nieuw tarief voorstellen" }],
         locationName: "Heist-op-den-Berg",
+        locationAddress: "Heist-op-den-Berg",
         lat: 51.079,
         lng: 4.735,
         people: ["c-rita"],

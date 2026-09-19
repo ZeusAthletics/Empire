@@ -34,6 +34,9 @@ export type PlayerRow = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  home_address?: string | null;
+  home_lat?: number | null;
+  home_lng?: number | null;
 };
 
 export type StatValueRow = {
@@ -55,6 +58,7 @@ export type PublicPlayer = {
   xp: number;
   xpToNext: number;
   lifetimeXp: number;
+  homeAddress: string | null;
   stats: { key: StatKey; value: number }[];
 };
 
@@ -74,6 +78,7 @@ export function mapPlayer(row: PlayerRow, stats: StatValueRow[]): SessionPlayer 
     xp: row.xp,
     xpToNext: row.xp_to_next,
     lifetimeXp: row.lifetime_xp,
+    homeAddress: row.home_address ?? null,
     stats: STAT_KEYS.map((key) => ({ key, value: byKey.get(key) ?? 0 })),
   };
 }

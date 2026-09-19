@@ -7,7 +7,8 @@ import { HeroArt } from "@/components/ui/HeroArt";
 import { Pill } from "@/components/ui/Pill";
 import { Plate } from "@/components/ui/Plate";
 import { useEmpireUI } from "@/components/empire-ui-context";
-import { CORE_STAT_KEYS, STAT_META, formatEuro, formatXp } from "@/lib/stats";
+import { CORE_STAT_KEYS, STAT_META, formatEuro, formatEuroDelta, formatXp } from "@/lib/stats";
+import { EmpireValueChart } from "@/features/empire/EmpireValueChart";
 import { TRACK_LABEL, firstSentence } from "@/lib/missions";
 import type { PublicCampaign } from "@/server/domain/campaign/types";
 import { doneCount, featuredMission, requiredCount, type PublicMission } from "@/server/domain/mission/types";
@@ -19,11 +20,13 @@ export function HomeScreen({
   campaign,
   missions,
   radarTop,
+  empireTrend = [],
 }: {
   player: PublicPlayer;
   campaign: PublicCampaign | null;
   missions: PublicMission[];
   radarTop?: Opportunity | null;
+  empireTrend?: number[];
 }) {
   const { openNyx } = useEmpireUI();
   const xpPct = player.xpToNext > 0 ? (player.xp / player.xpToNext) * 100 : 0;
@@ -43,14 +46,15 @@ export function HomeScreen({
     missions.find((mission) => mission.seedKey === "m-voka") ??
     missions.find((mission) => mission.kind === "EVENT" && mission.status === "ACTIVE") ??
     null;
+  const trendDelta =
+    empireTrend.length >= 2 ? empireTrend[empireTrend.length - 1] - empireTrend[0] : 0;
 
   return (
     <>
       <header className="hero" style={{ paddingBottom: 22 }}>
         <HeroArt src="/home-header.jpg" />
         <div className="hero-corner">
-          <span className="eyebrow">A better you builds a larger tomorrow</span>
-          <div className="script" style={{ marginTop: 26, fontSize: 20 }}>
+          <div className="script" style={{ fontSize: 20 }}>
             Meer dan gisteren.
           </div>
         </div>
@@ -180,27 +184,48 @@ export function HomeScreen({
       </div>
 
       <div className="section grid-2">
-        <div className="card">
-          <div className="card-head">
-            <span className="t eyebrow">
-              <BarChart3 size={13} strokeWidth={2} /> Empire value
-            </span>
-          </div>
-          {chapter ? (
-            <>
-              <div className="display d-xl" style={{ fontSize: 30 }}>
-                {formatEuro(chapter.economicCurrent)}
+        {chapter ? (
+          <Link href="/empire" className="card tap" style={{ display: "block", textAlign: "left" }}>
+            <div className="card-head">
+              <span className="t eyebrow">
+                <BarChart3 size={13} strokeWidth={2} /> Empire value
+              </span>
+              <span className="eyebrow muted">
+                Open <ArrowRight size={11} strokeWidth={2.4} />
+              </span>
+            </div>
+            <div className="display d-xl" style={{ fontSize: 30 }}>
+              {formatEuro(chapter.economicCurrent)}
+            </div>
+            {trendDelta ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                <span style={{ color: trendDelta < 0 ? "var(--coral)" : "var(--jade)", fontWeight: 800, fontSize: 12 }}>
+                  {formatEuroDelta(trendDelta)}
+                </span>
+                <span className="meta">over de historiek</span>
               </div>
-              <p className="meta" style={{ margin: "8px 0 0", fontStyle: "italic" }}>
-                “Kapitaal geeft opties. Opties geven vrijheid.”
-              </p>
-            </>
-          ) : (
+            ) : null}
+            {empireTrend.length > 1 ? (
+              <div style={{ marginTop: 8 }}>
+                <EmpireValueChart values={empireTrend} compact />
+              </div>
+            ) : null}
+            <p className="meta" style={{ margin: "8px 0 0", fontStyle: "italic" }}>
+              “Kapitaal geeft opties. Opties geven vrijheid.”
+            </p>
+          </Link>
+        ) : (
+          <div className="card">
+            <div className="card-head">
+              <span className="t eyebrow">
+                <BarChart3 size={13} strokeWidth={2} /> Empire value
+              </span>
+            </div>
             <p className="body" style={{ margin: 0 }}>
               Empire value volgt wanneer de campagne live gaat.
             </p>
-          )}
-        </div>
+          </div>
+        )}
         <div className="card">
           <div className="card-head">
             <span className="t eyebrow">

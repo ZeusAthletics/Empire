@@ -6,19 +6,23 @@ import { Plate } from "@/components/ui/Plate";
 import { Tag } from "@/components/ui/Tag";
 import { PIN_META } from "@/features/map/pinMeta";
 import { firstSentence, missionPlate } from "@/lib/missions";
-import { HOME_BASE, distanceKm, type MapPin } from "@/server/domain/map/types";
+import { HOME_BASE, distanceKm, type HomeBase, type MapPin } from "@/server/domain/map/types";
 
 export function MarkerSheet({
   pin,
+  home,
   onNote,
   onDelete,
 }: {
   pin: MapPin;
+  home?: HomeBase | null;
   onNote: (title: string) => void;
   onDelete?: () => void;
 }) {
   const meta = PIN_META[pin.type] ?? PIN_META.saved;
-  const dist = distanceKm(HOME_BASE, pin);
+  const origin = home ?? HOME_BASE;
+  const dist = distanceKm(origin, pin);
+  const distLabel = home ? `${dist} km van Home Base` : `${dist} km van Heist (geen Home Base)`;
   const mission = pin.mission;
   const contact = pin.contact;
 
@@ -48,7 +52,7 @@ export function MarkerSheet({
           <Tag className="alt">{mission.whenLabel || mission.estimateLabel || "—"}</Tag>
           <Tag className="alt">{`${mission.contactCount} contacten`}</Tag>
           <Tag>{`+${mission.xpReward} XP`}</Tag>
-          <Tag className="alt">{`${dist} km van Home Base`}</Tag>
+          <Tag className="alt">{distLabel}</Tag>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href={`/missions/${mission.id}`} className="btn btn-gold" style={{ flex: "1 1 130px" }}>
@@ -80,12 +84,14 @@ export function MarkerSheet({
           {contact.name}
         </h2>
         <p className="body" style={{ margin: "0 0 8px" }}>
+          {contact.address ? `${contact.address}` : null}
+          {contact.address && (contact.role || contact.note) ? " — " : null}
           {contact.role}
           {contact.note ? ` — ${contact.note}` : ""}
         </p>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
           {contact.tier ? <Tag className="alt">{contact.tier}</Tag> : null}
-          <Tag className="alt">{`${dist} km van Home Base`}</Tag>
+          <Tag className="alt">{distLabel}</Tag>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
@@ -120,7 +126,7 @@ export function MarkerSheet({
       {pin.note ? <p className="body" style={{ margin: "0 0 8px" }}>{pin.note}</p> : null}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
         <Tag className="alt">{`${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}`}</Tag>
-        <Tag className="alt">{`${dist} km van Home Base`}</Tag>
+        <Tag className="alt">{distLabel}</Tag>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-gold" style={{ flex: "1 1 120px" }} type="button" onClick={() => onNote(pin.title)}>

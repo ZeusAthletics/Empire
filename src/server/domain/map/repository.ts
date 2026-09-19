@@ -1,8 +1,11 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { inBelgium, matchKnownPlace } from "@/server/domain/geo/geocode";
 import {
   missionPinState,
   missionPinType,
+  type HomeBase,
   type MapPin,
+  type MapPinContact,
   type MapPinType,
   type MapState,
 } from "@/server/domain/map/types";
@@ -22,7 +25,7 @@ const PIN_TYPES = new Set<MapPinType>([
 
 export async function getMapState(playerId: string): Promise<MapState> {
   const admin = createSupabaseAdminClient();
-  const [{ data: missions, error: missionError }, { data: contacts, error: contactError }, { data: companies, error: companyError }, { data: pins, error: pinError }] =
+  const [{ data: missions, error: missionError }, { data: contacts, error: contactError }, { data: companies, error: companyError }, { data: pins, error: pinError }, { data: playerRow }] =
     await Promise.all([
       admin
         .from("missions")
@@ -31,7 +34,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
         .is("deleted_at", null),
       admin
         .from("contacts")
-        .select("id, name, role, note, tier, lat, lng, restricted")
+        .select("id, name, role, note, tier, address, lat, lng, restricted")
         .eq("player_id", playerId)
         .is("deleted_at", null),
       admin.from("companies").select("id, name, sector, lat, lng, note").eq("player_id", playerId).is("deleted_at", null),
@@ -40,13 +43,38 @@ export async function getMapState(playerId: string): Promise<MapState> {
         .select("id, title, pin_type, lat, lng, note, custom, contact_id, mission_id")
         .eq("player_id", playerId)
         .is("deleted_at", null),
+      admin.from("players").select("home_address, home_lat, home_lng").eq("id", playerId).maybeSingle(),
     ]);
   if (missionError) throw missionError;
-  if (contactError) throw contactError;
+  if (contactError) {
+    if (!/address|schema cache|column/i.test(contactError.message)) throw contactError;
+  }
   if (companyError) throw companyError;
   if (pinError) throw pinError;
 
-  const visibleContacts = (contacts ?? []).filter((contact) => !contact.restricted);
+  const contactRows = ((contacts ??
+    (contactError
+      ? (
+          await admin
+            .from("contacts")
+            .select("id, name, role, note, tier, lat, lng, restricted")
+            .eq("player_id", playerId)
+            .is("deleted_at", null)
+        ).data
+      : null) ??
+    []) as Record<string, unknown>[]).map((row) => ({
+    id: row.id as string,
+    name: row.name as string,
+    role: (row.role as string | null) ?? null,
+    note: (row.note as string | null) ?? null,
+    tier: (row.tier as string | null) ?? null,
+    address: (row.address as string | null | undefined) ?? null,
+    lat: (row.lat as number | null) ?? null,
+    lng: (row.lng as number | null) ?? null,
+    restricted: Boolean(row.restricted),
+  }));
+
+  const visibleContacts = contactRows.filter((contact) => !contact.restricted);
   const missionIds = (missions ?? []).map((mission) => mission.id as string);
   const { data: links } = missionIds.length
     ? await admin.from("mission_contacts").select("mission_id").in("mission_id", missionIds)
@@ -56,9 +84,40 @@ export async function getMapState(playerId: string): Promise<MapState> {
     contactCount.set(link.mission_id as string, (contactCount.get(link.mission_id as string) ?? 0) + 1);
   }
 
+  const home: HomeBase | null =
+    playerRow &&
+    typeof playerRow.home_lat === "number" &&
+    typeof playerRow.home_lng === "number" &&
+    inBelgium(playerRow.home_lat, playerRow.home_lng)
+      ? {
+          lat: playerRow.home_lat,
+          lng: playerRow.home_lng,
+          address: (playerRow.home_address as string | null) || "Home Base",
+        }
+      : null;
+
   const assembled: MapPin[] = [];
 
+  if (home) {
+    assembled.push({
+      id: "home",
+      title: "Home Base",
+      type: "home",
+      lat: home.lat,
+      lng: home.lng,
+      kind: "pin",
+      state: "active",
+      custom: false,
+      note: home.address,
+      missionId: null,
+      contactId: null,
+      mission: null,
+      contact: null,
+    });
+  }
+
   for (const pin of pins ?? []) {
+    if (pin.pin_type === "home") continue;
     assembled.push({
       id: pin.id as string,
       title: pin.title as string,
@@ -77,13 +136,18 @@ export async function getMapState(playerId: string): Promise<MapState> {
   }
 
   for (const mission of missions ?? []) {
-    if (mission.lat == null || mission.lng == null) continue;
+    const resolved = resolveMissionPin(
+      mission.lat as number | null,
+      mission.lng as number | null,
+      (mission.location_address as string | null) ?? (mission.location_name as string | null),
+    );
+    if (!resolved) continue;
     assembled.push({
       id: `mp-${mission.id}`,
       title: mission.title as string,
       type: missionPinType(mission.kind as MissionKind),
-      lat: mission.lat as number,
-      lng: mission.lng as number,
+      lat: resolved.lat,
+      lng: resolved.lng,
       kind: "mission",
       state: missionPinState(mission.status as string, Boolean(mission.featured)),
       custom: false,
@@ -107,7 +171,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
   }
 
   for (const contact of visibleContacts) {
-    if (contact.lat == null || contact.lng == null) continue;
+    if (contact.lat == null || contact.lng == null || !inBelgium(contact.lat as number, contact.lng as number)) continue;
     assembled.push({
       id: `cp-${contact.id}`,
       title: contact.name as string,
@@ -127,11 +191,13 @@ export async function getMapState(playerId: string): Promise<MapState> {
         role: (contact.role as string | null) ?? null,
         note: (contact.note as string | null) ?? null,
         tier: (contact.tier as string | null) ?? null,
+        address: (contact.address as string | null) ?? null,
       },
     });
   }
 
   for (const company of companies ?? []) {
+    if (company.lat == null || company.lng == null) continue;
     assembled.push({
       id: `kp-${company.id}`,
       title: company.name as string,
@@ -151,6 +217,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
 
   return {
     pins: assembled,
+    home,
     contactOptions: visibleContacts.map((contact) => ({ id: contact.id as string, title: contact.name as string })),
     missionOptions: (missions ?? [])
       .filter((mission) => mission.status !== "COMPLETED" && mission.status !== "COMPLETED_UNVERIFIED")
@@ -207,6 +274,50 @@ export async function createMapPin(
     contactId: (data.contact_id as string | null) ?? null,
     mission: null,
     contact: null,
+  };
+}
+
+function resolveMissionPin(lat: number | null, lng: number | null, locationName: string | null) {
+  if (lat != null && lng != null && inBelgium(lat, lng)) return { lat, lng };
+  if (locationName) {
+    const known = matchKnownPlace(locationName);
+    if (known) return { lat: known.lat, lng: known.lng };
+  }
+  return null;
+}
+
+export function contactMapPin(contact: {
+  id: string;
+  name: string;
+  role: string | null;
+  note: string | null;
+  tier: string | null;
+  address: string | null;
+  lat: number;
+  lng: number;
+}): MapPin {
+  const card: MapPinContact = {
+    id: contact.id,
+    name: contact.name,
+    role: contact.role,
+    note: contact.note,
+    tier: contact.tier,
+    address: contact.address,
+  };
+  return {
+    id: `cp-${contact.id}`,
+    title: contact.name,
+    type: "contact",
+    lat: contact.lat,
+    lng: contact.lng,
+    kind: "contact",
+    state: "default",
+    custom: false,
+    note: contact.note,
+    missionId: null,
+    contactId: contact.id,
+    mission: null,
+    contact: card,
   };
 }
 

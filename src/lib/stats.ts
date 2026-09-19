@@ -34,3 +34,9 @@ export function formatXp(n: number) {
 export function formatEuro(n: number) {
   return `€${n.toLocaleString("nl-BE")}`;
 }
+
+export function formatEuroDelta(n: number) {
+  if (n === 0) return formatEuro(0);
+  const sign = n > 0 ? "+" : "−";
+  return `${sign}${formatEuro(Math.abs(n))}`;
+}

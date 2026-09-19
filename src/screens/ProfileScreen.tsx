@@ -3,13 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, Calendar, Check, ChevronRight, Star, Users } from "lucide-react";
+import { BookOpen, Calendar, Check, ChevronRight, MapPin, Star, Users } from "lucide-react";
 import { Bar } from "@/components/ui/Bar";
 import { EmptyInvite } from "@/components/ui/EmptyInvite";
 import { HeroArt } from "@/components/ui/HeroArt";
 import { Plate } from "@/components/ui/Plate";
 import { Tag } from "@/components/ui/Tag";
+import { useEmpireUI } from "@/components/empire-ui-context";
+import { ContactComposer } from "@/features/contacts/ContactComposer";
+import { HomeAddressForm } from "@/features/profile/HomeAddressForm";
 import { STAT_META, formatXp } from "@/lib/stats";
+import type { PublicContact } from "@/server/domain/contact/repository";
 import type { PublicCampaign } from "@/server/domain/campaign/types";
 import type { MonthlyWrap } from "@/server/domain/journal/types";
 import type { PublicPlayer } from "@/server/domain/player/types";
@@ -18,18 +22,58 @@ export function ProfileScreen({
   player,
   campaign,
   wraps,
+  contacts,
 }: {
   player: PublicPlayer;
   campaign: PublicCampaign | null;
   wraps: MonthlyWrap[];
+  contacts: PublicContact[];
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const { toast } = useEmpireUI();
 
   async function logout() {
     setPending(true);
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/");
+    router.refresh();
+  }
+
+  async function addContact(input: { name: string; role: string; place: string; note: string }) {
+    const response = await fetch("/api/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: input.name,
+        role: input.role,
+        note: input.note,
+        address: input.place,
+      }),
+    });
+    const data = (await response.json()) as { ok: boolean; error?: string; contact?: PublicContact };
+    if (!response.ok || !data.ok) {
+      const message = data.error ?? "Contact kon niet worden bewaard.";
+      toast(message);
+      throw new Error(message);
+    }
+    toast(data.contact?.lat != null ? "Contact op de kaart" : "Contact bewaard");
+    router.refresh();
+  }
+
+  async function saveHome(address: string) {
+    const response = await fetch("/api/me/home", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address }),
+    });
+    const data = (await response.json()) as { ok: boolean; error?: string };
+    if (!response.ok || !data.ok) {
+      const message = data.error ?? "Home Base kon niet worden bewaard.";
+      toast(message);
+      throw new Error(message);
+    }
+    toast("Home Base staat op de kaart");
     router.refresh();
   }
 
@@ -123,10 +167,64 @@ export function ProfileScreen({
 
       <div className="section">
         <div className="section-head">
+          <h2 className="display d-sm">Home Base</h2>
+          <span className="eyebrow muted">{player.homeAddress ? "Op de kaart" : "Nog geen adres"}</span>
+        </div>
+        <HomeAddressForm address={player.homeAddress} pending={pending} onSave={(value) => void saveHome(value)} />
+      </div>
+
+      <div className="section">
+        <div className="section-head">
           <h2 className="display d-sm">Campaign metrics</h2>
           <span className="eyebrow muted">Small steps compound</span>
         </div>
         <EmptyInvite body="Geen campagnemetriek tot missies en netwerk in de database staan." />
+      </div>
+
+      <div className="section">
+        <div className="section-head">
+          <h2 className="display d-sm">Contacten</h2>
+          <span className="eyebrow muted">{contacts.length} zichtbaar</span>
+        </div>
+        {contacts.length ? (
+          <div className="stack" style={{ marginBottom: 12 }}>
+            {contacts.map((contact) => (
+              <div key={contact.id} className="card flat" style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <span
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: "50%",
+                    display: "grid",
+                    placeItems: "center",
+                    border: "1px solid var(--line)",
+                    color: "var(--gold)",
+                    fontWeight: 800,
+                    flex: "0 0 auto",
+                  }}
+                >
+                  {contact.name[0]}
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b style={{ fontSize: 13.5 }}>{contact.name}</b>
+                  <span className="meta" style={{ display: "block" }}>
+                    {contact.address ?? contact.role ?? "Geen adres"}
+                    {contact.address && contact.role ? ` · ${contact.role}` : ""}
+                    {contact.lat != null ? " · op de kaart" : ""}
+                  </span>
+                </span>
+                {contact.lat != null ? (
+                  <Link href={`/map?contact=${contact.id}`} className="btn btn-quiet btn-sm">
+                    <MapPin size={13} strokeWidth={2.2} /> Kaart
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyInvite body="Nog geen contacten. Voeg er een toe, of zet een pin van het type Contact op de kaart." />
+        )}
+        <ContactComposer pending={pending} onSave={(input) => void addContact(input)} />
       </div>
 
       <div className="section">

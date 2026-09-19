@@ -6,6 +6,7 @@ import { listOpenPatterns } from "@/server/domain/pattern/repository";
 import { listMissions } from "@/server/domain/mission/repository";
 import { featuredMission } from "@/server/domain/mission/types";
 import { findPlayerById } from "@/server/domain/player/repository";
+import { listVisibleContacts } from "@/server/domain/contact/repository";
 import type { IntelligenceTask } from "@/server/ai/routing/IntelligenceTask";
 
 export type NyxContext = {
@@ -18,6 +19,8 @@ export type NyxContext = {
   relevantMemories: string[];
   openPatterns: string[];
   liveOpportunities: string[];
+  knownAddresses: string[];
+  locationRule: string;
 };
 
 export async function buildNyxContext(playerId: string, task: IntelligenceTask): Promise<NyxContext> {
@@ -35,6 +38,14 @@ export async function buildNyxContext(playerId: string, task: IntelligenceTask):
   const patterns = await listOpenPatterns(playerId).catch(() => []);
   const opportunities = await listLiveOpportunities(playerId).catch(() => []);
 
+  const contacts = await listVisibleContacts(playerId).catch(() => []);
+  const knownAddresses = [
+    player?.homeAddress ? `Home Base: ${player.homeAddress}` : null,
+    ...contacts.map((contact) =>
+      contact.address ? `${contact.name}: ${contact.address}` : null,
+    ),
+  ].filter((item): item is string => Boolean(item));
+
   return {
     task,
     playerSummary: player ? `${player.displayName} · L${player.level} · ${player.title}` : null,
@@ -45,5 +56,8 @@ export async function buildNyxContext(playerId: string, task: IntelligenceTask):
     relevantMemories: memories.map((memory) => memory.normalizedFact),
     openPatterns: patterns.map((pattern) => pattern.title),
     liveOpportunities: opportunities.map((item) => item.title),
+    knownAddresses,
+    locationRule:
+      "Map pins require a real Belgian street address (street + house number + town). Look the address up. Never invent coordinates or use only a municipality.",
   };
 }

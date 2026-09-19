@@ -12,6 +12,7 @@ import {
   Locate,
   MapPin as PinIcon,
   Minus,
+  UserPlus,
   Plus,
   Search,
   Target,
@@ -65,11 +66,12 @@ export function MapScreen({
 
   function selectPin(pin: MapPin, fly = false) {
     setSelectedId(pin.id);
-    if (fly) mapRef.current?.flyTo(pin.lat, pin.lng, 13);
+    if (fly) mapRef.current?.flyTo(pin.lat, pin.lng, pin.type === "home" || pin.kind === "contact" ? 16 : 14);
     openSheet(
       pin.title,
       <MarkerSheet
         pin={pin}
+        home={state.home}
         onNote={(title) => void saveMapNote(title, pin)}
         onDelete={pin.custom ? () => void removePin(pin.id) : undefined}
       />,
@@ -108,13 +110,15 @@ export function MapScreen({
     router.refresh();
   }
 
-  function openNewPin(ll: { lat: number; lng: number }) {
+  function openNewPin(ll: { lat: number; lng: number }, type: MapPinType = "saved") {
     openSheet(
-      "Nieuwe pin",
+      type === "contact" ? "Nieuw contact" : "Nieuwe pin",
       <PinComposer
         ll={ll}
         contacts={state.contactOptions}
         missions={state.missionOptions}
+        defaultType={type}
+        home={state.home}
         pending={false}
         onCancel={closeSheet}
         onSave={(input) => void savePin(ll, input)}
@@ -124,7 +128,7 @@ export function MapScreen({
 
   async function savePin(
     ll: { lat: number; lng: number },
-    input: { title: string; type: MapPinType; note: string; contactId?: string; missionId?: string },
+    input: { title: string; type: MapPinType; note: string; role?: string; address?: string; contactId?: string; missionId?: string },
   ) {
     const response = await fetch("/api/map/pins", {
       method: "POST",
@@ -137,9 +141,9 @@ export function MapScreen({
       return;
     }
     closeSheet();
-    setFilter("mine");
+    setFilter(data.pin.kind === "contact" ? "contacts" : "mine");
     setSelectedId(data.pin.id);
-    toast("Pin opgeslagen");
+    toast(data.pin.kind === "contact" ? "Contact op de kaart" : "Pin opgeslagen");
     router.refresh();
     window.setTimeout(() => mapRef.current?.flyTo(data.pin!.lat, data.pin!.lng), 80);
   }
@@ -248,6 +252,7 @@ export function MapScreen({
           pins={pins}
           selectedId={selectedId}
           labels={labels}
+          center={state.home ?? HOME_BASE}
           onReady={(handle) => {
             mapRef.current = handle;
             setMapReady(true);
@@ -270,8 +275,12 @@ export function MapScreen({
             type="button"
             aria-label="Terug naar Home Base"
             onClick={() => {
-              mapRef.current?.flyTo(HOME_BASE.lat, HOME_BASE.lng, 11.6);
-              toast("Terug naar Home Base");
+              if (!state.home) {
+                toast("Vul eerst uw adres in op Profiel.");
+                return;
+              }
+              mapRef.current?.flyTo(state.home.lat, state.home.lng, 16);
+              toast("Home Base");
             }}
           >
             <Locate size={18} strokeWidth={2} />
@@ -300,13 +309,20 @@ export function MapScreen({
         </div>
       </div>
 
-      <div className="section" style={{ marginTop: 12 }}>
+      <div className="section grid-2" style={{ marginTop: 12 }}>
         <button
           className="btn btn-gold btn-block"
           type="button"
-          onClick={() => openNewPin(mapRef.current?.getCenter() ?? HOME_BASE)}
+          onClick={() => openNewPin(mapRef.current?.getCenter() ?? state.home ?? HOME_BASE)}
         >
-          <PinIcon size={15} strokeWidth={2.2} /> Eigen pin toevoegen
+          <PinIcon size={15} strokeWidth={2.2} /> Eigen pin
+        </button>
+        <button
+          className="btn btn-ghost btn-block"
+          type="button"
+          onClick={() => openNewPin(mapRef.current?.getCenter() ?? state.home ?? HOME_BASE, "contact")}
+        >
+          <UserPlus size={15} strokeWidth={2.2} /> Contact
         </button>
       </div>
 

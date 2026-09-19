@@ -17,8 +17,9 @@ export type SideQuestProposalPayload = {
     mainObjective: string;
     objectives: { label: string }[];
     locationName: string;
-    lat: number;
-    lng: number;
+    locationAddress?: string;
+    lat?: number;
+    lng?: number;
     people: string[];
     estimate: string;
     statReward: { key: StatKey; amount: number };
