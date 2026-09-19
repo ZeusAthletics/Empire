@@ -26,6 +26,19 @@ export async function findPlayerById(playerId: string): Promise<SessionPlayer | 
   return withStats(player as PlayerRow);
 }
 
+export async function findPlayerByDisplayName(displayName: string): Promise<SessionPlayer | null> {
+  const admin = createSupabaseAdminClient();
+  const { data: player, error } = await admin
+    .from("players")
+    .select("*")
+    .eq("display_name", displayName)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!player) return null;
+  return withStats(player as PlayerRow);
+}
+
 export async function findPlayerByAuthUserId(authUserId: string): Promise<SessionPlayer | null> {
   const admin = createSupabaseAdminClient();
   const { data: player, error } = await admin

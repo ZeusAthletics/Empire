@@ -102,3 +102,7 @@ export async function applyPhase9Schema() {
 export async function applyPhase10Schema() {
   await applySqlFile("supabase/migrations/20260919050000_phase10_radar.sql", "phase 10 radar schema");
 }
+
+export async function applyPhase11Schema() {
+  await applySqlFile("supabase/migrations/20260919060000_phase11_ops.sql", "phase 11 ops schema");
+}

@@ -32,6 +32,9 @@ export type PublicProposal = {
   kind: string;
   status: string;
   rationale: string;
+  createdAt?: string;
+  confidence?: string;
+  importance?: string;
   payload: SideQuestProposalPayload | MemoryProposalPayload | PatternProposalPayload | CampaignReviewPayload | Record<string, unknown>;
 };
 

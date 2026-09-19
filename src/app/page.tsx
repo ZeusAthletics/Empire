@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function RootPage() {
   const player = await getSessionPlayer();
+  if (player?.role === "ADMIN") redirect("/admin");
   if (player) redirect("/home");
 
   return (

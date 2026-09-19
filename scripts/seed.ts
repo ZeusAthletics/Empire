@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema, applyPhase8Schema, applyPhase9Schema, applyPhase10Schema } from "./apply-schema";
+import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema, applyPhase8Schema, applyPhase9Schema, applyPhase10Schema, applyPhase11Schema } from "./apply-schema";
+import { compilePersona, DEFAULT_PERSONA } from "../src/server/ai/prompts/persona";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
 import { SEED_MEMORY_PROPOSALS, SEED_MEMORIES } from "./seed-memory";
 import { SEED_NYX_PROPOSALS } from "./seed-nyx";
@@ -637,6 +638,27 @@ async function seedThink(admin: Admin, playerId: string) {
   }
 }
 
+async function seedPersona(admin: Admin) {
+  const { data: existing, error: lookupError } = await admin
+    .from("personas")
+    .select("id")
+    .eq("status", "ACTIVE")
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  const fields = {
+    version: DEFAULT_PERSONA.version,
+    status: "ACTIVE",
+    name: DEFAULT_PERSONA.name,
+    address: DEFAULT_PERSONA.address,
+    compiled_prompt: compilePersona(DEFAULT_PERSONA),
+    compiled_at: new Date().toISOString(),
+  };
+  const { error } = existing
+    ? await admin.from("personas").update(fields as never).eq("id", existing.id)
+    : await admin.from("personas").insert(fields as never);
+  if (error) throw error;
+}
+
 async function seedRadar(admin: Admin, playerId: string) {
   const context = {
     bottleneckStat: "optionality" as const,
@@ -788,6 +810,12 @@ async function main() {
     applyPhase10Schema,
     "supabase/migrations/20260919050000_phase10_radar.sql",
   );
+  await ensureTable(
+    admin,
+    "media_assets",
+    applyPhase11Schema,
+    "supabase/migrations/20260919060000_phase11_ops.sql",
+  );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
   const adminAuth = await ensureAuthUser(admin, adminEmail, adminPassword);
@@ -838,6 +866,7 @@ async function main() {
   await seedMemories(admin, player.id);
   await seedThink(admin, player.id);
   await seedRadar(admin, player.id);
+  await seedPersona(admin);
 
   console.log(`Seeded player ${player.display_name} (${playerEmail})`);
   console.log(`Seeded admin ${operator.display_name} (${adminEmail})`);
@@ -849,6 +878,7 @@ async function main() {
   console.log(`Seeded ${SEED_MEMORIES.length} memories and ${SEED_MEMORY_PROPOSALS.length} Onthouden chip`);
   console.log("Seeded optionality pattern and campaign review");
   console.log(`Seeded ${SEED_OPPORTUNITIES.length} radar items`);
+  console.log(`Seeded persona@${DEFAULT_PERSONA.version}`);
 }
 
 main().catch((error) => {

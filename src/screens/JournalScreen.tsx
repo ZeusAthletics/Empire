@@ -93,7 +93,13 @@ function JournalCard({
         {entry.media.length ? (
           <div className="media-row">
             {entry.media.slice(0, 3).map((item, index) => (
-              <Plate key={`${item.kind}-${index}`} kind={item.kind} label={item.label} />
+              <Plate
+                key={`${item.kind}-${index}`}
+                kind={item.kind}
+                label={item.label}
+                src={item.src}
+                approved={item.approved}
+              />
             ))}
             {entry.extraMedia ? <span className="media-more">+{entry.extraMedia}</span> : null}
           </div>

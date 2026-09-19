@@ -8,5 +8,6 @@ export const dynamic = "force-dynamic";
 export default async function EmpireLayout({ children }: { children: ReactNode }) {
   const player = await getSessionPlayer();
   if (!player) redirect("/");
+  if (player.role === "ADMIN") redirect("/admin");
   return <AppShell>{children}</AppShell>;
 }

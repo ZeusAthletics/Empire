@@ -18,33 +18,43 @@ export function Plate({
   kind,
   className = "",
   label,
+  src,
+  approved,
 }: {
   kind: PlateKind;
   className?: string;
   label?: string;
+  src?: string;
+  approved?: boolean;
 }) {
   const id = useId().replace(/:/g, "");
   const [a, b, d] = PLATE_ART[kind];
+  const showImage = Boolean(src && approved);
 
   return (
     <div className={`plate ${className}`.trim()}>
-      <svg viewBox="0 0 48 48" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor={a} />
-            <stop offset="1" stopColor={b} />
-          </linearGradient>
-        </defs>
-        <rect width="48" height="48" fill={`url(#${id})`} />
-        <path
-          d={d}
-          fill="none"
-          stroke="rgba(201,163,78,.45)"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" />
+      ) : (
+        <svg viewBox="0 0 48 48" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor={a} />
+              <stop offset="1" stopColor={b} />
+            </linearGradient>
+          </defs>
+          <rect width="48" height="48" fill={`url(#${id})`} />
+          <path
+            d={d}
+            fill="none"
+            stroke="rgba(201,163,78,.45)"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
       {label ? <span className="lbl">{label}</span> : null}
     </div>
   );

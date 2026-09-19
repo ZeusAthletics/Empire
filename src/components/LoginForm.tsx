@@ -20,12 +20,12 @@ export function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const payload = (await response.json()) as { ok: boolean; error?: string };
+      const payload = (await response.json()) as { ok: boolean; error?: string; next?: string };
       if (!response.ok || !payload.ok) {
         setError(payload.error ?? "Aanmelden mislukt.");
         return;
       }
-      router.push("/home");
+      router.push(payload.next ?? "/home");
       router.refresh();
     } catch {
       setError("Geen verbinding. Probeer het opnieuw.");

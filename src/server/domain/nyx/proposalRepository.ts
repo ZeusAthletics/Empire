@@ -50,8 +50,25 @@ function mapProposal(row: Record<string, unknown>): PublicProposal | null {
     kind,
     status: row.status as string,
     rationale: row.rationale as string,
+    createdAt: (row.created_at as string | undefined) ?? undefined,
+    confidence: (row.confidence as string | undefined) ?? undefined,
+    importance: (row.importance as string | undefined) ?? undefined,
     payload,
   };
+}
+
+export async function listProposals(playerId: string): Promise<PublicProposal[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("proposals")
+    .select("id, seed_key, kind, status, rationale, payload, created_at, confidence, importance")
+    .eq("player_id", playerId)
+    .order("created_at", { ascending: false })
+    .limit(80);
+  if (error) throw error;
+  return (data ?? [])
+    .map((row) => mapProposal(row as Record<string, unknown>))
+    .filter((item): item is PublicProposal => Boolean(item));
 }
 
 export async function listPendingSideQuest(playerId: string): Promise<PublicProposal | null> {
@@ -313,6 +330,37 @@ export async function rejectPatternProposal(playerId: string, proposalId: string
     await dismissPattern(playerId, proposal.payload.patternId);
   }
   await rejectProposal(playerId, proposalId);
+}
+
+export async function decideFromAdmin(playerId: string, proposalId: string, action: "approve" | "reject") {
+  const proposal = await getProposal(playerId, proposalId);
+  if (action === "reject") {
+    if (proposal.kind === "PATTERN") {
+      await rejectPatternProposal(playerId, proposalId);
+    } else {
+      await rejectProposal(playerId, proposalId);
+    }
+    return { kind: proposal.kind, mission: null };
+  }
+
+  if (proposal.kind === "SIDE_QUEST") {
+    const mission = await approveProposal(playerId, proposalId);
+    return { kind: proposal.kind, mission };
+  }
+  if (proposal.kind === "MEMORY" || proposal.kind === "MEMORY_REVISION") {
+    await approveMemoryProposal(playerId, proposalId);
+    return { kind: proposal.kind, mission: null };
+  }
+  if (proposal.kind === "PATTERN") {
+    await approvePatternProposal(playerId, proposalId);
+    return { kind: proposal.kind, mission: null };
+  }
+  if (proposal.kind === "CAMPAIGN_REVIEW") {
+    await approveCampaignReviewProposal(playerId, proposalId);
+    return { kind: proposal.kind, mission: null };
+  }
+
+  throw new Error("Dit voorstel kan hier niet worden goedgekeurd.");
 }
 
 export async function approveCampaignReviewProposal(playerId: string, proposalId: string) {

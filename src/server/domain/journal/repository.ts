@@ -17,9 +17,16 @@ function asMedia(value: unknown): JournalMedia[] {
   return value
     .map((item) => {
       if (!item || typeof item !== "object") return null;
-      const row = item as { kind?: string; label?: string };
+      const row = item as { kind?: string; label?: string; src?: string; approved?: boolean; mediaId?: string };
       const kind = MEDIA_KINDS.has(row.kind as JournalMediaKind) ? (row.kind as JournalMediaKind) : "note";
-      return { kind, label: typeof row.label === "string" ? row.label : "Beeld" };
+      const media: JournalMedia = {
+        kind,
+        label: typeof row.label === "string" ? row.label : "Beeld",
+      };
+      if (typeof row.src === "string") media.src = row.src;
+      if (row.approved) media.approved = true;
+      if (typeof row.mediaId === "string") media.mediaId = row.mediaId;
+      return media;
     })
     .filter((item): item is JournalMedia => Boolean(item));
 }

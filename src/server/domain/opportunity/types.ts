@@ -21,6 +21,17 @@ export type OpportunityStatus =
   | "EXPIRED";
 export type OpportunitySignalKind = "VIEWED" | "SAVED" | "DISMISSED" | "CONVERTED" | "COMPLETED" | "IGNORED";
 
+export type ScoreBreakdown = {
+  bottleneckFit: number;
+  proximity: number;
+  timing: number;
+  relationshipFit: number;
+  interestFit: number;
+  noveltyPenaltyInv: number;
+  hardFilters: number;
+  base: number;
+};
+
 export type Opportunity = {
   id: string;
   seedKey: string | null;
@@ -42,6 +53,7 @@ export type Opportunity = {
   type: OpportunityKind;
   campaignChanging: boolean;
   status: OpportunityStatus;
+  scoreBreakdown: ScoreBreakdown | null;
 };
 
 export type OpportunityDraft = {
@@ -78,15 +90,4 @@ export type ScoreContext = {
   categoryWeight: number;
   similarCount: number;
   now?: Date;
-};
-
-export type ScoreBreakdown = {
-  bottleneckFit: number;
-  proximity: number;
-  timing: number;
-  relationshipFit: number;
-  interestFit: number;
-  noveltyPenaltyInv: number;
-  hardFilters: number;
-  base: number;
 };

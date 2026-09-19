@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { NYX_CORE_VERSION } from "@/server/ai/prompts/nyx-core";
 import type { ModelRoutingDecision } from "@/server/ai/routing/AIModelRouter";
 
 export type NyxRunWrite = {
@@ -25,7 +26,7 @@ export async function writeNyxRun(input: NyxRunWrite) {
       service: "ORCHESTRATOR",
       model: input.decision.model,
       model_tier: input.decision.modelTier,
-      prompt_version: "persona@1",
+      prompt_version: NYX_CORE_VERSION,
       routing_reason: input.decision.reason,
       reasoning_effort: input.decision.reasoningEffort,
       context_refs: [],

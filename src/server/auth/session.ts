@@ -18,6 +18,12 @@ export async function getSessionPlayer(): Promise<SessionPlayer | null> {
   return findPlayerByAuthUserId(user.id);
 }
 
+export async function requireAdmin() {
+  const player = await getSessionPlayer();
+  if (!player || player.role !== "ADMIN") return null;
+  return player;
+}
+
 export function toPublicPlayer(player: SessionPlayer): PublicPlayer {
   return {
     id: player.id,

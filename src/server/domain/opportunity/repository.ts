@@ -47,7 +47,21 @@ export function mapOpportunity(row: Record<string, unknown>): Opportunity {
     type: (row.type as OpportunityKind) ?? "STRATEGIC",
     campaignChanging: Boolean(row.campaign_changing),
     status: (row.status as OpportunityStatus) ?? "NEW",
+    scoreBreakdown: row.score_breakdown && typeof row.score_breakdown === "object"
+      ? (row.score_breakdown as Opportunity["scoreBreakdown"])
+      : null,
   };
+}
+
+export async function listAllOpportunities(playerId: string): Promise<Opportunity[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("opportunities")
+    .select("*")
+    .eq("player_id", playerId)
+    .order("relevance_score", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => mapOpportunity(row as Record<string, unknown>));
 }
 
 export async function listOpportunities(playerId: string): Promise<Opportunity[]> {

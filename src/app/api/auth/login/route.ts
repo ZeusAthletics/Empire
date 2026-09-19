@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { findPlayerByAuthUserId } from "@/server/domain/player/repository";
 
 export const runtime = "nodejs";
 
@@ -25,10 +26,11 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.user) {
     return NextResponse.json({ ok: false, error: "Aanmelden mislukt. Controleer uw gegevens." }, { status: 401 });
   }
 
-  return NextResponse.json({ ok: true });
+  const player = await findPlayerByAuthUserId(data.user.id).catch(() => null);
+  return NextResponse.json({ ok: true, next: player?.role === "ADMIN" ? "/admin" : "/home" });
 }

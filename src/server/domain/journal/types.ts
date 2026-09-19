@@ -7,6 +7,9 @@ export type JournalMediaKind = "gym" | "note" | "meet" | "city" | "room" | "book
 export type JournalMedia = {
   kind: JournalMediaKind;
   label: string;
+  src?: string;
+  approved?: boolean;
+  mediaId?: string;
 };
 
 export type JournalContact = {

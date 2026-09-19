@@ -101,7 +101,7 @@ export function MonthlyWrap({ wrap, entries }: { wrap: MonthlyWrapData; entries:
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
             {shots.map((item, index) => (
               <div key={`${item.kind}-${index}`} style={{ aspectRatio: "1", position: "relative" }}>
-                <Plate kind={item.kind} className="fill" label={item.label} />
+                <Plate kind={item.kind} className="fill" label={item.label} src={item.src} approved={item.approved} />
               </div>
             ))}
           </div>
