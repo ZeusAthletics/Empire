@@ -1,7 +1,9 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import type { NyxIdentityRef } from "@/server/domain/nyx/identity/repository";
 
 const ROLES = [
@@ -13,6 +15,7 @@ const ROLES = [
 
 export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
   const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [role, setRole] = useState<(typeof ROLES)[number]["value"]>("FACE");
@@ -31,6 +34,7 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
         setError(payload.error ?? "Upload mislukt.");
         return;
       }
+      if (inputRef.current) inputRef.current.value = "";
       router.refresh();
     } catch {
       setError("Geen verbinding.");
@@ -47,60 +51,83 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
   }
 
   return (
-    <div className="admin-page">
-      <header className="admin-head">
-        <h1>Nyx — identity vault</h1>
-        <p className="muted">Canonieke referenties voor gpt-image-1 + vision gate. Niet de spelergalerij.</p>
-      </header>
+    <>
+      <div className="head">
+        <h1 className="display" style={{ fontSize: 22 }}>
+          Nyx — identity vault
+        </h1>
+        <span className="muted">Canonieke refs voor gpt-image-1 · niet de spelergalerij</span>
+      </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <span className="eyebrow">Upload</span>
-        <select
-          className="input"
-          value={role}
-          disabled={pending}
-          onChange={(event) => setRole(event.target.value as (typeof ROLES)[number]["value"])}
-          style={{ marginTop: 8, marginBottom: 8, maxWidth: 320 }}
-        >
-          {ROLES.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <label className="drop">
-          <input
-            type="file"
-            accept="image/*"
+      <div className="card" style={{ marginTop: 14 }}>
+        <label className="field" style={{ display: "block", marginBottom: 12 }}>
+          <span className="eyebrow">Rol van deze still</span>
+          <select
+            className="input"
+            value={role}
             disabled={pending}
-            onChange={(event) => void onFile(event.target.files?.[0])}
-          />
-          <p className="muted" style={{ margin: "8px 0 0" }}>
-            {pending ? "Bezig…" : "6–12 stills: face close-up, 3/4, full body, gold latex + zwart leer."}
-          </p>
+            onChange={(event) => setRole(event.target.value as (typeof ROLES)[number]["value"])}
+            style={{ marginTop: 6, maxWidth: 360 }}
+          >
+            {ROLES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
         </label>
-        {error ? <p style={{ color: "var(--coral)", marginTop: 8 }}>{error}</p> : null}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          disabled={pending}
+          style={{ display: "none" }}
+          onChange={(event) => void onFile(event.target.files?.[0])}
+        />
+
+        <div className="drop">
+          <div className="eyebrow">Upload</div>
+          <p className="muted" style={{ margin: "8px 0 12px" }}>
+            6–12 stills: face close-up, 3/4, full body, gold latex + zwart leer.
+          </p>
+          <button
+            className="btn gold sm"
+            type="button"
+            disabled={pending}
+            onClick={() => inputRef.current?.click()}
+          >
+            {pending ? "Bezig…" : "Kies afbeelding"}
+          </button>
+        </div>
+        {error ? <p style={{ color: "var(--coral)", marginTop: 10 }}>{error}</p> : null}
       </div>
 
-      <div className="stack">
-        {refs.length ? (
-          refs.map((ref) => (
-            <div key={ref.id} className="card flat" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span className="eyebrow" style={{ minWidth: 120 }}>
-                {ref.role}
-              </span>
-              <span className="meta" style={{ flex: 1 }}>
-                {ref.label ?? ref.storagePath}
-              </span>
-              <button className="btn sm" type="button" disabled={pending} onClick={() => void remove(ref.id)}>
-                Verwijder
-              </button>
+      <div className="agrid" style={{ marginTop: 14 }}>
+        {refs.map((ref) => (
+          <article key={ref.id} className="acard">
+            <div className="thumb">
+              <img src={`/api/admin/nyx-identity/${ref.id}/file`} alt="" />
+              <span className="badge up">{ref.role}</span>
             </div>
-          ))
-        ) : (
-          <p className="muted">Nog geen referenties. Autonome foto&apos;s blijven uit tot FACE ref staat.</p>
-        )}
+            <div className="ab">
+              <div className="td-main">{ref.label ?? ref.role}</div>
+              <div className="td-sub mono">{ref.storagePath.split("/").pop()}</div>
+              <div style={{ marginTop: 10 }}>
+                <button className="btn sm" type="button" disabled={pending} onClick={() => void remove(ref.id)}>
+                  Verwijder
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
-    </div>
+
+      {!refs.length ? (
+        <div className="empty" style={{ marginTop: 14 }}>
+          Nog geen referenties. Upload minstens één <b>Face</b> voordat Nyx autonoom foto&apos;s mag sturen.
+        </div>
+      ) : null}
+    </>
   );
 }
