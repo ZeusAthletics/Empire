@@ -19,6 +19,9 @@ async function deliverStillOrVideo(input: {
   wantVideo: boolean;
   intimacyTier: Awaited<ReturnType<typeof computeIntimacyTier>>;
   runId: string | null;
+  /** Default 3 for cron outreach; admin test uses 1 to fit Vercel timeouts. */
+  maxAttempts?: number;
+  faceRefOnly?: boolean;
 }): Promise<{ ok: boolean; action: "PHOTO" | "VIDEO" | "SILENCE"; reason: string; mediaId?: string; messageId?: string }> {
   const hasRefs = await hasFaceIdentityRef();
   if (!hasRefs) {
@@ -28,8 +31,9 @@ async function deliverStillOrVideo(input: {
   let still: ArrayBuffer | null = null;
   let lastGateReason = "Identity gate: geen match met Nyx.";
   let lastGenError = "Still generatie mislukt.";
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const generated = await generateNyxStill(input.scene);
+  const maxAttempts = input.maxAttempts ?? 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const generated = await generateNyxStill(input.scene, { faceRefOnly: input.faceRefOnly });
     if (!generated.bytes) {
       lastGenError = generated.error ?? lastGenError;
       continue;
@@ -248,6 +252,8 @@ export async function forceNyxTestPhoto(
     wantVideo: false,
     intimacyTier,
     runId: null,
+    maxAttempts: 1,
+    faceRefOnly: true,
   });
 
   await safeLogOutreachRun({

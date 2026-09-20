@@ -39,10 +39,16 @@ function buildEditParams(
   return shared;
 }
 
-async function refsForEdit(): Promise<NyxIdentityRef[]> {
+export type GenerateNyxStillOptions = {
+  /** Admin test: only FACE ref — faster uploads to OpenAI. */
+  faceRefOnly?: boolean;
+};
+
+async function refsForEdit(options?: GenerateNyxStillOptions): Promise<NyxIdentityRef[]> {
   const all = await listIdentityRefs();
   const face = all.find((ref) => ref.role === "FACE");
   if (!face) return [];
+  if (options?.faceRefOnly) return [face];
   const rest = all.filter((ref) => ref.id !== face.id).slice(0, 3);
   return [face, ...rest];
 }
@@ -59,11 +65,14 @@ function openAiErrorMessage(error: unknown): string {
   return "OpenAI images.edit mislukt.";
 }
 
-export async function generateNyxStill(scene: string): Promise<GenerateNyxStillResult> {
+export async function generateNyxStill(
+  scene: string,
+  options?: GenerateNyxStillOptions,
+): Promise<GenerateNyxStillResult> {
   if (!openaiConfigured()) {
     return { bytes: null, error: "OPENAI_API_KEY ontbreekt in Vercel." };
   }
-  const refs = await refsForEdit();
+  const refs = await refsForEdit(options);
   if (!refs.length) {
     return { bytes: null, error: "Geen FACE-referentie geüpload." };
   }

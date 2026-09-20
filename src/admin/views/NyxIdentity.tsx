@@ -162,10 +162,22 @@ export function NyxIdentityView({
       try {
         payload = JSON.parse(raw) as TestPhotoPayload;
       } catch {
+        if (response.status === 504) {
+          setError(
+            "Vercel timeout (504). GPT Image 2 kan 1–3 min duren — probeer GPT Image 1, of Pro-plan (langere function timeout).",
+          );
+          return;
+        }
         setError(response.ok ? "Ongeldig antwoord van server." : `Serverfout (${response.status}).`);
         return;
       }
       if (!response.ok || !payload.ok) {
+        if (response.status === 504) {
+          setError(
+            "Vercel timeout (504). GPT Image 2 kan 1–3 min duren — probeer GPT Image 1, of Pro-plan (langere function timeout).",
+          );
+          return;
+        }
         setError(payload.error ?? payload.reason ?? "Testfoto mislukt.");
         return;
       }
@@ -297,8 +309,8 @@ export function NyxIdentityView({
       <div className="card" style={{ marginTop: 14 }}>
         <div className="eyebrow">Test outreach</div>
         <p className="muted" style={{ margin: "8px 0 12px", fontSize: 12.5 }}>
-          Genereert één identity-locked still ({imageEditModel} + vision gate) en stuurt die naar de gescope speler. Telt
-          niet mee als echte outreach-beslissing.
+          Eén poging ({imageEditModel}, face-ref alleen, vision gate) — houd het scherm open 30–90s. Bij 504: kies GPT
+          Image 1 of Vercel Pro voor langere timeouts. Telt niet mee als echte outreach.
         </p>
         <button
           className="btn sm"
