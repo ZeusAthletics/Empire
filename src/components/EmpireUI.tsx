@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { X } from "lucide-react";
 import { EmpireUIContext } from "@/components/empire-ui-context";
 import { NyxSheet } from "@/features/nyx/NyxSheet";
 
@@ -42,7 +43,11 @@ export function EmpireUIProvider({ children }: { children: ReactNode }) {
       if (event.key === "Escape") closeSheet();
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.documentElement.classList.add("sheet-open");
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.documentElement.classList.remove("sheet-open");
+    };
   }, [nyxOpen, custom, closeSheet]);
 
   const value = useMemo(
@@ -81,7 +86,12 @@ export function EmpireUIProvider({ children }: { children: ReactNode }) {
               exit={{ x: "-50%", y: "102%" }}
               transition={{ duration, ease: [0.2, 0.7, 0.3, 1] }}
             >
-              <div className="grip" />
+              <div className="sheet-head">
+                <div className="grip" />
+                <button type="button" className="sheet-close" aria-label="Sluiten" onClick={closeSheet}>
+                  <X size={18} strokeWidth={2.2} />
+                </button>
+              </div>
               {nyxOpen ? <NyxSheet /> : custom?.content}
             </motion.div>
           </>

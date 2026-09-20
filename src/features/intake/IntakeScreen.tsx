@@ -69,7 +69,7 @@ export function IntakeScreen() {
 
   return (
     <div className="app intake">
-      <main className="view" style={{ paddingBottom: "calc(28px + var(--safe-b))" }}>
+      <main className="view">
         <header className="hero" style={{ paddingBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <img
@@ -100,7 +100,7 @@ export function IntakeScreen() {
           </div>
         </header>
 
-        <div ref={logRef} className="section stack" style={{ marginTop: 0 }}>
+        <div ref={logRef} className="intake-log section stack" style={{ marginTop: 0 }}>
           {(talk?.messages ?? []).map((message) => (
             <div
               key={message.id}
@@ -122,44 +122,45 @@ export function IntakeScreen() {
           ))}
         </div>
 
-        {error ? (
-          <div className="section">
-            <p className="body" style={{ color: "var(--coral)", margin: 0 }}>
+        <div className="intake-compose">
+          {error ? (
+            <p className="body" style={{ color: "var(--coral)", margin: "0 0 10px" }}>
               {error}
             </p>
-          </div>
-        ) : null}
-
-        {talk?.readyToConfirm ? (
-          <div className="section">
-            <button className="btn btn-gold btn-block" type="button" disabled={pending} onClick={() => void confirm()}>
+          ) : null}
+          {talk?.readyToConfirm ? (
+            <button
+              className="btn btn-gold btn-block"
+              style={{ marginBottom: 10 }}
+              type="button"
+              disabled={pending}
+              onClick={() => void confirm()}
+            >
               {pending ? "Bezig…" : "Dit klopt · start het empire"}
             </button>
-          </div>
-        ) : null}
-
-        <form
-          className="section"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void ask(inputRef.current?.value ?? "");
-          }}
-        >
-          <div className="field">
-            <label htmlFor="intakeReply">Uw antwoord</label>
-            <input
-              ref={inputRef}
-              id="intakeReply"
-              className="input"
-              placeholder="Typ hier…"
-              disabled={pending}
-              autoComplete="off"
-            />
-          </div>
-          <button className="btn btn-gold btn-block" type="submit" disabled={pending}>
-            {pending ? "Nyx luistert…" : "Stuur"}
-          </button>
-        </form>
+          ) : null}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void ask(inputRef.current?.value ?? "");
+            }}
+          >
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label htmlFor="intakeReply">Uw antwoord</label>
+              <input
+                ref={inputRef}
+                id="intakeReply"
+                className="input"
+                placeholder="Typ hier…"
+                disabled={pending}
+                autoComplete="off"
+              />
+            </div>
+            <button className="btn btn-gold btn-block" type="submit" disabled={pending}>
+              {pending ? "Nyx luistert…" : "Stuur"}
+            </button>
+          </form>
+        </div>
       </main>
     </div>
   );

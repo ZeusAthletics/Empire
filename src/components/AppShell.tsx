@@ -9,7 +9,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <EmpireUIProvider>
       <div className="app">
-        <main className="view" tabIndex={-1}>
+        <main className="view has-nav" tabIndex={-1}>
           {children}
         </main>
       </div>

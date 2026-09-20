@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Filter,
   Layers,
+  List,
   Locate,
   MapPin as PinIcon,
   Minus,
@@ -17,6 +18,7 @@ import {
   Search,
   Target,
   Users,
+  Info,
 } from "lucide-react";
 import { EmptyInvite } from "@/components/ui/EmptyInvite";
 import { useEmpireUI } from "@/components/empire-ui-context";
@@ -164,6 +166,23 @@ export function MapScreen({
     toast(`Niets gevonden voor “${query}”`);
   }
 
+  function openNearby() {
+    const list = nearby.length ? nearby : pins.slice(0, 8);
+    openSheet(
+      "Doelwitten",
+      <NearbySheet
+        pins={list}
+        empty={!list.length}
+        onPick={(pin) => selectPin(pin, true)}
+        onAskNyx={openNyx}
+      />,
+    );
+  }
+
+  function openLegend() {
+    openSheet("Legenda", <LegendSheet />);
+  }
+
   useEffect(() => {
     if (focused.current || !mapReady) return;
     if (focusMissionId) {
@@ -188,7 +207,7 @@ export function MapScreen({
       <header className="page-head" style={{ paddingBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <h1 className="display d-lg">
+            <h1 className="display d-md">
               Kempen <span style={{ color: "var(--gold)" }}>Vice</span>
             </h1>
             <span className="eyebrow muted">Real opportunities. No fiction.</span>
@@ -222,6 +241,14 @@ export function MapScreen({
               }}
             />
           </div>
+          <button
+            className="btn btn-ghost btn-icon"
+            type="button"
+            aria-label="Doelwitten"
+            onClick={openNearby}
+          >
+            <List size={18} strokeWidth={2} />
+          </button>
           <button
             className="btn btn-ghost btn-icon"
             type="button"
@@ -269,7 +296,7 @@ export function MapScreen({
           }}
         />
         <div className="map-hint">Sleep om te pannen · lang indrukken = pin</div>
-        <div className="map-ctl" style={{ top: "calc(12px + var(--safe-t))" }}>
+        <div className="map-ctl" style={{ top: 12 }}>
           <button
             className="map-btn"
             type="button"
@@ -293,8 +320,11 @@ export function MapScreen({
           >
             <Layers size={18} strokeWidth={2} />
           </button>
+          <button className="map-btn" type="button" aria-label="Legenda" onClick={openLegend}>
+            <Info size={18} strokeWidth={2} />
+          </button>
         </div>
-        <div className="map-ctl" style={{ top: "calc(116px + var(--safe-t))" }}>
+        <div className="map-ctl" style={{ top: 160 }}>
           <button className="map-btn" type="button" aria-label="Inzoomen" onClick={() => mapRef.current?.zoomBy(1)}>
             <Plus size={18} strokeWidth={2.2} />
           </button>
@@ -302,105 +332,126 @@ export function MapScreen({
             <Minus size={18} strokeWidth={2.2} />
           </button>
         </div>
-        <div className="map-badge">{labels ? "Donkere basemap" : "Zonder labels"} · CARTO</div>
-        <div className="map-scale">
-          <span className="lab">{scale.label}</span>
-          <div className="rule" style={{ width: scale.width }} />
-        </div>
-      </div>
-
-      <div className="section grid-2" style={{ marginTop: 12 }}>
-        <button
-          className="btn btn-gold btn-block"
-          type="button"
-          onClick={() => openNewPin(mapRef.current?.getCenter() ?? state.home ?? HOME_BASE)}
-        >
-          <PinIcon size={15} strokeWidth={2.2} /> Eigen pin
-        </button>
-        <button
-          className="btn btn-ghost btn-block"
-          type="button"
-          onClick={() => openNewPin(mapRef.current?.getCenter() ?? state.home ?? HOME_BASE, "contact")}
-        >
-          <UserPlus size={15} strokeWidth={2.2} /> Contact
-        </button>
-      </div>
-
-      <div className="section">
-        <div className="section-head">
-          <h2 className="display d-sm">Doelwitten in beeld</h2>
-          <span className="eyebrow muted">{pins.length} markers</span>
-        </div>
-        <div className="stack">
-          {nearby.length ? (
-            nearby.map((pin) => {
-              const meta = PIN_META[pin.type];
-              return (
-                <button
-                  key={pin.id}
-                  className="card flat tap"
-                  style={{ display: "flex", gap: 12, alignItems: "center", textAlign: "left" }}
-                  type="button"
-                  onClick={() => selectPin(pin, true)}
-                >
-                  <span
-                    style={{ width: 34, height: 40, flex: "0 0 auto" }}
-                    dangerouslySetInnerHTML={{ __html: markerSvg(pin, false) }}
-                  />
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span className="eyebrow" style={{ color: meta.stroke }}>
-                      {meta.label}
-                    </span>
-                    <span className="display d-sm" style={{ display: "block", margin: "3px 0" }}>
-                      {pin.title}
-                    </span>
-                    <span className="meta">
-                      {pin.mission ? `${pin.mission.locationName ?? ""} · +${pin.mission.xpReward} XP` : ""}
-                    </span>
-                  </span>
-                  <span style={{ color: "var(--ink-3)" }}>
-                    <ChevronRight size={16} strokeWidth={2.2} />
-                  </span>
-                </button>
-              );
-            })
-          ) : (
-            <EmptyInvite
-              body="Nog geen pins in deze filter. Lang indrukken op de kaart zet een eigen pin vast."
-              action={
-                <button className="btn btn-ghost btn-sm" type="button" onClick={openNyx}>
-                  Vraag het aan Nyx
-                </button>
-              }
-            />
-          )}
-        </div>
-      </div>
-
-      <div className="section">
-        <div className="card flat">
-          <span className="eyebrow">Legenda</span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 14px", marginTop: 10 }}>
-            {Object.entries(PIN_META).map(([key, meta]) => (
-              <span key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: "var(--ink-2)" }}>
-                <span
-                  style={{
-                    width: 11,
-                    height: 11,
-                    borderRadius: "50%",
-                    background: meta.fill,
-                    border: `1.6px solid ${meta.stroke}`,
-                  }}
-                />
-                {meta.label}
-              </span>
-            ))}
+        <div className="map-dock">
+          <div className="map-dock-meta">
+            <div className="map-badge">{labels ? "Donkere basemap" : "Zonder labels"} · CARTO</div>
+            <div className="map-scale">
+              <span className="lab">{scale.label}</span>
+              <div className="rule" style={{ width: scale.width }} />
+            </div>
           </div>
-          <p className="meta" style={{ margin: "10px 0 0" }}>
-            Status wordt ook zonder kleur aangeduid: voltooid krijgt een vinkje, vergrendeld een slot.
-          </p>
+          <div className="map-actions">
+            <button
+              className="btn btn-gold"
+              type="button"
+              onClick={() => openNewPin(mapRef.current?.getCenter() ?? state.home ?? HOME_BASE)}
+            >
+              <PinIcon size={15} strokeWidth={2.2} /> Eigen pin
+            </button>
+            <button
+              className="btn btn-ghost"
+              type="button"
+              onClick={() => openNewPin(mapRef.current?.getCenter() ?? state.home ?? HOME_BASE, "contact")}
+            >
+              <UserPlus size={15} strokeWidth={2.2} /> Contact
+            </button>
+          </div>
         </div>
       </div>
     </>
+  );
+}
+
+function NearbySheet({
+  pins,
+  empty,
+  onPick,
+  onAskNyx,
+}: {
+  pins: MapPin[];
+  empty: boolean;
+  onPick: (pin: MapPin) => void;
+  onAskNyx: () => void;
+}) {
+  return (
+    <div className="sheet-body">
+      <div className="section-head" style={{ marginTop: 0 }}>
+        <h2 className="display d-sm">Doelwitten in beeld</h2>
+        <span className="eyebrow muted">{pins.length} markers</span>
+      </div>
+      <div className="stack">
+        {empty ? (
+          <EmptyInvite
+            body="Nog geen pins in deze filter. Lang indrukken op de kaart zet een eigen pin vast."
+            action={
+              <button className="btn btn-ghost btn-sm" type="button" onClick={onAskNyx}>
+                Vraag het aan Nyx
+              </button>
+            }
+          />
+        ) : (
+          pins.map((pin) => {
+            const meta = PIN_META[pin.type];
+            return (
+              <button
+                key={pin.id}
+                className="card flat tap"
+                style={{ display: "flex", gap: 12, alignItems: "center", textAlign: "left" }}
+                type="button"
+                onClick={() => onPick(pin)}
+              >
+                <span
+                  style={{ width: 34, height: 40, flex: "0 0 auto" }}
+                  dangerouslySetInnerHTML={{ __html: markerSvg(pin, false) }}
+                />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="eyebrow" style={{ color: meta.stroke }}>
+                    {meta.label}
+                  </span>
+                  <span className="display d-sm" style={{ display: "block", margin: "3px 0" }}>
+                    {pin.title}
+                  </span>
+                  <span className="meta">
+                    {pin.mission ? `${pin.mission.locationName ?? ""} · +${pin.mission.xpReward} XP` : ""}
+                  </span>
+                </span>
+                <span style={{ color: "var(--ink-3)" }}>
+                  <ChevronRight size={16} strokeWidth={2.2} />
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LegendSheet() {
+  return (
+    <div className="sheet-body">
+      <h2 className="display d-sm" style={{ margin: "0 0 10px" }}>
+        Legenda
+      </h2>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 14px" }}>
+        {Object.entries(PIN_META).map(([key, meta]) => (
+          <span key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: "var(--ink-2)" }}>
+            <span
+              style={{
+                width: 11,
+                height: 11,
+                borderRadius: "50%",
+                background: meta.fill,
+                border: `1.6px solid ${meta.stroke}`,
+              }}
+            />
+            {meta.label}
+          </span>
+        ))}
+      </div>
+      <p className="meta" style={{ margin: "12px 0 0" }}>
+        Status wordt ook zonder kleur aangeduid: voltooid krijgt een vinkje, vergrendeld een slot.
+      </p>
+    </div>
   );
 }

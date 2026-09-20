@@ -5,8 +5,11 @@
   z-index: 1;
   width: 100%;
   max-width: var(--col);
+  height: 100%;
   margin: 0 auto;
-  min-height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--night);
   box-shadow:
     0 0 0 1px rgba(201, 163, 78, 0.12),
@@ -14,8 +17,24 @@
 }
 
 .view {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(16px + var(--safe-b));
+}
+.view.has-nav {
   padding-bottom: calc(var(--nav-h) + var(--safe-b) + 28px);
 }
+.view.has-nav:has(.mapwrap) {
+  padding-bottom: calc(var(--nav-h) + var(--safe-b));
+}
+.view.has-nav:has(.composer) {
+  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 88px);
+}
+html.sheet-open .view { overflow: hidden; }
 
 .display {
   font-family: var(--font-anton), Anton, Impact, sans-serif;
@@ -95,7 +114,24 @@ a.card { text-decoration: none; color: inherit; display: block; }
 }
 
 .intake .view {
-  padding-bottom: calc(24px + var(--safe-b));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.intake .hero { flex: 0 0 auto; }
+.intake-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.intake-compose {
+  flex: 0 0 auto;
+  padding: 12px 16px calc(16px + var(--safe-b));
+  border-top: 1px solid var(--line-soft);
+  background: var(--night);
 }
 .section-head {
   display: flex;
@@ -356,29 +392,56 @@ a.card { text-decoration: none; color: inherit; display: block; }
   bottom: 0;
   left: 50%;
   width: min(100%, var(--col));
-  max-height: 88dvh;
+  max-height: calc(var(--frame-h, 100dvh) - max(8px, var(--safe-t)));
   display: flex;
   flex-direction: column;
+  min-height: 0;
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-bottom: 0;
   border-radius: var(--r-xl) var(--r-xl) 0 0;
   box-shadow: var(--shadow-sheet);
-  padding-bottom: var(--safe-b);
 }
 .sheet .grip {
   width: 40px;
   height: 4px;
   border-radius: 2px;
   background: var(--ink-4);
-  margin: 10px auto 2px;
+  margin: 10px auto 8px;
   flex: 0 0 auto;
 }
-.sheet .sheet-body { overflow: auto; padding: 12px 16px 18px; }
+.sheet-head {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+.sheet-close {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+  border-radius: var(--r-md);
+}
+.sheet-close:active { color: var(--gold); }
+.sheet .sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 16px calc(18px + var(--safe-b));
+}
+.sheet:has(.sheet-foot) .sheet-body { padding-bottom: 12px; }
 .sheet .sheet-foot {
-  padding: 10px 16px 14px;
+  padding: 10px 16px calc(14px + var(--safe-b));
   border-top: 1px solid var(--line-soft);
   flex: 0 0 auto;
+  background: var(--charcoal);
 }
 
 .mapwrap {
@@ -387,6 +450,21 @@ a.card { text-decoration: none; color: inherit; display: block; }
   background: #0e0c0a;
   overflow: hidden;
   touch-action: none;
+}
+.view:has(.mapwrap) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.view:has(.mapwrap) .page-head,
+.view:has(.mapwrap) .chiprow {
+  flex: 0 0 auto;
+}
+.view:has(.mapwrap) .mapwrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  margin-top: 8px;
 }
 .leaflet-host,
 .leaflet-container {
@@ -482,6 +560,35 @@ a.card { text-decoration: none; color: inherit; display: block; }
   margin-top: 3px;
   margin-left: auto;
 }
+.map-dock {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+}
+.view.has-nav:has(.mapwrap) .map-dock {
+  right: 76px;
+}
+.map-dock > * { pointer-events: auto; }
+.map-dock-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8px;
+}
+.map-dock .map-badge,
+.map-dock .map-scale {
+  position: static;
+}
+.map-actions {
+  display: flex;
+  gap: 8px;
+}
+.map-actions .btn { flex: 1; }
 .map-hint {
   position: absolute;
   left: 12px;
@@ -541,7 +648,7 @@ select.input { appearance: auto; }
   outline: none;
   resize: none;
   max-height: 92px;
-  font-size: 13.5px;
+  font-size: 16px;
   line-height: 1.45;
   color: var(--ink-1);
   padding: 10px 0 8px;
@@ -689,7 +796,7 @@ select.input { appearance: auto; }
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid var(--line-soft);
   color: var(--ink-1);
-  font-size: 14px;
+  font-size: 16px;
 }
 .input:focus { border-color: var(--gold); outline: none; }
 
@@ -752,7 +859,7 @@ select.input { appearance: auto; }
 }
 @media (min-width: 900px) {
   .app {
-    min-height: 100dvh;
+    height: 100%;
     border-left: 1px solid rgba(201, 163, 78, 0.12);
     border-right: 1px solid rgba(201, 163, 78, 0.12);
   }

@@ -48,6 +48,7 @@
   /* Layout */
   --col: 430px;
   --nav-h: 72px;
+  --frame-h: 100dvh;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);

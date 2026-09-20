@@ -83,14 +83,12 @@ export function HomeScreen({
       <div className="section" style={{ marginTop: 0 }}>
         {chapter ? (
           <Link href="/profile" className="card tap" style={{ display: "block" }}>
-            <div className="card-head">
-              <h2 className="display d-sm">
-                Chapter {chapter.roman} — {chapter.name}
-              </h2>
-              <span className="eyebrow muted" style={{ textAlign: "right", maxWidth: 110, lineHeight: 1.5 }}>
-                {campaign?.northStar ?? "North star volgt uit uw intake."}
-              </span>
-            </div>
+            <h2 className="display d-sm" style={{ margin: "0 0 8px" }}>
+              Chapter {chapter.roman} — {chapter.name}
+            </h2>
+            <p className="body" style={{ margin: "0 0 12px" }}>
+              {campaign?.northStar ?? "North star volgt uit uw intake."}
+            </p>
             <Bar pct={chapterPct} />
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11 }}>
               <span style={{ color: "var(--ink-3)" }}>{formatEuro(chapter.economicFrom)}</span>

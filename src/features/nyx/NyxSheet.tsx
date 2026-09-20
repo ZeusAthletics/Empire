@@ -4,7 +4,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
 import { Tag } from "@/components/ui/Tag";
 import { useEmpireUI } from "@/components/empire-ui-context";
 import type { NyxTalkState } from "@/server/domain/nyx/types";
@@ -184,7 +183,7 @@ export function NyxSheet() {
   return (
     <>
       <div className="sheet-body">
-        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 12, paddingRight: 36 }}>
           <img
             src="/nyx.jpg"
             alt=""
@@ -202,15 +201,6 @@ export function NyxSheet() {
             </h2>
             <span className="eyebrow muted">Mission control · altijd aan je zijde</span>
           </div>
-          <button
-            className="btn btn-ghost btn-icon"
-            style={{ marginLeft: "auto" }}
-            type="button"
-            aria-label="Sluiten"
-            onClick={closeSheet}
-          >
-            <X size={17} strokeWidth={2.2} />
-          </button>
         </div>
 
         <div ref={logRef} className="stack" style={{ gap: 8, marginBottom: 12 }}>

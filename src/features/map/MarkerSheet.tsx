@@ -28,38 +28,40 @@ export function MarkerSheet({
 
   if (mission) {
     return (
-      <div className="sheet-body">
-        <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-          <span style={{ width: 104, height: 104, flex: "0 0 auto", position: "relative" }}>
-            <Plate
-              kind={missionPlate(mission.kind)}
-              className="fill"
-              src={mission.coverSrc ?? undefined}
-              approved={mission.coverApproved}
-            />
-          </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span className="eyebrow" style={{ color: meta.stroke }}>
-              {meta.label}
+      <>
+        <div className="sheet-body">
+          <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+            <span style={{ width: 104, height: 104, flex: "0 0 auto", position: "relative" }}>
+              <Plate
+                kind={missionPlate(mission.kind)}
+                className="fill"
+                src={mission.coverSrc ?? undefined}
+                approved={mission.coverApproved}
+              />
             </span>
-            <h2 className="display d-lg" style={{ margin: "6px 0 4px" }}>
-              {mission.title}
-            </h2>
-            <p className="meta" style={{ margin: "0 0 6px" }}>
-              {mission.locationAddress || mission.locationName}
-            </p>
-            <p className="body" style={{ margin: 0, fontSize: 12.5 }}>
-              {firstSentence(mission.why)}
-            </p>
-          </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="eyebrow" style={{ color: meta.stroke }}>
+                {meta.label}
+              </span>
+              <h2 className="display d-lg" style={{ margin: "6px 0 4px" }}>
+                {mission.title}
+              </h2>
+              <p className="meta" style={{ margin: "0 0 6px" }}>
+                {mission.locationAddress || mission.locationName}
+              </p>
+              <p className="body" style={{ margin: 0, fontSize: 12.5 }}>
+                {firstSentence(mission.why)}
+              </p>
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Tag className="alt">{mission.whenLabel || mission.estimateLabel || "—"}</Tag>
+            <Tag className="alt">{`${mission.contactCount} contacten`}</Tag>
+            <Tag>{`+${mission.xpReward} XP`}</Tag>
+            <Tag className="alt">{distLabel}</Tag>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
-          <Tag className="alt">{mission.whenLabel || mission.estimateLabel || "—"}</Tag>
-          <Tag className="alt">{`${mission.contactCount} contacten`}</Tag>
-          <Tag>{`+${mission.xpReward} XP`}</Tag>
-          <Tag className="alt">{distLabel}</Tag>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="sheet-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href={`/missions/${mission.id}`} className="btn btn-gold" style={{ flex: "1 1 130px" }}>
             View mission
           </Link>
@@ -75,30 +77,32 @@ export function MarkerSheet({
             <FileText size={14} strokeWidth={2.2} /> Add note
           </button>
         </div>
-      </div>
+      </>
     );
   }
 
   if (contact) {
     return (
-      <div className="sheet-body">
-        <span className="eyebrow" style={{ color: meta.stroke }}>
-          {meta.label}
-        </span>
-        <h2 className="display d-lg" style={{ margin: "6px 0 4px" }}>
-          {contact.name}
-        </h2>
-        <p className="body" style={{ margin: "0 0 8px" }}>
-          {contact.address ? `${contact.address}` : null}
-          {contact.address && (contact.role || contact.note) ? " — " : null}
-          {contact.role}
-          {contact.note ? ` — ${contact.note}` : ""}
-        </p>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
-          {contact.tier ? <Tag className="alt">{contact.tier}</Tag> : null}
-          <Tag className="alt">{distLabel}</Tag>
+      <>
+        <div className="sheet-body">
+          <span className="eyebrow" style={{ color: meta.stroke }}>
+            {meta.label}
+          </span>
+          <h2 className="display d-lg" style={{ margin: "6px 0 4px" }}>
+            {contact.name}
+          </h2>
+          <p className="body" style={{ margin: "0 0 8px" }}>
+            {contact.address ? `${contact.address}` : null}
+            {contact.address && (contact.role || contact.note) ? " — " : null}
+            {contact.role}
+            {contact.note ? ` — ${contact.note}` : ""}
+          </p>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {contact.tier ? <Tag className="alt">{contact.tier}</Tag> : null}
+            <Tag className="alt">{distLabel}</Tag>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="sheet-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
             className="btn btn-gold"
             style={{ flex: "1 1 130px" }}
@@ -116,24 +120,26 @@ export function MarkerSheet({
             <Navigation size={14} strokeWidth={2.2} /> Route
           </a>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="sheet-body">
-      <span className="eyebrow" style={{ color: meta.stroke }}>
-        {meta.label}
-      </span>
-      <h2 className="display d-lg" style={{ margin: "6px 0 4px" }}>
-        {pin.title}
-      </h2>
-      {pin.note ? <p className="body" style={{ margin: "0 0 8px" }}>{pin.note}</p> : null}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
-        <Tag className="alt">{`${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}`}</Tag>
-        <Tag className="alt">{distLabel}</Tag>
+    <>
+      <div className="sheet-body">
+        <span className="eyebrow" style={{ color: meta.stroke }}>
+          {meta.label}
+        </span>
+        <h2 className="display d-lg" style={{ margin: "6px 0 4px" }}>
+          {pin.title}
+        </h2>
+        {pin.note ? <p className="body" style={{ margin: "0 0 8px" }}>{pin.note}</p> : null}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <Tag className="alt">{`${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}`}</Tag>
+          <Tag className="alt">{distLabel}</Tag>
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="sheet-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-gold" style={{ flex: "1 1 120px" }} type="button" onClick={() => onNote(pin.title)}>
           Notitie
         </button>
@@ -151,6 +157,6 @@ export function MarkerSheet({
           </button>
         ) : null}
       </div>
-    </div>
+    </>
   );
 }

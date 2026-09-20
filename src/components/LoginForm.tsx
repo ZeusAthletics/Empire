@@ -32,7 +32,7 @@ export function LoginForm() {
   }
 
   return (
-    <main className="view" style={{ paddingBottom: "calc(24px + var(--safe-b))" }}>
+    <main className="view">
       <header className="hero" style={{ paddingBottom: 8 }}>
         <p className="eyebrow">Kempen Vice</p>
         <h1 className="display d-xl" style={{ margin: "12px 0 8px" }}>

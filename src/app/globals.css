@@ -3,15 +3,23 @@
 @import "../styles/global.css";
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { height: 100%; }
+html, body {
+  height: var(--frame-h, 100dvh);
+  max-height: var(--frame-h, 100dvh);
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
 body {
   margin: 0;
+  position: fixed;
+  inset: 0;
+  width: 100%;
   background: var(--night);
   color: var(--ink-1);
   font-family: var(--font-montserrat), Montserrat, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
 }
 body::before {
@@ -24,6 +32,13 @@ body::before {
     radial-gradient(120% 60% at 50% 0%, rgba(201, 163, 78, 0.1), transparent 60%),
     radial-gradient(80% 50% at 50% 100%, rgba(104, 28, 53, 0.18), transparent 70%),
     var(--night);
+}
+html:has(.ops),
+html:has(.ops) body {
+  position: static;
+  height: auto;
+  max-height: none;
+  overflow: auto;
 }
 button, input, textarea { font: inherit; color: inherit; }
 button { background: none; border: 0; padding: 0; cursor: pointer; }
