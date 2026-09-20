@@ -67,6 +67,7 @@ async function deliverStillOrVideo(input: {
         playerId: input.playerId,
         content: input.caption,
         mediaId,
+        mediaContext: `Gegenereerde video (identity lock), scene: ${input.scene}`,
         runId: input.runId,
       });
       return { ok: true, action: "VIDEO", reason: "Video via locked still.", mediaId, messageId: message.id };
@@ -83,6 +84,7 @@ async function deliverStillOrVideo(input: {
     playerId: input.playerId,
     content: input.caption,
     mediaId,
+    mediaContext: `Gegenereerde foto (identity lock), scene: ${input.scene}`,
     runId: input.runId,
   });
   return { ok: true, action: "PHOTO", reason: "Foto na identity gate.", mediaId, messageId: message.id };

@@ -35,15 +35,50 @@ export function NyxCuratedGalleryView({
     setPending(true);
     setError(null);
     try {
-      const body = new FormData();
-      body.append("file", file);
-      body.append("description", description);
-      body.append("minIntimacyTier", minTier);
-      if (label.trim()) body.append("label", label);
-      const response = await fetch("/api/admin/nyx-curated", { method: "POST", body });
-      const payload = (await response.json()) as { ok: boolean; error?: string };
-      if (!response.ok || !payload.ok) {
-        setError(payload.error ?? "Upload mislukt.");
+      const prep = await fetch("/api/admin/nyx-curated/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || "application/octet-stream",
+          description,
+          minIntimacyTier: minTier,
+          label: label.trim() || undefined,
+        }),
+      });
+      const prepPayload = (await prep.json()) as {
+        ok: boolean;
+        error?: string;
+        signedUrl?: string;
+        itemId?: string;
+      };
+      if (!prep.ok || !prepPayload.ok || !prepPayload.signedUrl || !prepPayload.itemId) {
+        if (prep.status === 413) {
+          setError("Bestand te groot voor server — probeer opnieuw (directe upload zou actief moeten zijn).");
+          return;
+        }
+        setError(prepPayload.error ?? "Upload kon niet worden voorbereid.");
+        return;
+      }
+
+      const put = await fetch(prepPayload.signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      if (!put.ok) {
+        setError(`Opslag weigerde het bestand (${put.status}). Controleer bucket-limieten in Supabase.`);
+        return;
+      }
+
+      const done = await fetch("/api/admin/nyx-curated/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: prepPayload.itemId }),
+      });
+      const donePayload = (await done.json()) as { ok: boolean; error?: string };
+      if (!done.ok || !donePayload.ok) {
+        setError(donePayload.error ?? "Upload afronden mislukt.");
         return;
       }
       setDescription("");
@@ -51,7 +86,7 @@ export function NyxCuratedGalleryView({
       if (inputRef.current) inputRef.current.value = "";
       router.refresh();
     } catch {
-      setError("Geen verbinding.");
+      setError("Geen verbinding of geblokkeerd door browser (CORS). Probeer kleiner bestand of andere browser.");
     } finally {
       setPending(false);
     }
@@ -94,7 +129,7 @@ export function NyxCuratedGalleryView({
           Nyx — curated galerij
         </h1>
         <span className="muted">
-          OpenArt stills/clips · AI kiest op beschrijving + band · elk item max 1× naar {scopedName}
+          OpenArt stills/clips · direct naar Supabase (grote bestanden ok) · max 1× naar {scopedName}
         </span>
       </div>
 

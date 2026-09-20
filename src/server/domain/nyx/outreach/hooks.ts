@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { formatChatLineForPrompt } from "@/server/domain/nyx/chatFormat";
 import { listMissions } from "@/server/domain/mission/repository";
 import { retrieveRelevantMemories } from "@/server/domain/memory/repository";
 
@@ -13,7 +14,7 @@ export async function collectOutreachHooks(playerId: string): Promise<OutreachHo
 
   const { data: messages, error } = await admin
     .from("nyx_messages")
-    .select("role, content, created_at")
+    .select("role, content, media_id, media_context, created_at")
     .eq("player_id", playerId)
     .order("created_at", { ascending: false })
     .limit(8);
@@ -21,7 +22,9 @@ export async function collectOutreachHooks(playerId: string): Promise<OutreachHo
 
   const recentChat = [...(messages ?? [])]
     .reverse()
-    .map((row) => `${row.role}: ${row.content}`);
+    .map((row) =>
+      formatChatLineForPrompt(row as { role: string; content: string; media_id?: string | null; media_context?: string | null }),
+    );
 
   const recentUser = (messages ?? []).filter((row) => row.role === "USER");
   if (recentUser.length) {

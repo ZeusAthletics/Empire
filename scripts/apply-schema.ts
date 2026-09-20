@@ -131,3 +131,10 @@ export async function applyNyxCuratedLibrarySchema() {
     "nyx curated library schema",
   );
 }
+
+export async function applyNyxMessageMediaContextSchema() {
+  await applySqlFile(
+    "supabase/migrations/20260920130000_nyx_message_media_context.sql",
+    "nyx message media context",
+  );
+}

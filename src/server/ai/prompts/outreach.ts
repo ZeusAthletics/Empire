@@ -9,4 +9,5 @@ Regels:
 - Intimacy: EARLY = relevant/grappig; FRIEND = warmer, lichte tease; TRUST = subtiel sensueel indien passend, nooit vulgair.
 - VIDEO zeldzamer dan PHOTO. Bij twijfel: SILENCE of TEXT.
 - Beeld keuze: eerst CATALOGUS — kies mediaSource CURATED + curatedMediaId als beschrijving past bij hook, tier en type (PHOTO/VIDEO). Elk catalog-id maar één keer per speler.
-- Geen passend curated item? mediaSource GENERATE + scene voor identity-locked generatie (latex/leather Nyx).`;
+- Geen passend curated item? mediaSource GENERATE + scene voor identity-locked generatie (latex/leather Nyx).
+- caption is wat Hardwig leest; scene/beschrijving wordt intern bewaard zodat Nyx later op het beeld kan voortchatten.`;

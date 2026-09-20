@@ -136,6 +136,67 @@ export async function uploadCuratedMedia(input: {
   return mapCurated(updated as Record<string, unknown>);
 }
 
+/** Bypass Vercel 4.5MB body limit — browser uploads directly to Supabase Storage. */
+export async function prepareCuratedDirectUpload(input: {
+  filename: string;
+  contentType: string;
+  description: string;
+  minIntimacyTier: IntimacyTier;
+  label?: string;
+}): Promise<{ item: NyxCuratedItem; signedUrl: string }> {
+  const admin = createSupabaseAdminClient();
+  const mediaType = detectMediaType(input.contentType, input.filename);
+  const contentType = input.contentType || (mediaType === "VIDEO" ? "video/mp4" : "image/jpeg");
+  const { data: row, error: insertError } = await admin
+    .from("nyx_curated_media")
+    .insert({
+      storage_path: "pending",
+      content_type: contentType,
+      media_type: mediaType,
+      description: input.description.trim(),
+      min_intimacy_tier: input.minIntimacyTier,
+      label: input.label?.trim() || null,
+    } as never)
+    .select("*")
+    .single();
+  if (insertError || !row) throw insertError ?? new Error("Curated item kon niet worden aangemaakt.");
+
+  const safeName = input.filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) || (mediaType === "VIDEO" ? "clip.mp4" : "still.jpg");
+  const path = `nyx-curated/${row.id}/${safeName}`;
+  const { data: signed, error: signError } = await admin.storage.from(MEDIA_BUCKET).createSignedUploadUrl(path);
+  if (signError || !signed?.signedUrl) {
+    await admin.from("nyx_curated_media").delete().eq("id", row.id);
+    throw signError ?? new Error("Signed upload URL kon niet worden gemaakt.");
+  }
+
+  const { data: updated, error: updateError } = await admin
+    .from("nyx_curated_media")
+    .update({ storage_path: path } as never)
+    .eq("id", row.id)
+    .select("*")
+    .single();
+  if (updateError || !updated) {
+    await admin.from("nyx_curated_media").delete().eq("id", row.id);
+    throw updateError ?? new Error("Curated pad kon niet worden bijgewerkt.");
+  }
+
+  return { item: mapCurated(updated as Record<string, unknown>), signedUrl: signed.signedUrl };
+}
+
+export async function completeCuratedDirectUpload(id: string): Promise<NyxCuratedItem> {
+  const admin = createSupabaseAdminClient();
+  const item = await getCuratedById(id);
+  if (!item) throw new Error("Curated item niet gevonden.");
+  if (item.storagePath === "pending") throw new Error("Upload niet voorbereid.");
+
+  const { error: dlError } = await admin.storage.from(MEDIA_BUCKET).download(item.storagePath);
+  if (dlError) {
+    await admin.from("nyx_curated_media").delete().eq("id", id);
+    throw new Error("Bestand niet in storage — upload opnieuw proberen.");
+  }
+  return item;
+}
+
 export async function updateCuratedMedia(
   id: string,
   patch: { description?: string; minIntimacyTier?: IntimacyTier; label?: string | null },

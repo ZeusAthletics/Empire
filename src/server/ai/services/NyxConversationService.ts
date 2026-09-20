@@ -3,11 +3,11 @@ import { planNyxTask, runNyxTask } from "@/server/ai/orchestrator/NyxOrchestrato
 import { handleCasualUserTurn, stripModelNames } from "@/server/ai/fallback/nyxReply";
 import { afterNyxReply } from "@/server/ai/services/MemoryExtractionService";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
+import { recentPlayerChatTurns } from "@/server/domain/nyx/recentChat";
 import {
   appendMessage,
   featuredTalkContext,
   getOrCreateTalk,
-  recentMessageTexts,
 } from "@/server/domain/nyx/talkRepository";
 import type { NyxTalkState } from "@/server/domain/nyx/types";
 
@@ -27,7 +27,7 @@ export async function sendNyxMessage(playerId: string, text: string): Promise<Ny
   await appendMessage({ playerId, conversationId: talk.conversationId, role: "USER", content: trimmed });
 
   const ctx = await featuredTalkContext(playerId);
-  const recent = await recentMessageTexts(talk.conversationId);
+  const recent = await recentPlayerChatTurns(playerId);
   let reply: string | null = null;
   let runId: string | null = null;
   let fallbackUsed = false;

@@ -30,6 +30,8 @@ export async function appendCompanionNyxMessage(input: {
   playerId: string;
   content: string;
   mediaId?: string | null;
+  /** What the image/video showed — Nyx uses this in later chat. */
+  mediaContext?: string | null;
   runId?: string | null;
 }): Promise<{ id: string }> {
   const conversationId = await getOrCreateCompanionConversationId(input.playerId);
@@ -43,6 +45,7 @@ export async function appendCompanionNyxMessage(input: {
       content: input.content,
       mode: MODE,
       media_id: input.mediaId ?? null,
+      media_context: input.mediaContext?.trim() || null,
       run_id: input.runId ?? null,
     } as never)
     .select("id")

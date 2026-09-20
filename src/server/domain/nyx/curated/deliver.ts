@@ -51,6 +51,7 @@ export async function deliverCuratedToPlayer(input: {
     playerId: input.playerId,
     content: input.caption,
     mediaId,
+    mediaContext: `Curated ${item.mediaType.toLowerCase()} uit beeldbank: ${item.description}${item.label ? ` (${item.label})` : ""}`,
     runId: input.runId,
   });
   await recordCuratedDelivery({
