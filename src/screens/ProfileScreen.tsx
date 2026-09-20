@@ -94,7 +94,7 @@ export function ProfileScreen({
   return (
     <>
       <header className="hero" style={{ paddingBottom: 20 }}>
-        <HeroArt seed={5} />
+        <HeroArt src="/profile-header.jpg" objectPosition="42% 18%" />
         <div className="hero-corner">
           <span className="eyebrow">Discipline creates freedom</span>
         </div>

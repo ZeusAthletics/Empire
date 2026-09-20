@@ -8,7 +8,6 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Clock,
   FileText,
   Gem,
   ImageIcon,
@@ -19,21 +18,25 @@ import {
   Target,
   Users,
 } from "lucide-react";
-import { Bar } from "@/components/ui/Bar";
 import { HeroArt } from "@/components/ui/HeroArt";
 import { Plate } from "@/components/ui/Plate";
 import { Tag } from "@/components/ui/Tag";
 import { useEmpireUI } from "@/components/empire-ui-context";
 import {
-  DAILY_IMPACT,
   JOURNAL_FILTERS,
   JOURNAL_ICONS,
-  UPCOMING,
   filterEntries,
   nextPlaceholderMedia,
 } from "@/features/journal/journalMeta";
 import { formatDateLabel, formatTime } from "@/server/domain/journal/dates";
 import type { JournalEntry, JournalFilter, JournalMedia, JournalState } from "@/server/domain/journal/types";
+
+export type JournalUpcoming = {
+  id: string;
+  when: string;
+  title: string;
+  detail: string;
+};
 
 function JournalCard({
   entry,
@@ -109,7 +112,15 @@ function JournalCard({
   );
 }
 
-export function JournalScreen({ initial }: { initial: JournalState }) {
+export function JournalScreen({
+  initial,
+  upcoming,
+  opportunityCount,
+}: {
+  initial: JournalState;
+  upcoming: JournalUpcoming[];
+  opportunityCount: number;
+}) {
   const router = useRouter();
   const { toast, openSheet, closeSheet } = useEmpireUI();
   const [entries, setEntries] = useState(initial.entries);
@@ -301,7 +312,7 @@ export function JournalScreen({ initial }: { initial: JournalState }) {
               color: "var(--ivory)",
             }}
           >
-            “Small logs make big fires. Keep stacking the right ones.”
+            “Schrijf wat er bewoog. Ik bouw daar later een patroon van.”
           </p>
           <span className="script" style={{ marginTop: 6, textAlign: "right" }}>
             Nyx
@@ -314,9 +325,9 @@ export function JournalScreen({ initial }: { initial: JournalState }) {
           onClick={() => void createWrap()}
         >
           <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <BarChart3 size={16} strokeWidth={2.2} /> Create wrap
+            <BarChart3 size={16} strokeWidth={2.2} /> Maak wrap
           </span>
-          <span style={{ fontSize: 9, letterSpacing: "0.14em", opacity: 0.8 }}>Month so far · {monthCount} entries</span>
+          <span style={{ fontSize: 9, letterSpacing: "0.14em", opacity: 0.8 }}>Deze maand · {monthCount} notities</span>
         </button>
       </div>
 
@@ -334,45 +345,18 @@ export function JournalScreen({ initial }: { initial: JournalState }) {
         </div>
       </div>
 
-      <div className="section">
-        <div className="card">
-          <div className="card-head">
-            <span className="t eyebrow">
-              <BarChart3 size={13} strokeWidth={2} /> Daily impact
-            </span>
-          </div>
-          <div className="stack" style={{ gap: 7 }}>
-            {DAILY_IMPACT.map((stat) => (
-              <div
-                key={stat.key}
-                style={{ display: "grid", gridTemplateColumns: "82px 1fr 28px", alignItems: "center", gap: 9 }}
-              >
-                <span className="eyebrow muted" style={{ fontSize: 9 }}>
-                  {stat.label}
-                </span>
-                <Bar pct={stat.v * 14} className={stat.key === "wellbeing" ? "coral thin" : "thin"} />
-                <span style={{ fontSize: 11, fontWeight: 800, color: "var(--gold-soft)", textAlign: "right" }}>
-                  +{stat.v}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
       <div className="section grid-2">
         <div className="card">
           <div className="card-head">
             <span className="t eyebrow">
-              <BarChart3 size={13} strokeWidth={2} /> Today&apos;s stats
+              <BarChart3 size={13} strokeWidth={2} /> Vandaag
             </span>
           </div>
           <div className="stack" style={{ gap: 9 }}>
             {[
-              [FileText, list.length, "Entries"],
-              [Clock, "4 u 20", "Deep work"],
+              [FileText, list.length, "Notities"],
               [Users, list.filter((entry) => entry.contacts.length).length, "Gesprekken"],
-              [Gem, 1, "Opportunity"],
+              [Gem, opportunityCount, "Kansen"],
             ].map(([Icon, value, label]) => {
               const StatIcon = Icon as typeof FileText;
               return (
@@ -380,7 +364,7 @@ export function JournalScreen({ initial }: { initial: JournalState }) {
                   <span style={{ color: "var(--gold)" }}>
                     <StatIcon size={15} strokeWidth={2} />
                   </span>
-                  <b style={{ fontSize: 13 }}>{value as string | number}</b>
+                  <b style={{ fontSize: 13 }}>{value as number}</b>
                   <span className="meta">{label as string}</span>
                 </div>
               );
@@ -390,33 +374,41 @@ export function JournalScreen({ initial }: { initial: JournalState }) {
         <div className="card">
           <div className="card-head">
             <span className="t eyebrow">
-              <Calendar size={13} strokeWidth={2} /> Upcoming
+              <Calendar size={13} strokeWidth={2} /> Gepland
             </span>
           </div>
           <div className="stack" style={{ gap: 10 }}>
-            {UPCOMING.map((item) => (
-              <div key={item.id} style={{ display: "flex", gap: 9 }}>
-                <span
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: "50%",
-                    background: "var(--gold)",
-                    marginTop: 6,
-                    flex: "0 0 auto",
-                  }}
-                />
-                <span>
-                  <span className="meta" style={{ display: "block" }}>
-                    {item.when}
+            {upcoming.length ? (
+              upcoming.map((item) => (
+                <Link key={item.id} href={`/missions/${item.id}`} style={{ display: "flex", gap: 9 }}>
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: "var(--gold)",
+                      marginTop: 6,
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  <span>
+                    <span className="meta" style={{ display: "block" }}>
+                      {item.when}
+                    </span>
+                    <b style={{ fontSize: 12.5 }}>{item.title}</b>
+                    {item.detail ? (
+                      <span className="meta" style={{ display: "block" }}>
+                        {item.detail}
+                      </span>
+                    ) : null}
                   </span>
-                  <b style={{ fontSize: 12.5 }}>{item.title}</b>
-                  <span className="meta" style={{ display: "block" }}>
-                    {item.detail}
-                  </span>
-                </span>
-              </div>
-            ))}
+                </Link>
+              ))
+            ) : (
+              <p className="body" style={{ margin: 0 }}>
+                Nog geen geplande missies.
+              </p>
+            )}
           </div>
         </div>
       </div>

@@ -1,11 +1,19 @@
-export function HeroArt({ seed = 0, src }: { seed?: number; src?: string }) {
+export function HeroArt({
+  seed = 0,
+  src,
+  objectPosition,
+}: {
+  seed?: number;
+  src?: string;
+  objectPosition?: string;
+}) {
   const g = `g${seed}`;
   return (
     <>
       <div className="hero-art" aria-hidden="true">
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="" />
+          <img src={src} alt="" style={objectPosition ? { objectPosition } : undefined} />
         ) : (
           <svg viewBox="0 0 430 220" preserveAspectRatio="xMidYMid slice">
             <defs>

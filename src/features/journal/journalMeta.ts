@@ -38,23 +38,6 @@ export const JOURNAL_ICONS: Record<string, LucideIcon> = {
   cal: Calendar,
 };
 
-export const DAILY_IMPACT = [
-  { key: "capital", label: "CAPITAL", v: 2 },
-  { key: "income", label: "INCOME", v: 1 },
-  { key: "ownership", label: "OWNERSHIP", v: 1 },
-  { key: "network", label: "NETWORK", v: 3 },
-  { key: "authority", label: "AUTHORITY", v: 2 },
-  { key: "strategy", label: "STRATEGY", v: 2 },
-  { key: "execution", label: "EXECUTION", v: 3 },
-  { key: "wellbeing", label: "WELLBEING", v: 1 },
-] as const;
-
-export const UPCOMING = [
-  { id: "u1", when: "Morgen · 09:00", title: "Strategy call", detail: "Q4 marketing" },
-  { id: "u2", when: "Morgen · 14:00", title: "Studio levering", detail: "Meubels" },
-  { id: "u3", when: "Wo 23 sep · 10:00", title: "Investor meeting", detail: "Online" },
-] as const;
-
 const PLACEHOLDER_MEDIA = ["meet", "city", "room", "note", "gym"] as const;
 
 export function nextPlaceholderMedia(count: number) {
