@@ -98,19 +98,11 @@ export function ProfileScreen({
         <div className="hero-corner">
           <span className="eyebrow">Discipline creates freedom</span>
         </div>
-        <span className="eyebrow" style={{ display: "block", lineHeight: 1.7 }}>
-          Hardwig
-          <br />
-          Empire mode
-        </span>
         <h1 className="display d-xl" style={{ margin: "26px 0 2px" }}>
           {player.displayName}
         </h1>
         <div className="display d-md" style={{ color: "var(--gold)" }}>
           Level {player.level}
-        </div>
-        <div className="eyebrow muted" style={{ marginTop: 4 }}>
-          {player.title}
         </div>
         <p
           style={{
@@ -337,15 +329,9 @@ export function ProfileScreen({
       </div>
 
       <div className="section" style={{ marginBottom: 14 }}>
-        <div className="card flat">
-          <span className="eyebrow muted">Sessie</span>
-          <p className="body" style={{ margin: "6px 0 10px" }}>
-            Deze sessie komt uit Supabase Auth. Stats komen uit Postgres. Vernieuw of zet de app op de achtergrond: u blijft binnen.
-          </p>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => void logout()} disabled={pending}>
-            {pending ? "Bezig…" : "Afmelden"}
-          </button>
-        </div>
+        <button className="btn btn-ghost btn-block" type="button" onClick={() => void logout()} disabled={pending}>
+          {pending ? "Bezig…" : "Afmelden"}
+        </button>
       </div>
     </>
   );
