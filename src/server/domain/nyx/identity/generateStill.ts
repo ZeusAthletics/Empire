@@ -106,10 +106,15 @@ export async function generateNyxStill(
     return { bytes: await image.arrayBuffer(), error: null };
   } catch (error) {
     const msg = openAiErrorMessage(error);
-    const hint =
-      model === "gpt-image-2" && /model|does not exist|not found|access/i.test(msg)
-        ? " Tip: kies GPT Image 1 als je account nog geen gpt-image-2 heeft."
-        : "";
+    let hint = "";
+    if (/safety system|safety_violations/i.test(msg)) {
+      hint =
+        model === "gpt-image-2"
+          ? " GPT Image 2 weigert Nyx latex/leather vaker dan Image 1 — gebruik Image 1 voor productie; Image 2 is alleen vergelijkingstest."
+          : " OpenAI safety filter — check refs en face prompt.";
+    } else if (model === "gpt-image-2" && /model|does not exist|not found|access/i.test(msg)) {
+      hint = " Tip: kies GPT Image 1 als je account nog geen gpt-image-2 heeft.";
+    }
     return { bytes: null, error: `${msg}${hint}` };
   }
 }

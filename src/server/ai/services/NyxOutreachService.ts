@@ -11,6 +11,11 @@ import { collectOutreachHooks, hasOutreachHook } from "@/server/domain/nyx/outre
 import { computeIntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 import { shouldWakeOutreachDecision } from "@/server/domain/nyx/outreach/gate";
 import { logOutreachRun } from "@/server/domain/nyx/outreach/repository";
+import { deliverCuratedToPlayer } from "@/server/domain/nyx/curated/deliver";
+import {
+  formatCuratedCatalogForPrompt,
+  listCuratedAvailableForOutreach,
+} from "@/server/domain/nyx/curated/repository";
 
 async function deliverStillOrVideo(input: {
   playerId: string;
@@ -108,7 +113,8 @@ export async function runNyxOutreachTick(playerId: string) {
   }
 
   const hasRefs = await hasFaceIdentityRef();
-  const prompt = `${NYX_OUTREACH_GUIDE}\n\nIntimacy tier: ${intimacyTier}\nIdentity refs beschikbaar: ${hasRefs}\nOpenArt video: ${openArtVideoEnabled()}\nHooks:\n${hookContext.hooks.join("\n")}\n\nRecent chat:\n${hookContext.recentChat.join("\n")}`;
+  const catalog = await listCuratedAvailableForOutreach(playerId, intimacyTier);
+  const prompt = `${NYX_OUTREACH_GUIDE}\n\nIntimacy tier: ${intimacyTier}\nIdentity refs beschikbaar: ${hasRefs}\nOpenArt video: ${openArtVideoEnabled()}\n${formatCuratedCatalogForPrompt(catalog)}\nHooks:\n${hookContext.hooks.join("\n")}\n\nRecent chat:\n${hookContext.recentChat.join("\n")}`;
 
   const result = await runNyxTask({
     playerId,
@@ -162,15 +168,52 @@ export async function runNyxOutreachTick(playerId: string) {
   const caption = decision.caption?.trim() || "…";
   const scene = decision.scene?.trim() || decision.reason;
   const wantVideo = decision.action === "VIDEO";
+  const expectedType = wantVideo ? "VIDEO" : "PHOTO";
 
-  const delivered = await deliverStillOrVideo({
-    playerId,
-    scene,
-    caption,
-    wantVideo,
-    intimacyTier,
-    runId: result.runId,
-  });
+  let delivered: Awaited<ReturnType<typeof deliverStillOrVideo>>;
+
+  if (decision.mediaSource === "CURATED" && decision.curatedMediaId?.trim()) {
+    const curated = await deliverCuratedToPlayer({
+      playerId,
+      curatedId: decision.curatedMediaId.trim(),
+      caption,
+      playerTier: intimacyTier,
+      expectedType,
+      runId: result.runId,
+    });
+    if (curated.ok) {
+      delivered = {
+        ok: true,
+        action: curated.action,
+        reason: curated.reason,
+        mediaId: curated.mediaId,
+        messageId: curated.messageId,
+      };
+    } else if (hasRefs) {
+      delivered = await deliverStillOrVideo({
+        playerId,
+        scene,
+        caption,
+        wantVideo,
+        intimacyTier,
+        runId: result.runId,
+      });
+      if (delivered.ok) {
+        delivered.reason = `${curated.reason} · fallback GENERATE: ${delivered.reason}`;
+      }
+    } else {
+      delivered = { ok: false, action: "SILENCE", reason: curated.reason };
+    }
+  } else {
+    delivered = await deliverStillOrVideo({
+      playerId,
+      scene,
+      caption,
+      wantVideo,
+      intimacyTier,
+      runId: result.runId,
+    });
+  }
 
   if (!delivered.ok) {
     if (wantVideo && hasRefs) {

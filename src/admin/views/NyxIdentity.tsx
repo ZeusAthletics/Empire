@@ -304,6 +304,11 @@ export function NyxIdentityView({
             Huidige keuze: <span className="mono">{imageEditModel}</span>
           </p>
         )}
+        {imageEditModel === "gpt-image-2" ? (
+          <p className="muted" style={{ marginTop: 8, fontSize: 11.5, maxWidth: 520 }}>
+            Zelfde Nyx-prompt (latex/leather) als Image 1. OpenAI safety op Image 2 kan weigeren — productie = Image 1.
+          </p>
+        ) : null}
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>

@@ -15,6 +15,7 @@ import {
   applyIntakeSchema,
   applyNyxIdentityOutreachSchema,
   applyNyxIdentityFacePromptSchema,
+  applyNyxCuratedLibrarySchema,
 } from "./apply-schema";
 import { compilePersona, DEFAULT_PERSONA } from "../src/server/ai/prompts/persona";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
@@ -877,6 +878,12 @@ async function main() {
     "nyx_identity_settings",
     applyNyxIdentityFacePromptSchema,
     "supabase/migrations/20260920110000_nyx_identity_face_prompt.sql",
+  );
+  await ensureTable(
+    admin,
+    "nyx_curated_media",
+    applyNyxCuratedLibrarySchema,
+    "supabase/migrations/20260920120000_nyx_curated_library.sql",
   );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);

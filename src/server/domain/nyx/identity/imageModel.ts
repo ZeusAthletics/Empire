@@ -9,6 +9,6 @@ export function parseNyxImageEditModel(value: string | null | undefined): NyxIma
 }
 
 export const NYX_IMAGE_EDIT_MODEL_LABELS: Record<NyxImageEditModel, string> = {
-  "gpt-image-1": "GPT Image 1 (input fidelity high)",
-  "gpt-image-2": "GPT Image 2 (high-fidelity edit default)",
+  "gpt-image-1": "GPT Image 1 — Nyx latex/leather (aanbevolen)",
+  "gpt-image-2": "GPT Image 2 — vergelijking (safety kan weigeren)",
 };

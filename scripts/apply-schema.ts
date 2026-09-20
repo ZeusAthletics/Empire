@@ -124,3 +124,10 @@ export async function applyNyxIdentityFacePromptSchema() {
     "nyx identity face prompt settings",
   );
 }
+
+export async function applyNyxCuratedLibrarySchema() {
+  await applySqlFile(
+    "supabase/migrations/20260920120000_nyx_curated_library.sql",
+    "nyx curated library schema",
+  );
+}

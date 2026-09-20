@@ -6,6 +6,8 @@ export const NYX_OUTREACH_JSON_SCHEMA = {
     reason: { type: "string" },
     caption: { type: "string" },
     scene: { type: "string" },
+    mediaSource: { type: "string", enum: ["CURATED", "GENERATE"] },
+    curatedMediaId: { type: "string" },
   },
   required: ["action", "reason"],
 } as const;
@@ -15,6 +17,8 @@ export type NyxOutreachDecision = {
   reason: string;
   caption?: string;
   scene?: string;
+  mediaSource?: "CURATED" | "GENERATE";
+  curatedMediaId?: string;
 };
 
 export function parseOutreachDecision(raw: string | null): NyxOutreachDecision | null {

@@ -15,6 +15,7 @@ const NAV: { href: string; label: string; exact?: boolean; key?: string }[] = [
   { href: "/admin/prompts", label: "Prompts" },
   { href: "/admin/persona", label: "Nyx — persona" },
   { href: "/admin/nyx-identity", label: "Nyx — identity" },
+  { href: "/admin/nyx-gallery", label: "Nyx — galerij" },
   { href: "/admin/assets", label: "Beeldmateriaal" },
 ];
 
