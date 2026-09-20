@@ -1,4 +1,5 @@
 import { appendCompanionNyxMessage } from "@/server/domain/nyx/companionRepository";
+import { appendOutboundNyxMessage } from "@/server/domain/nyx/talkRepository";
 import {
   downloadCuratedBytes,
   getCuratedById,
@@ -17,6 +18,8 @@ export async function deliverCuratedToPlayer(input: {
   playerTier: IntimacyTier;
   expectedType: NyxCuratedMediaType;
   runId: string | null;
+  /** Mission Control thread when player asked in chat; default companion outreach thread. */
+  conversationId?: string;
 }): Promise<{ ok: boolean; reason: string; mediaId?: string; messageId?: string; action: "PHOTO" | "VIDEO" }> {
   const item = await getCuratedById(input.curatedId);
   if (!item) return { ok: false, reason: "Curated id onbekend.", action: input.expectedType };
@@ -47,13 +50,23 @@ export async function deliverCuratedToPlayer(input: {
     contentType: item.contentType,
     filename: ext,
   });
-  const message = await appendCompanionNyxMessage({
-    playerId: input.playerId,
-    content: input.caption,
-    mediaId,
-    mediaContext: `Curated ${item.mediaType.toLowerCase()} uit beeldbank: ${item.description}${item.label ? ` (${item.label})` : ""}`,
-    runId: input.runId,
-  });
+  const mediaContext = `Curated ${item.mediaType.toLowerCase()} uit beeldbank: ${item.description}${item.label ? ` (${item.label})` : ""}`;
+  const message = input.conversationId
+    ? await appendOutboundNyxMessage({
+        playerId: input.playerId,
+        conversationId: input.conversationId,
+        content: input.caption,
+        mediaId,
+        mediaContext,
+        runId: input.runId,
+      })
+    : await appendCompanionNyxMessage({
+        playerId: input.playerId,
+        content: input.caption,
+        mediaId,
+        mediaContext,
+        runId: input.runId,
+      });
   await recordCuratedDelivery({
     curatedId: input.curatedId,
     playerId: input.playerId,

@@ -4,6 +4,7 @@ import { handleCasualUserTurn, stripModelNames } from "@/server/ai/fallback/nyxR
 import { afterNyxReply } from "@/server/ai/services/MemoryExtractionService";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
 import { recentPlayerChatTurns } from "@/server/domain/nyx/recentChat";
+import { tryFulfillChatMediaRequest } from "@/server/ai/services/NyxChatMediaService";
 import {
   appendMessage,
   featuredTalkContext,
@@ -28,15 +29,35 @@ export async function sendNyxMessage(playerId: string, text: string): Promise<Ny
 
   const ctx = await featuredTalkContext(playerId);
   const recent = await recentPlayerChatTurns(playerId);
+
+  const mediaAttempt = openaiConfigured()
+    ? await tryFulfillChatMediaRequest({
+        playerId,
+        userText: trimmed,
+        conversationId: talk.conversationId,
+        recentChat: recent,
+        featuredTitle: ctx.featuredTitle,
+      }).catch(() => ({ handled: false as const }))
+    : { handled: false as const };
+
+  if (mediaAttempt.handled && mediaAttempt.action !== "FAILED") {
+    return getOrCreateTalk(playerId);
+  }
+
   let reply: string | null = null;
   let runId: string | null = null;
   let fallbackUsed = false;
+
+  const mediaFailNote =
+    mediaAttempt.handled && mediaAttempt.action === "FAILED"
+      ? `\n\n[Systeem: Hardwig vroeg om beeld maar leveren mislukte (${mediaAttempt.reason}). Antwoord alleen in tekst — geen fictieve foto tussen haken, geen "hier is een foto".]`
+      : "";
 
   const live = openaiConfigured()
     ? await runNyxTask({
         playerId,
         task: "CASUAL_CHAT",
-        text: `${trimmed}\n\nRecente beurten:\n${recent.join("\n")}\nHoofdmissie: ${ctx.featuredTitle}`,
+        text: `${trimmed}\n\nRecente beurten:\n${recent.join("\n")}\nHoofdmissie: ${ctx.featuredTitle}${mediaFailNote}`,
         invokeModel: true,
       }).catch(() => null)
     : null;

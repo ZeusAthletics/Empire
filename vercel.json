@@ -7,6 +7,9 @@
     },
     "src/app/api/cron/nyx-outreach/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/nyx/message/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [

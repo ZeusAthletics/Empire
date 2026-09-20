@@ -1,94 +1,18 @@
 import { runNyxTask } from "@/server/ai/orchestrator/NyxOrchestrator";
 import { NYX_OUTREACH_GUIDE } from "@/server/ai/prompts/outreach";
 import { NYX_OUTREACH_JSON_SCHEMA, parseOutreachDecision } from "@/server/ai/schemas/outreach.schema";
+import { deliverStillOrVideo, fulfillNyxMediaDecision } from "@/server/ai/services/NyxMediaDelivery";
 import { appendCompanionNyxMessage } from "@/server/domain/nyx/companionRepository";
-import { storeNyxGalleryAsset } from "@/server/domain/nyx/galleryRepository";
-import { generateNyxStill } from "@/server/domain/nyx/identity/generateStill";
-import { hasFaceIdentityRef } from "@/server/domain/nyx/identity/repository";
-import { checkNyxIdentityGate } from "@/server/domain/nyx/identity/visionGate";
-import { imageToVideoFromStill, openArtVideoEnabled } from "@/server/domain/media/openArtVideo";
+import { openArtVideoEnabled } from "@/server/domain/media/openArtVideo";
 import { collectOutreachHooks, hasOutreachHook } from "@/server/domain/nyx/outreach/hooks";
 import { computeIntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 import { shouldWakeOutreachDecision } from "@/server/domain/nyx/outreach/gate";
 import { logOutreachRun } from "@/server/domain/nyx/outreach/repository";
-import { deliverCuratedToPlayer } from "@/server/domain/nyx/curated/deliver";
 import {
   formatCuratedCatalogForPrompt,
   listCuratedAvailableForOutreach,
 } from "@/server/domain/nyx/curated/repository";
-
-async function deliverStillOrVideo(input: {
-  playerId: string;
-  scene: string;
-  caption: string;
-  wantVideo: boolean;
-  intimacyTier: Awaited<ReturnType<typeof computeIntimacyTier>>;
-  runId: string | null;
-  /** Default 3 for cron outreach; admin test uses 1 to fit Vercel timeouts. */
-  maxAttempts?: number;
-  faceRefOnly?: boolean;
-}): Promise<{ ok: boolean; action: "PHOTO" | "VIDEO" | "SILENCE"; reason: string; mediaId?: string; messageId?: string }> {
-  const hasRefs = await hasFaceIdentityRef();
-  if (!hasRefs) {
-    return { ok: false, action: "SILENCE", reason: "Geen identity refs — geen autonome foto." };
-  }
-
-  let still: ArrayBuffer | null = null;
-  let lastGateReason = "Identity gate: geen match met Nyx.";
-  let lastGenError = "Still generatie mislukt.";
-  const maxAttempts = input.maxAttempts ?? 3;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const generated = await generateNyxStill(input.scene, { faceRefOnly: input.faceRefOnly });
-    if (!generated.bytes) {
-      lastGenError = generated.error ?? lastGenError;
-      continue;
-    }
-    still = generated.bytes;
-    const gate = await checkNyxIdentityGate(still);
-    if (gate.pass) break;
-    lastGateReason = `Identity gate: ${gate.reason} (${Math.round(gate.confidence * 100)}%)`;
-    still = null;
-  }
-  if (!still) {
-    const reason = lastGenError !== "Still generatie mislukt." ? lastGenError : lastGateReason;
-    return { ok: false, action: "SILENCE", reason };
-  }
-
-  if (input.wantVideo && openArtVideoEnabled()) {
-    const mp4 = await imageToVideoFromStill(still, input.scene);
-    if (mp4) {
-      const mediaId = await storeNyxGalleryAsset({
-        playerId: input.playerId,
-        bytes: mp4,
-        contentType: "video/mp4",
-        filename: "nyx-outreach.mp4",
-      });
-      const message = await appendCompanionNyxMessage({
-        playerId: input.playerId,
-        content: input.caption,
-        mediaId,
-        mediaContext: `Gegenereerde video (identity lock), scene: ${input.scene}`,
-        runId: input.runId,
-      });
-      return { ok: true, action: "VIDEO", reason: "Video via locked still.", mediaId, messageId: message.id };
-    }
-  }
-
-  const mediaId = await storeNyxGalleryAsset({
-    playerId: input.playerId,
-    bytes: still,
-    contentType: "image/jpeg",
-    filename: "nyx-outreach.jpg",
-  });
-  const message = await appendCompanionNyxMessage({
-    playerId: input.playerId,
-    content: input.caption,
-    mediaId,
-    mediaContext: `Gegenereerde foto (identity lock), scene: ${input.scene}`,
-    runId: input.runId,
-  });
-  return { ok: true, action: "PHOTO", reason: "Foto na identity gate.", mediaId, messageId: message.id };
-}
+import { hasFaceIdentityRef } from "@/server/domain/nyx/identity/repository";
 
 export async function runNyxOutreachTick(playerId: string) {
   const intimacyTier = await computeIntimacyTier(playerId);
@@ -167,79 +91,14 @@ export async function runNyxOutreachTick(playerId: string) {
     return { action: "TEXT" as const };
   }
 
-  const caption = decision.caption?.trim() || "…";
-  const scene = decision.scene?.trim() || decision.reason;
-  const wantVideo = decision.action === "VIDEO";
-  const expectedType = wantVideo ? "VIDEO" : "PHOTO";
+  const delivered = await fulfillNyxMediaDecision({
+    playerId,
+    decision,
+    intimacyTier,
+    runId: result.runId,
+  });
 
-  let delivered: Awaited<ReturnType<typeof deliverStillOrVideo>>;
-
-  if (decision.mediaSource === "CURATED" && decision.curatedMediaId?.trim()) {
-    const curated = await deliverCuratedToPlayer({
-      playerId,
-      curatedId: decision.curatedMediaId.trim(),
-      caption,
-      playerTier: intimacyTier,
-      expectedType,
-      runId: result.runId,
-    });
-    if (curated.ok) {
-      delivered = {
-        ok: true,
-        action: curated.action,
-        reason: curated.reason,
-        mediaId: curated.mediaId,
-        messageId: curated.messageId,
-      };
-    } else if (hasRefs) {
-      delivered = await deliverStillOrVideo({
-        playerId,
-        scene,
-        caption,
-        wantVideo,
-        intimacyTier,
-        runId: result.runId,
-      });
-      if (delivered.ok) {
-        delivered.reason = `${curated.reason} · fallback GENERATE: ${delivered.reason}`;
-      }
-    } else {
-      delivered = { ok: false, action: "SILENCE", reason: curated.reason };
-    }
-  } else {
-    delivered = await deliverStillOrVideo({
-      playerId,
-      scene,
-      caption,
-      wantVideo,
-      intimacyTier,
-      runId: result.runId,
-    });
-  }
-
-  if (!delivered.ok) {
-    if (wantVideo && hasRefs) {
-      const fallback = await deliverStillOrVideo({
-        playerId,
-        scene,
-        caption,
-        wantVideo: false,
-        intimacyTier,
-        runId: result.runId,
-      });
-      if (fallback.ok) {
-        await logOutreachRun({
-          playerId,
-          action: fallback.action,
-          reason: `${decision.reason} · fallback foto`,
-          intimacyTier,
-          mediaId: fallback.mediaId,
-          messageId: fallback.messageId,
-          runId: result.runId,
-        });
-        return { action: fallback.action };
-      }
-    }
+  if (!delivered.ok || delivered.action === "SILENCE" || delivered.action === "TEXT") {
     await logOutreachRun({
       playerId,
       action: "SILENCE",
@@ -295,7 +154,6 @@ export async function forceNyxTestPhoto(
     scene,
     caption,
     wantVideo: false,
-    intimacyTier,
     runId: null,
     maxAttempts: 1,
     faceRefOnly: true,

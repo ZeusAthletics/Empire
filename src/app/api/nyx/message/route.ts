@@ -4,6 +4,7 @@ import { afterNyxReply } from "@/server/ai/services/MemoryExtractionService";
 import { getNyxTalk, sendNyxMessage } from "@/server/ai/services/NyxConversationService";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function GET() {
   const player = await getSessionPlayer();

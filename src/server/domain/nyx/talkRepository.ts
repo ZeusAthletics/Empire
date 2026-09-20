@@ -154,6 +154,33 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
   };
 }
 
+export async function appendOutboundNyxMessage(input: {
+  playerId: string;
+  conversationId: string;
+  content: string;
+  mediaId?: string | null;
+  mediaContext?: string | null;
+  runId?: string | null;
+}): Promise<{ id: string }> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("nyx_messages")
+    .insert({
+      conversation_id: input.conversationId,
+      player_id: input.playerId,
+      role: "NYX",
+      content: input.content,
+      mode: "MISSION_CONTROL",
+      media_id: input.mediaId ?? null,
+      media_context: input.mediaContext?.trim() || null,
+      run_id: input.runId ?? null,
+    } as never)
+    .select("id")
+    .single();
+  if (error || !data) throw error ?? new Error("Nyx bericht kon niet worden bewaard.");
+  return { id: data.id as string };
+}
+
 export async function appendMessage(input: {
   playerId: string;
   conversationId: string;
