@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   try {
     const result = await forceNyxTestPhoto(scoped.id, body);
     if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.reason }, { status: 400 });
+      return NextResponse.json({ ok: false, error: result.reason, reason: result.reason }, { status: 400 });
     }
     return NextResponse.json({ ...result, ok: true });
   } catch (error) {

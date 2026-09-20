@@ -151,10 +151,22 @@ export function NyxIdentityView({
     setError(null);
     setTestNote(null);
     try {
-      const response = await fetch("/api/admin/nyx-identity/test-photo", { method: "POST" });
-      const payload = (await response.json()) as { ok: boolean; error?: string; messageId?: string };
+      const response = await fetch("/api/admin/nyx-identity/test-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const raw = await response.text();
+      type TestPhotoPayload = { ok: boolean; error?: string; reason?: string; messageId?: string };
+      let payload: TestPhotoPayload = { ok: false, error: "Testfoto mislukt." };
+      try {
+        payload = JSON.parse(raw) as TestPhotoPayload;
+      } catch {
+        setError(response.ok ? "Ongeldig antwoord van server." : `Serverfout (${response.status}).`);
+        return;
+      }
       if (!response.ok || !payload.ok) {
-        setError(payload.error ?? "Testfoto mislukt.");
+        setError(payload.error ?? payload.reason ?? "Testfoto mislukt.");
         return;
       }
       setTestNote("Verstuurd naar Hardwig — check Nyx-chat en Profiel → Galerij.");

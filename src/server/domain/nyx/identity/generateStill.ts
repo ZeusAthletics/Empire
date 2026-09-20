@@ -47,10 +47,26 @@ async function refsForEdit(): Promise<NyxIdentityRef[]> {
   return [face, ...rest];
 }
 
-export async function generateNyxStill(scene: string): Promise<ArrayBuffer | null> {
-  if (!openaiConfigured()) return null;
+export type GenerateNyxStillResult = {
+  bytes: ArrayBuffer | null;
+  error: string | null;
+};
+
+function openAiErrorMessage(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message?: string }).message ?? "OpenAI images.edit mislukt.");
+  }
+  return "OpenAI images.edit mislukt.";
+}
+
+export async function generateNyxStill(scene: string): Promise<GenerateNyxStillResult> {
+  if (!openaiConfigured()) {
+    return { bytes: null, error: "OPENAI_API_KEY ontbreekt in Vercel." };
+  }
   const refs = await refsForEdit();
-  if (!refs.length) return null;
+  if (!refs.length) {
+    return { bytes: null, error: "Geen FACE-referentie geüpload." };
+  }
 
   const [facePrompt, model] = await Promise.all([getCanonicalFacePrompt(), getNyxImageEditModel()]);
   const prompt = buildNyxEditPrompt(scene, facePrompt || undefined);
@@ -69,14 +85,22 @@ export async function generateNyxStill(scene: string): Promise<ArrayBuffer | nul
     const b64 = result.data?.[0]?.b64_json;
     if (b64) {
       const buf = Buffer.from(b64, "base64");
-      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+      return {
+        bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+        error: null,
+      };
     }
     const remote = result.data?.[0]?.url;
-    if (!remote) return null;
+    if (!remote) return { bytes: null, error: "OpenAI gaf geen beeld terug." };
     const image = await fetch(remote, { headers: { "User-Agent": UA } });
-    if (!image.ok) return null;
-    return image.arrayBuffer();
-  } catch {
-    return null;
+    if (!image.ok) return { bytes: null, error: "OpenAI-beeld kon niet worden gedownload." };
+    return { bytes: await image.arrayBuffer(), error: null };
+  } catch (error) {
+    const msg = openAiErrorMessage(error);
+    const hint =
+      model === "gpt-image-2" && /model|does not exist|not found|access/i.test(msg)
+        ? " Tip: kies GPT Image 1 als je account nog geen gpt-image-2 heeft."
+        : "";
+    return { bytes: null, error: `${msg}${hint}` };
   }
 }

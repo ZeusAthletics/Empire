@@ -10,11 +10,14 @@ export async function resolveAdminScope(operator: SessionPlayer, path: string) {
 
   if (scoped.id !== operator.id) {
     const admin = createSupabaseAdminClient();
-    await admin.from("admin_access_log").insert({
+    const { error: logError } = await admin.from("admin_access_log").insert({
       admin_player_id: operator.id,
       scoped_player_id: scoped.id,
       path,
     } as never);
+    if (logError) {
+      // Scope resolution must not fail if audit log insert fails.
+    }
   }
 
   return scoped;

@@ -27,18 +27,22 @@ async function deliverStillOrVideo(input: {
 
   let still: ArrayBuffer | null = null;
   let lastGateReason = "Identity gate: geen match met Nyx.";
+  let lastGenError = "Still generatie mislukt.";
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    still = await generateNyxStill(input.scene);
-    if (!still) {
-      return { ok: false, action: "SILENCE", reason: "Still generatie mislukt." };
+    const generated = await generateNyxStill(input.scene);
+    if (!generated.bytes) {
+      lastGenError = generated.error ?? lastGenError;
+      continue;
     }
+    still = generated.bytes;
     const gate = await checkNyxIdentityGate(still);
     if (gate.pass) break;
     lastGateReason = `Identity gate: ${gate.reason} (${Math.round(gate.confidence * 100)}%)`;
     still = null;
   }
   if (!still) {
-    return { ok: false, action: "SILENCE", reason: lastGateReason };
+    const reason = lastGenError !== "Still generatie mislukt." ? lastGenError : lastGateReason;
+    return { ok: false, action: "SILENCE", reason };
   }
 
   if (input.wantVideo && openArtVideoEnabled()) {
@@ -210,11 +214,26 @@ export async function runNyxOutreachTick(playerId: string) {
 }
 
 /** Admin-only: skip outreach gates and run identity-locked still + vision gate. */
+async function safeLogOutreachRun(
+  input: Parameters<typeof logOutreachRun>[0],
+): Promise<void> {
+  try {
+    await logOutreachRun(input);
+  } catch {
+    // Admin test / outreach should not fail if run log insert fails.
+  }
+}
+
 export async function forceNyxTestPhoto(
   playerId: string,
   input?: { scene?: string; caption?: string },
 ): Promise<{ ok: boolean; action: "PHOTO" | "SILENCE"; reason: string; mediaId?: string; messageId?: string }> {
-  const intimacyTier = await computeIntimacyTier(playerId);
+  let intimacyTier: Awaited<ReturnType<typeof computeIntimacyTier>> = "EARLY";
+  try {
+    intimacyTier = await computeIntimacyTier(playerId);
+  } catch {
+    // Test photo only needs a tier label for the run log.
+  }
   const scene =
     input?.scene?.trim() ||
     "Portrait, gold latex top, black leather, Kempen dusk light, confident gaze, same Nyx identity.";
@@ -231,7 +250,7 @@ export async function forceNyxTestPhoto(
     runId: null,
   });
 
-  await logOutreachRun({
+  await safeLogOutreachRun({
     playerId,
     action: delivered.ok ? delivered.action : "SILENCE",
     reason: delivered.ok ? `Admin test photo: ${delivered.reason}` : delivered.reason,

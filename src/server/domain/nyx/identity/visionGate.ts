@@ -44,7 +44,9 @@ export async function checkNyxIdentityGate(candidateBytes: ArrayBuffer): Promise
   const facePrompt = await getCanonicalFacePrompt();
   const client = getOpenAIClient();
 
-  const response = await client.responses.create({
+  let response;
+  try {
+    response = await client.responses.create({
     model: "gpt-4.1-mini",
     input: [
       {
@@ -86,6 +88,10 @@ Return JSON: identicalFace (true only if face match is exact enough for identity
       },
     },
   });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Vision API mislukt.";
+    return fail(msg);
+  }
 
   const raw = response.output_text ?? "";
   try {
