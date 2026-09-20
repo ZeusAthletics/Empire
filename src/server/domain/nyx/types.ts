@@ -5,6 +5,8 @@ export type NyxChatMessage = {
   id: string;
   role: "me" | "nyx";
   text: string;
+  mediaSrc?: string | null;
+  mediaKind?: "image" | "video" | null;
 };
 
 export type NyxProposalCard = {

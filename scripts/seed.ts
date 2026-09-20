@@ -1,7 +1,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { applyPhase1Schema, applyPhase3Schema, applyPhase4Schema, applyPhase5Schema, applyPhase6Schema, applyPhase7Schema, applyPhase8Schema, applyPhase9Schema, applyPhase10Schema, applyPhase11Schema, applyIntakeSchema } from "./apply-schema";
+import {
+  applyPhase1Schema,
+  applyPhase3Schema,
+  applyPhase4Schema,
+  applyPhase5Schema,
+  applyPhase6Schema,
+  applyPhase7Schema,
+  applyPhase8Schema,
+  applyPhase9Schema,
+  applyPhase10Schema,
+  applyPhase11Schema,
+  applyIntakeSchema,
+  applyNyxIdentityOutreachSchema,
+} from "./apply-schema";
 import { compilePersona, DEFAULT_PERSONA } from "../src/server/ai/prompts/persona";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
 import { SEED_MEMORY_PROPOSALS, SEED_MEMORIES } from "./seed-memory";
@@ -851,6 +864,12 @@ async function main() {
     "player_models",
     applyIntakeSchema,
     "supabase/migrations/20260919180000_intake_and_covers.sql",
+  );
+  await ensureTable(
+    admin,
+    "nyx_identity_refs",
+    applyNyxIdentityOutreachSchema,
+    "supabase/migrations/20260920100000_nyx_identity_outreach.sql",
   );
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);

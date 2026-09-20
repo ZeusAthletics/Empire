@@ -17,17 +17,21 @@ import type { PublicContact } from "@/server/domain/contact/repository";
 import type { PublicCampaign } from "@/server/domain/campaign/types";
 import type { MonthlyWrap } from "@/server/domain/journal/types";
 import type { PublicPlayer } from "@/server/domain/player/types";
+import { NyxGallerySection } from "@/features/profile/NyxGallerySection";
+import type { NyxGalleryItem } from "@/server/domain/nyx/galleryRepository";
 
 export function ProfileScreen({
   player,
   campaign,
   wraps,
   contacts,
+  nyxGallery,
 }: {
   player: PublicPlayer;
   campaign: PublicCampaign | null;
   wraps: MonthlyWrap[];
   contacts: PublicContact[];
+  nyxGallery: NyxGalleryItem[];
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -186,6 +190,8 @@ export function ProfileScreen({
         </div>
         <EmptyInvite body="Geen campagnemetriek tot missies en netwerk in de database staan." />
       </div>
+
+      <NyxGallerySection items={nyxGallery} />
 
       <div className="section">
         <div className="section-head">

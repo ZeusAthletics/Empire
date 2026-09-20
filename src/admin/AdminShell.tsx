@@ -14,6 +14,7 @@ const NAV: { href: string; label: string; exact?: boolean; key?: string }[] = [
   { href: "/admin/runs", label: "AI runs" },
   { href: "/admin/prompts", label: "Prompts" },
   { href: "/admin/persona", label: "Nyx — persona" },
+  { href: "/admin/nyx-identity", label: "Nyx — identity" },
   { href: "/admin/assets", label: "Beeldmateriaal" },
 ];
 

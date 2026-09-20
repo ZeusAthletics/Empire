@@ -110,3 +110,10 @@ export async function applyPhase11Schema() {
 export async function applyIntakeSchema() {
   await applySqlFile("supabase/migrations/20260919180000_intake_and_covers.sql", "intake and covers schema");
 }
+
+export async function applyNyxIdentityOutreachSchema() {
+  await applySqlFile(
+    "supabase/migrations/20260920100000_nyx_identity_outreach.sql",
+    "nyx identity and outreach schema",
+  );
+}

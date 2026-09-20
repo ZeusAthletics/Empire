@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/server/validation/rewardEngine.test.ts src/server/validation/missionRuleEngine.test.ts src/server/ai/__tests__/routing.test.ts src/server/ai/__tests__/memory.test.ts src/server/ai/__tests__/think.test.ts src/server/ai/__tests__/radar.test.ts src/server/ai/__tests__/evals.test.ts src/server/domain/geo/geocode.test.ts src/server/domain/empire/apply.test.ts src/server/ai/__tests__/intake.test.ts src/server/ai/__tests__/covers.test.ts",
+    "test": "tsx --test src/server/validation/rewardEngine.test.ts src/server/validation/missionRuleEngine.test.ts src/server/ai/__tests__/routing.test.ts src/server/ai/__tests__/memory.test.ts src/server/ai/__tests__/think.test.ts src/server/ai/__tests__/radar.test.ts src/server/ai/__tests__/evals.test.ts src/server/domain/geo/geocode.test.ts src/server/domain/empire/apply.test.ts src/server/ai/__tests__/intake.test.ts src/server/ai/__tests__/covers.test.ts src/server/ai/__tests__/outreach.test.ts",
     "db:verify:ops": "tsx scripts/verify-phase11.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:verify": "tsx scripts/verify-phase4.ts",

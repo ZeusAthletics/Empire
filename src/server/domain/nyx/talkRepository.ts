@@ -6,6 +6,8 @@ import { findPlayerById } from "@/server/domain/player/repository";
 import { NYX_GREETING } from "@/server/ai/fallback/nyxReply";
 import type { NyxChatMessage, NyxTalkState } from "@/server/domain/nyx/types";
 import { chipFromProposal } from "@/server/domain/memory/repository";
+import { companionConversationId } from "@/server/domain/nyx/companionRepository";
+import { publicMediaUrl } from "@/server/domain/media/repository";
 import { isMemoryPayload, isSideQuestPayload } from "@/server/domain/nyx/proposalTypes";
 import {
   listPendingByKind,
@@ -15,14 +17,41 @@ import {
 } from "@/server/domain/nyx/proposalRepository";
 import { isPatternPayload, isReviewPayload } from "@/server/domain/nyx/proposalTypes";
 
-function mapMessages(
-  rows: { id: string; role: string; content: string }[],
-): NyxChatMessage[] {
-  return rows.map((row) => ({
-    id: row.id,
-    role: row.role === "USER" ? "me" : "nyx",
-    text: row.content,
-  }));
+async function mediaMetaForIds(ids: string[]): Promise<Map<string, { src: string; video: boolean }>> {
+  const map = new Map<string, { src: string; video: boolean }>();
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return map;
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.from("media_assets").select("id, approved, storage_path").in("id", unique);
+  if (error || !data) return map;
+  for (const row of data) {
+    if (!row.approved) continue;
+    const path = String(row.storage_path ?? "");
+    map.set(row.id as string, {
+      src: publicMediaUrl(row.id as string),
+      video: /\.mp4$/i.test(path),
+    });
+  }
+  return map;
+}
+
+async function mapMessages(
+  rows: { id: string; role: string; content: string; media_id?: string | null }[],
+): Promise<NyxChatMessage[]> {
+  const mediaIds = rows.map((row) => row.media_id).filter(Boolean) as string[];
+  const coverMap = await mediaMetaForIds(mediaIds);
+  return rows.map((row) => {
+    const mediaId = row.media_id ?? null;
+    const cover = mediaId ? coverMap.get(mediaId) : undefined;
+    const mediaSrc = cover?.src ?? null;
+    return {
+      id: row.id,
+      role: row.role === "USER" ? "me" : "nyx",
+      text: row.content,
+      mediaSrc,
+      mediaKind: mediaSrc ? (cover?.video ? "video" : "image") : null,
+    };
+  });
 }
 
 function cardOf(proposal: PublicProposal | null) {
@@ -82,10 +111,13 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
     if (greetError) throw greetError;
   }
 
+  const companionId = await companionConversationId(playerId);
+  const conversationIds = companionId && companionId !== conversationId ? [conversationId, companionId] : [conversationId];
+
   const { data: rows, error: msgError } = await admin
     .from("nyx_messages")
-    .select("id, role, content")
-    .eq("conversation_id", conversationId)
+    .select("id, role, content, media_id, created_at")
+    .in("conversation_id", conversationIds)
     .order("created_at", { ascending: true });
   if (msgError) throw msgError;
 
@@ -97,7 +129,7 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
   ]);
   return {
     conversationId,
-    messages: mapMessages(rows ?? []),
+    messages: await mapMessages(rows ?? []),
     proposal: cardOf(pending),
     memoryChips: memoryProposals.flatMap((item) => {
       if (!isMemoryPayload(item.payload)) return [];

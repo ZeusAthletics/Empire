@@ -4,16 +4,26 @@ import { getSessionPlayer, toPublicPlayer } from "@/server/auth/session";
 import { findPublicCampaignByPlayerId } from "@/server/domain/campaign/repository";
 import { listVisibleContacts } from "@/server/domain/contact/repository";
 import { listMonthlyWraps } from "@/server/domain/journal/repository";
+import { listNyxGallery } from "@/server/domain/nyx/galleryRepository";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProfilePage() {
   const player = await getSessionPlayer();
   if (!player) redirect("/");
-  const [campaign, wraps, contacts] = await Promise.all([
+  const [campaign, wraps, contacts, nyxGallery] = await Promise.all([
     findPublicCampaignByPlayerId(player.id),
     listMonthlyWraps(player.id),
     listVisibleContacts(player.id),
+    listNyxGallery(player.id),
   ]);
-  return <ProfileScreen player={toPublicPlayer(player)} campaign={campaign} wraps={wraps} contacts={contacts} />;
+  return (
+    <ProfileScreen
+      player={toPublicPlayer(player)}
+      campaign={campaign}
+      wraps={wraps}
+      contacts={contacts}
+      nyxGallery={nyxGallery}
+    />
+  );
 }

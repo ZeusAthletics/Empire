@@ -219,6 +219,22 @@ export function NyxSheet() {
               <p className="body" style={{ margin: "5px 0 0", color: "var(--ink-1)" }}>
                 {message.text}
               </p>
+              {message.mediaSrc ? (
+                message.mediaKind === "video" ? (
+                  <video
+                    src={message.mediaSrc}
+                    controls
+                    playsInline
+                    style={{ width: "100%", marginTop: 8, borderRadius: 10 }}
+                  />
+                ) : (
+                  <img
+                    src={message.mediaSrc}
+                    alt=""
+                    style={{ width: "100%", marginTop: 8, borderRadius: 10, display: "block" }}
+                  />
+                )
+              ) : null}
             </div>
           ))}
         </div>
