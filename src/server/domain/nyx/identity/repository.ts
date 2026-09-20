@@ -11,6 +11,36 @@ export type NyxIdentityRef = {
   createdAt: string;
 };
 
+const FACE_PROMPT_KEY = "face_prompt";
+
+export async function getCanonicalFacePrompt(): Promise<string> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("nyx_identity_settings")
+    .select("value")
+    .eq("key", FACE_PROMPT_KEY)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42P01") return "";
+    throw error;
+  }
+  return (data?.value as string | undefined)?.trim() ?? "";
+}
+
+export async function setCanonicalFacePrompt(value: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const trimmed = value.trim();
+  const { error } = await admin.from("nyx_identity_settings").upsert(
+    {
+      key: FACE_PROMPT_KEY,
+      value: trimmed,
+      updated_at: new Date().toISOString(),
+    } as never,
+    { onConflict: "key" },
+  );
+  if (error) throw error;
+}
+
 function mapRow(row: Record<string, unknown>): NyxIdentityRef {
   return {
     id: row.id as string,

@@ -15,13 +15,23 @@ const ROLES = [
   { value: "VARIANT_OK", label: "Variant OK" },
 ] as const;
 
-export function NyxIdentityView({ refs, gallery }: { refs: NyxIdentityRef[]; gallery: NyxGalleryItem[] }) {
+export function NyxIdentityView({
+  refs,
+  gallery,
+  facePrompt: initialFacePrompt,
+}: {
+  refs: NyxIdentityRef[];
+  gallery: NyxGalleryItem[];
+  facePrompt: string;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [role, setRole] = useState<(typeof ROLES)[number]["value"]>("FACE");
   const [testNote, setTestNote] = useState<string | null>(null);
+  const [facePrompt, setFacePrompt] = useState(initialFacePrompt);
+  const [facePromptNote, setFacePromptNote] = useState<string | null>(null);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -72,6 +82,30 @@ export function NyxIdentityView({ refs, gallery }: { refs: NyxIdentityRef[]; gal
     }
   }
 
+  async function saveFacePrompt() {
+    setPending(true);
+    setError(null);
+    setFacePromptNote(null);
+    try {
+      const response = await fetch("/api/admin/nyx-identity", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ facePrompt }),
+      });
+      const payload = (await response.json()) as { ok: boolean; error?: string; facePrompt?: string };
+      if (!response.ok || !payload.ok) {
+        setError(payload.error ?? "Face prompt kon niet worden opgeslagen.");
+        return;
+      }
+      if (typeof payload.facePrompt === "string") setFacePrompt(payload.facePrompt);
+      setFacePromptNote("Face prompt opgeslagen — gebruikt bij elke identity-locked still.");
+    } catch {
+      setError("Geen verbinding.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function forceTestPhoto() {
     setPending(true);
     setError(null);
@@ -99,8 +133,35 @@ export function NyxIdentityView({ refs, gallery }: { refs: NyxIdentityRef[]; gal
           Nyx — identity vault
         </h1>
         <span className="muted">
-          Face-ref = exact gezicht · gpt-image-1 edit met hoge input fidelity · niet de spelergalerij
+          Face-ref + face prompt = identity lock · gpt-image-1 edit · niet de spelergalerij
         </span>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <div className="eyebrow">Canon face prompt (tekst)</div>
+        <p className="muted" style={{ margin: "8px 0 10px", fontSize: 12.5 }}>
+          Plak hier je gedetailleerde gezichtsbeschrijving (leeftijd, ogen, neus, kaak, huid, haar, sieraden). Wordt
+          samen met de Face-still naar gpt-image-1 en de vision gate gestuurd.
+        </p>
+        <textarea
+          className="input"
+          rows={8}
+          disabled={pending}
+          value={facePrompt}
+          onChange={(event) => setFacePrompt(event.target.value)}
+          placeholder="Bijv. vrouw ~28, donkere hazel ogen, smalle neus, zachte kaaklijn, olijfachtige huid, zwart lang haar met gouden bliksemschicht-halsketting…"
+          style={{ width: "100%", maxWidth: 720, resize: "vertical", fontFamily: "inherit", fontSize: 13 }}
+        />
+        <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn gold sm" type="button" disabled={pending} onClick={() => void saveFacePrompt()}>
+            {pending ? "Bezig…" : "Opslaan face prompt"}
+          </button>
+          {facePromptNote ? (
+            <span className="muted" style={{ fontSize: 12, color: "var(--jade)" }}>
+              {facePromptNote}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>

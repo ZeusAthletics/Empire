@@ -117,3 +117,10 @@ export async function applyNyxIdentityOutreachSchema() {
     "nyx identity and outreach schema",
   );
 }
+
+export async function applyNyxIdentityFacePromptSchema() {
+  await applySqlFile(
+    "supabase/migrations/20260920110000_nyx_identity_face_prompt.sql",
+    "nyx identity face prompt settings",
+  );
+}

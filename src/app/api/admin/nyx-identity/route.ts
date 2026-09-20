@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/server/auth/session";
 import {
   deleteIdentityRef,
+  getCanonicalFacePrompt,
   listIdentityRefs,
+  setCanonicalFacePrompt,
   uploadIdentityRef,
   type NyxIdentityRefRole,
 } from "@/server/domain/nyx/identity/repository";
@@ -14,8 +16,35 @@ const ROLES: NyxIdentityRefRole[] = ["FACE", "BODY", "SIGNATURE_OUTFIT", "VARIAN
 export async function GET() {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
-  const refs = await listIdentityRefs();
-  return NextResponse.json({ ok: true, refs });
+  const [refs, facePrompt] = await Promise.all([listIdentityRefs(), getCanonicalFacePrompt()]);
+  return NextResponse.json({ ok: true, refs, facePrompt });
+}
+
+export async function PATCH(request: Request) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
+
+  let body: { facePrompt?: string };
+  try {
+    body = (await request.json()) as { facePrompt?: string };
+  } catch {
+    return NextResponse.json({ ok: false, error: "Ongeldige JSON." }, { status: 400 });
+  }
+  if (typeof body.facePrompt !== "string") {
+    return NextResponse.json({ ok: false, error: "facePrompt ontbreekt." }, { status: 400 });
+  }
+  if (body.facePrompt.length > 8000) {
+    return NextResponse.json({ ok: false, error: "Face prompt te lang (max 8000)." }, { status: 400 });
+  }
+
+  try {
+    await setCanonicalFacePrompt(body.facePrompt);
+    const facePrompt = await getCanonicalFacePrompt();
+    return NextResponse.json({ ok: true, facePrompt });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Opslaan mislukt.";
+    return NextResponse.json({ ok: false, error: message }, { status: 400 });
+  }
 }
 
 export async function POST(request: Request) {

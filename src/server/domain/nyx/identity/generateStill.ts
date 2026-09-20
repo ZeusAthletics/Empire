@@ -3,6 +3,7 @@ import { getOpenAIClient, openaiConfigured } from "@/server/ai/client/openai";
 import { buildNyxEditPrompt } from "@/server/ai/prompts/nyx-identity";
 import {
   downloadIdentityRefBytes,
+  getCanonicalFacePrompt,
   listIdentityRefs,
   type NyxIdentityRef,
 } from "@/server/domain/nyx/identity/repository";
@@ -29,7 +30,8 @@ export async function generateNyxStill(scene: string): Promise<ArrayBuffer | nul
   const refs = await refsForEdit();
   if (!refs.length) return null;
 
-  const prompt = buildNyxEditPrompt(scene);
+  const facePrompt = await getCanonicalFacePrompt();
+  const prompt = buildNyxEditPrompt(scene, facePrompt || undefined);
   const client = getOpenAIClient();
 
   const imageFiles = await Promise.all(

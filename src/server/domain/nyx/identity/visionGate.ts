@@ -1,6 +1,7 @@
 import { getOpenAIClient, openaiConfigured } from "@/server/ai/client/openai";
 import {
   downloadIdentityRefBytes,
+  getCanonicalFacePrompt,
   listIdentityRefs,
   type NyxIdentityRef,
 } from "@/server/domain/nyx/identity/repository";
@@ -40,6 +41,7 @@ export async function checkNyxIdentityGate(candidateBytes: ArrayBuffer): Promise
   if (!ref) return fail("Geen FACE-referentie.");
 
   const refBytes = await downloadIdentityRefBytes(ref);
+  const facePrompt = await getCanonicalFacePrompt();
   const client = getOpenAIClient();
 
   const response = await client.responses.create({
@@ -51,7 +53,11 @@ export async function checkNyxIdentityGate(candidateBytes: ArrayBuffer): Promise
           {
             type: "input_text",
             text: `Image 1 is the canonical FACE reference for Nyx. Image 2 is a candidate output.
-
+${
+  facePrompt
+    ? `\nCanonical face traits (candidate must match these AND image 1):\n${facePrompt}\n`
+    : ""
+}
 Pass ONLY if image 2 shows the EXACT same face as image 1 — same person, same facial structure (not a similar model, not a cousin look-alike). Expression, angle, and lighting may differ; identity may not.
 
 Return JSON: identicalFace (true only if face match is exact enough for identity lock), samePerson, confidence 0-1, reason (short).`,

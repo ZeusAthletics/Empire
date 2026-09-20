@@ -13,11 +13,17 @@ You MAY change only: facial expression and emotion, subtle head tilt, body pose,
     "different person, new face, face morph, doppelganger, blonde, red hair, cartoon, illustration, watermark",
 };
 
-export function buildNyxEditPrompt(scene: string): string {
+export function buildNyxEditPrompt(scene: string, canonicalFacePrompt?: string): string {
+  const faceCanon = canonicalFacePrompt?.trim();
   return [
     NYX_IDENTITY.editPromptPrefix,
+    faceCanon
+      ? `Canonical face description (must match reference image exactly — do not invent different features):\n${faceCanon}`
+      : null,
     NYX_IDENTITY.promptFragment,
     `Emotion / scene (face stays identical): ${scene}`,
     `Forbidden: ${NYX_IDENTITY.forbidden}. ${NYX_IDENTITY.negativeFragment}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
