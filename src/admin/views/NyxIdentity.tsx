@@ -4,7 +4,9 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { NyxGalleryItem } from "@/server/domain/nyx/galleryRepository";
 import type { NyxIdentityRef } from "@/server/domain/nyx/identity/repository";
+import { relTime } from "@/admin/format";
 
 const ROLES = [
   { value: "FACE", label: "Face (verplicht voor foto's)" },
@@ -13,7 +15,7 @@ const ROLES = [
   { value: "VARIANT_OK", label: "Variant OK" },
 ] as const;
 
-export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
+export function NyxIdentityView({ refs, gallery }: { refs: NyxIdentityRef[]; gallery: NyxGalleryItem[] }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +46,30 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
     }
   }
 
-  async function remove(id: string) {
+  async function removeRef(id: string) {
     setPending(true);
     await fetch(`/api/admin/nyx-identity?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     router.refresh();
     setPending(false);
+  }
+
+  async function removeGalleryItem(id: string) {
+    if (!window.confirm("Verwijderen uit galerij en Nyx-chat? Dit kan niet ongedaan.")) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/nyx-gallery?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const payload = (await response.json()) as { ok: boolean; error?: string };
+      if (!response.ok || !payload.ok) {
+        setError(payload.error ?? "Galerij-item kon niet worden verwijderd.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Geen verbinding.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function forceTestPhoto() {
@@ -159,7 +180,7 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
               <div className="td-main">{ref.label ?? ref.role}</div>
               <div className="td-sub mono">{ref.storagePath.split("/").pop()}</div>
               <div style={{ marginTop: 10 }}>
-                <button className="btn sm" type="button" disabled={pending} onClick={() => void remove(ref.id)}>
+                <button className="btn sm" type="button" disabled={pending} onClick={() => void removeRef(ref.id)}>
                   Verwijder
                 </button>
               </div>
@@ -171,6 +192,48 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
       {!refs.length ? (
         <div className="empty" style={{ marginTop: 14 }}>
           Nog geen referenties. Upload minstens één <b>Face</b> voordat Nyx autonoom foto&apos;s mag sturen.
+        </div>
+      ) : null}
+
+      <div className="head" style={{ marginTop: 28 }}>
+        <h2 className="display" style={{ fontSize: 18 }}>
+          Verstuurde beelden
+        </h2>
+        <span className="muted">Hardwig galerij + Nyx-chat · verwijderen wist ook de bijlage in het gesprek</span>
+      </div>
+
+      <div className="agrid" style={{ marginTop: 14 }}>
+        {gallery.map((item) => (
+          <article key={item.id} className="acard">
+            <div className="thumb">
+              {item.isVideo ? (
+                <video src={item.src} muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <img src={item.src} alt="" />
+              )}
+              <span className="badge up">{item.isVideo ? "VIDEO" : "FOTO"}</span>
+            </div>
+            <div className="ab">
+              <div className="td-sub mono">{relTime(item.createdAt)}</div>
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="btn sm"
+                  type="button"
+                  disabled={pending}
+                  style={{ color: "var(--coral)" }}
+                  onClick={() => void removeGalleryItem(item.id)}
+                >
+                  Verwijder bij speler
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {!gallery.length ? (
+        <div className="empty" style={{ marginTop: 14 }}>
+          Nog niets verstuurd naar Hardwig.
         </div>
       ) : null}
     </>

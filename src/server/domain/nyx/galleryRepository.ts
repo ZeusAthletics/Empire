@@ -64,12 +64,22 @@ export async function listNyxGallery(playerId: string): Promise<NyxGalleryItem[]
   });
 }
 
-export async function deleteMediaAsset(id: string): Promise<void> {
+export async function deleteNyxGalleryItem(playerId: string, mediaId: string): Promise<void> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.from("media_assets").select("storage_path").eq("id", id).maybeSingle();
+  const { data, error } = await admin
+    .from("media_assets")
+    .select("storage_path, kind, player_id")
+    .eq("id", mediaId)
+    .maybeSingle();
   if (error) throw error;
-  if (data?.storage_path) {
+  if (!data) throw new Error("Galerij-item niet gevonden.");
+  if (data.player_id !== playerId) throw new Error("Geen toegang tot dit item.");
+  if (data.kind !== "NYX_GALLERY") throw new Error("Alleen Nyx-galerij-items kunnen hier worden verwijderd.");
+
+  await admin.from("nyx_messages").update({ media_id: null } as never).eq("media_id", mediaId);
+  if (data.storage_path && data.storage_path !== "pending") {
     await admin.storage.from(MEDIA_BUCKET).remove([data.storage_path as string]);
   }
-  await admin.from("media_assets").delete().eq("id", id);
+  const { error: delError } = await admin.from("media_assets").delete().eq("id", mediaId);
+  if (delError) throw delError;
 }
