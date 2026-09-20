@@ -12,6 +12,7 @@ export async function lastOutreachSendAt(playerId: string): Promise<string | nul
     .select("created_at")
     .eq("player_id", playerId)
     .neq("action", "SILENCE")
+    .not("reason", "like", "Admin test%")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

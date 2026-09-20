@@ -209,3 +209,47 @@ export async function runNyxOutreachTick(playerId: string) {
   });
   return { action: delivered.action };
 }
+
+/** Admin-only: skip outreach gates and run identity-locked still + vision gate. */
+export async function forceNyxTestPhoto(
+  playerId: string,
+  input?: { scene?: string; caption?: string },
+): Promise<{ ok: boolean; action: "PHOTO" | "SILENCE"; reason: string; mediaId?: string; messageId?: string }> {
+  const intimacyTier = await computeIntimacyTier(playerId);
+  const scene =
+    input?.scene?.trim() ||
+    "Portrait, gold latex top, black leather, Kempen dusk light, confident gaze, same Nyx identity.";
+  const caption =
+    input?.caption?.trim() ||
+    "Ik wilde u even iets laten zien — zonder poespas.";
+
+  const delivered = await deliverStillOrVideo({
+    playerId,
+    scene,
+    caption,
+    wantVideo: false,
+    intimacyTier,
+    runId: null,
+  });
+
+  await logOutreachRun({
+    playerId,
+    action: delivered.ok ? delivered.action : "SILENCE",
+    reason: delivered.ok ? `Admin test photo: ${delivered.reason}` : delivered.reason,
+    intimacyTier,
+    mediaId: delivered.mediaId ?? null,
+    messageId: delivered.messageId ?? null,
+    runId: null,
+  });
+
+  if (!delivered.ok || delivered.action === "SILENCE") {
+    return { ok: false, action: "SILENCE", reason: delivered.reason };
+  }
+  return {
+    ok: true,
+    action: "PHOTO",
+    reason: delivered.reason,
+    mediaId: delivered.mediaId,
+    messageId: delivered.messageId,
+  };
+}

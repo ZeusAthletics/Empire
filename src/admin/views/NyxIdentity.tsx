@@ -19,6 +19,7 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [role, setRole] = useState<(typeof ROLES)[number]["value"]>("FACE");
+  const [testNote, setTestNote] = useState<string | null>(null);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -48,6 +49,26 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
     await fetch(`/api/admin/nyx-identity?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     router.refresh();
     setPending(false);
+  }
+
+  async function forceTestPhoto() {
+    setPending(true);
+    setError(null);
+    setTestNote(null);
+    try {
+      const response = await fetch("/api/admin/nyx-identity/test-photo", { method: "POST" });
+      const payload = (await response.json()) as { ok: boolean; error?: string; messageId?: string };
+      if (!response.ok || !payload.ok) {
+        setError(payload.error ?? "Testfoto mislukt.");
+        return;
+      }
+      setTestNote("Verstuurd naar Hardwig — check Nyx-chat en Profiel → Galerij.");
+      router.refresh();
+    } catch {
+      setError("Geen verbinding.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -101,6 +122,28 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
           </button>
         </div>
         {error ? <p style={{ color: "var(--coral)", marginTop: 10 }}>{error}</p> : null}
+        {testNote ? <p style={{ color: "var(--jade)", marginTop: 10 }}>{testNote}</p> : null}
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <div className="eyebrow">Test outreach</div>
+        <p className="muted" style={{ margin: "8px 0 12px", fontSize: 12.5 }}>
+          Genereert één identity-locked still (gpt-image-1 + vision gate) en stuurt die naar de gescope speler. Telt
+          niet mee als echte outreach-beslissing.
+        </p>
+        <button
+          className="btn sm"
+          type="button"
+          disabled={pending || !refs.some((ref) => ref.role === "FACE")}
+          onClick={() => void forceTestPhoto()}
+        >
+          {pending ? "Bezig…" : "Force test photo naar Hardwig"}
+        </button>
+        {!refs.some((ref) => ref.role === "FACE") ? (
+          <p className="muted" style={{ marginTop: 8, fontSize: 11.5 }}>
+            Upload eerst minstens één Face-ref.
+          </p>
+        ) : null}
       </div>
 
       <div className="agrid" style={{ marginTop: 14 }}>
