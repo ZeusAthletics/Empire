@@ -3,8 +3,16 @@
 import { useEffect } from "react";
 
 function syncFrame() {
-  const height = window.visualViewport?.height ?? window.innerHeight;
-  document.documentElement.style.setProperty("--frame-h", `${Math.round(height)}px`);
+  const layoutH = window.innerHeight;
+  const vv = window.visualViewport;
+  if (!vv) {
+    document.documentElement.style.setProperty("--frame-h", `${layoutH}px`);
+    return;
+  }
+  // Full-screen frame uses layout viewport (content under status bar). Only shrink when the keyboard is open.
+  const keyboardOpen = vv.height < layoutH * 0.75;
+  const height = keyboardOpen ? Math.round(vv.height + vv.offsetTop) : layoutH;
+  document.documentElement.style.setProperty("--frame-h", `${height}px`);
 }
 
 export function PwaRegister() {

@@ -53,6 +53,7 @@
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --nav-pad-b: max(var(--safe-b), 12px);
 
   /* Elevatie */
   --glow-gold: 0 0 0 1px rgba(201, 163, 78, 0.35), 0 8px 28px rgba(201, 163, 78, 0.14);
