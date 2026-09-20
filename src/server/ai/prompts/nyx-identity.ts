@@ -1,10 +1,23 @@
 export const NYX_IDENTITY = {
   name: "Nyx — locked identity",
-  promptFragment: `Same woman as the reference photos: Nyx. Same face, bone structure, age (late twenties), proportions, dark hair, black nail polish, gold lightning bolt necklace. Wardrobe: black-gold aesthetic — gold latex top, black latex or leather, optional gymwear that still reads black-gold. Photoreal, cinematic light, no cartoon.`,
+  /** Used for images.edit — face must stay identical to reference uploads. */
+  editPromptPrefix: `Identity lock: the woman's FACE in the output must be the SAME person as the first reference image — identical facial geometry (eyes, nose, lips, jaw, cheekbones, skin tone, hair color, hairline, age). Do NOT generate a new face or a look-alike.
+
+You MAY change only: facial expression and emotion, subtle head tilt, body pose, camera distance, lighting, background, outfit styling within Nyx's black-gold latex/leather look.`,
+  promptFragment: `Nyx: black nail polish, gold lightning bolt necklace, black-gold wardrobe (gold latex top, black latex or leather). Photoreal, cinematic, no cartoon.`,
   allowedVariants:
-    "3/4 angle, full body, gym, car interior, training setting, subtle smile, confident gaze, Kempen dusk or studio — always same person and signature look.",
+    "Expression/emotion and scene may change; face identity may not.",
   forbidden:
-    "new face, different hair color, cute casual off-brand, other aesthetic, different jewelry, missing necklace, readable text, logos, watermark, extra people facing camera, vulgar pose.",
+    "different face, new person, face swap drift, different hair color, missing necklace, cartoon, watermark, text, extra faces.",
   negativeFragment:
-    "different person, new face, blonde hair, red hair, casual hoodie look, cartoon, illustration, watermark, text overlay, logo",
+    "different person, new face, face morph, doppelganger, blonde, red hair, cartoon, illustration, watermark",
 };
+
+export function buildNyxEditPrompt(scene: string): string {
+  return [
+    NYX_IDENTITY.editPromptPrefix,
+    NYX_IDENTITY.promptFragment,
+    `Emotion / scene (face stays identical): ${scene}`,
+    `Forbidden: ${NYX_IDENTITY.forbidden}. ${NYX_IDENTITY.negativeFragment}`,
+  ].join("\n");
+}

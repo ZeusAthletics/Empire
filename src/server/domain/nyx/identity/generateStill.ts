@@ -1,50 +1,54 @@
 import { toFile } from "openai";
 import { getOpenAIClient, openaiConfigured } from "@/server/ai/client/openai";
-import { NYX_IDENTITY } from "@/server/ai/prompts/nyx-identity";
+import { buildNyxEditPrompt } from "@/server/ai/prompts/nyx-identity";
 import {
   downloadIdentityRefBytes,
-  pickRefsForGeneration,
+  listIdentityRefs,
   type NyxIdentityRef,
 } from "@/server/domain/nyx/identity/repository";
 
 const UA = "EmpireMode/1.0 (nyx-still)";
 
-async function refBytes(refs: NyxIdentityRef[]): Promise<ArrayBuffer[]> {
-  const out: ArrayBuffer[] = [];
-  for (const ref of refs) {
-    out.push(await downloadIdentityRefBytes(ref));
-  }
-  return out;
+function mimeForRef(ref: NyxIdentityRef): string {
+  const path = ref.storagePath.toLowerCase();
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  return "image/jpeg";
 }
 
-function buildPrompt(scene: string): string {
-  return [
-    NYX_IDENTITY.promptFragment,
-    `Allowed variants: ${NYX_IDENTITY.allowedVariants}`,
-    `Scene: ${scene}`,
-    `Avoid: ${NYX_IDENTITY.forbidden}. ${NYX_IDENTITY.negativeFragment}`,
-  ].join("\n");
+async function refsForEdit(): Promise<NyxIdentityRef[]> {
+  const all = await listIdentityRefs();
+  const face = all.find((ref) => ref.role === "FACE");
+  if (!face) return [];
+  const rest = all.filter((ref) => ref.id !== face.id).slice(0, 3);
+  return [face, ...rest];
 }
 
 export async function generateNyxStill(scene: string): Promise<ArrayBuffer | null> {
   if (!openaiConfigured()) return null;
-  const refs = await pickRefsForGeneration(3);
+  const refs = await refsForEdit();
   if (!refs.length) return null;
 
-  const prompt = buildPrompt(scene);
+  const prompt = buildNyxEditPrompt(scene);
   const client = getOpenAIClient();
-  const bytesList = await refBytes(refs);
-  const primary = bytesList[0];
-  if (!primary) return null;
 
-  const imageFile = await toFile(Buffer.from(primary), "face-ref.png", { type: "image/png" });
+  const imageFiles = await Promise.all(
+    refs.map(async (ref, index) => {
+      const bytes = await downloadIdentityRefBytes(ref);
+      const ext = mimeForRef(ref) === "image/png" ? "png" : mimeForRef(ref) === "image/webp" ? "webp" : "jpg";
+      return toFile(Buffer.from(bytes), `nyx-ref-${index}.${ext}`, { type: mimeForRef(ref) });
+    }),
+  );
 
   try {
     const result = await client.images.edit({
       model: "gpt-image-1",
-      image: imageFile,
+      image: imageFiles.length === 1 ? imageFiles[0] : imageFiles,
       prompt,
       size: "1024x1024",
+      input_fidelity: "high",
+      quality: "high",
+      output_format: "jpeg",
     });
     const b64 = result.data?.[0]?.b64_json;
     if (b64) {

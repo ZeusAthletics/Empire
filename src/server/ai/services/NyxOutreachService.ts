@@ -5,7 +5,7 @@ import { appendCompanionNyxMessage } from "@/server/domain/nyx/companionReposito
 import { storeNyxGalleryAsset } from "@/server/domain/nyx/galleryRepository";
 import { generateNyxStill } from "@/server/domain/nyx/identity/generateStill";
 import { hasFaceIdentityRef } from "@/server/domain/nyx/identity/repository";
-import { passesNyxIdentityGate } from "@/server/domain/nyx/identity/visionGate";
+import { checkNyxIdentityGate } from "@/server/domain/nyx/identity/visionGate";
 import { imageToVideoFromStill, openArtVideoEnabled } from "@/server/domain/media/openArtVideo";
 import { collectOutreachHooks, hasOutreachHook } from "@/server/domain/nyx/outreach/hooks";
 import { computeIntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
@@ -25,21 +25,20 @@ async function deliverStillOrVideo(input: {
     return { ok: false, action: "SILENCE", reason: "Geen identity refs — geen autonome foto." };
   }
 
-  let still = await generateNyxStill(input.scene);
-  if (!still) {
-    return { ok: false, action: "SILENCE", reason: "Still generatie mislukt." };
-  }
-
-  let passed = await passesNyxIdentityGate(still);
-  if (!passed) {
+  let still: ArrayBuffer | null = null;
+  let lastGateReason = "Identity gate: geen match met Nyx.";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     still = await generateNyxStill(input.scene);
     if (!still) {
-      return { ok: false, action: "SILENCE", reason: "Identity gate: retry mislukt." };
+      return { ok: false, action: "SILENCE", reason: "Still generatie mislukt." };
     }
-    passed = await passesNyxIdentityGate(still);
-    if (!passed) {
-      return { ok: false, action: "SILENCE", reason: "Identity gate: geen match met Nyx." };
-    }
+    const gate = await checkNyxIdentityGate(still);
+    if (gate.pass) break;
+    lastGateReason = `Identity gate: ${gate.reason} (${Math.round(gate.confidence * 100)}%)`;
+    still = null;
+  }
+  if (!still) {
+    return { ok: false, action: "SILENCE", reason: lastGateReason };
   }
 
   if (input.wantVideo && openArtVideoEnabled()) {

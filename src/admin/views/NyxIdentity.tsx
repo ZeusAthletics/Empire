@@ -77,7 +77,9 @@ export function NyxIdentityView({ refs }: { refs: NyxIdentityRef[] }) {
         <h1 className="display" style={{ fontSize: 22 }}>
           Nyx — identity vault
         </h1>
-        <span className="muted">Canonieke refs voor gpt-image-1 · niet de spelergalerij</span>
+        <span className="muted">
+          Face-ref = exact gezicht · gpt-image-1 edit met hoge input fidelity · niet de spelergalerij
+        </span>
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
