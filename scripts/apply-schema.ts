@@ -138,3 +138,10 @@ export async function applyNyxMessageMediaContextSchema() {
     "nyx message media context",
   );
 }
+
+export async function applyNyxMessageSeenSchema() {
+  await applySqlFile(
+    "supabase/migrations/20260920140000_nyx_message_seen.sql",
+    "nyx message seen at for media badge",
+  );
+}

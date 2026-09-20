@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { relTime } from "@/admin/format";
 import { INTIMACY_TIER_LABELS } from "@/server/domain/nyx/curated/tier";
@@ -92,30 +92,43 @@ export function NyxCuratedGalleryView({
     }
   }
 
-  async function saveItem(item: NyxCuratedItem, patch: { description: string; minIntimacyTier: IntimacyTier }) {
+  async function saveItem(
+    item: NyxCuratedItem,
+    patch: { description: string; minIntimacyTier: IntimacyTier; label: string },
+  ): Promise<boolean> {
     setPending(true);
     setError(null);
     try {
       const response = await fetch("/api/admin/nyx-curated", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id, description: patch.description, minIntimacyTier: patch.minIntimacyTier }),
+        body: JSON.stringify({
+          id: item.id,
+          description: patch.description,
+          minIntimacyTier: patch.minIntimacyTier,
+          label: patch.label.trim() || null,
+        }),
       });
       const payload = (await response.json()) as { ok: boolean; error?: string };
       if (!response.ok || !payload.ok) {
         setError(payload.error ?? "Opslaan mislukt.");
-        return;
+        return false;
       }
       router.refresh();
+      return true;
     } catch {
       setError("Geen verbinding.");
+      return false;
     } finally {
       setPending(false);
     }
   }
 
-  async function removeItem(id: string) {
-    if (!window.confirm("Curated item verwijderen? Al verstuurd blijft in spelergeschiedenis.")) return;
+  async function removeItem(id: string, sentToPlayer?: boolean) {
+    const msg = sentToPlayer
+      ? "Dit item is al naar de speler gestuurd. Verwijderen uit de beeldbank? (chat/galerij bij speler blijft.)"
+      : "Curated item definitief verwijderen?";
+    if (!window.confirm(msg)) return;
     setPending(true);
     await fetch(`/api/admin/nyx-curated?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     router.refresh();
@@ -212,11 +225,23 @@ function CuratedCard({
 }: {
   item: NyxCuratedItem;
   pending: boolean;
-  onSave: (item: NyxCuratedItem, patch: { description: string; minIntimacyTier: IntimacyTier }) => void;
-  onRemove: (id: string) => void;
+  onSave: (
+    item: NyxCuratedItem,
+    patch: { description: string; minIntimacyTier: IntimacyTier; label: string },
+  ) => Promise<boolean>;
+  onRemove: (id: string, sentToPlayer?: boolean) => void;
 }) {
   const [description, setDescription] = useState(item.description);
+  const [label, setLabel] = useState(item.label ?? "");
   const [minTier, setMinTier] = useState(item.minIntimacyTier);
+  const [savedNote, setSavedNote] = useState(false);
+
+  useEffect(() => {
+    setDescription(item.description);
+    setLabel(item.label ?? "");
+    setMinTier(item.minIntimacyTier);
+    setSavedNote(false);
+  }, [item.id, item.description, item.label, item.minIntimacyTier]);
 
   return (
     <article className="acard">
@@ -237,14 +262,33 @@ function CuratedCard({
       </div>
       <div className="ab">
         <div className="td-sub mono">{relTime(item.createdAt)} · min {item.minIntimacyTier}</div>
-        <textarea
-          className="input"
-          rows={3}
-          disabled={pending}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          style={{ marginTop: 8, width: "100%", fontSize: 12, resize: "vertical" }}
-        />
+        {item.label ? <div className="td-main" style={{ marginTop: 6, fontSize: 13 }}>{item.label}</div> : null}
+        <label className="field" style={{ display: "block", marginTop: 8 }}>
+          <span className="eyebrow" style={{ fontSize: 10 }}>
+            Label
+          </span>
+          <input
+            className="input"
+            disabled={pending}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Korte titel voor admin"
+            style={{ marginTop: 4, width: "100%", fontSize: 12 }}
+          />
+        </label>
+        <label className="field" style={{ display: "block", marginTop: 8 }}>
+          <span className="eyebrow" style={{ fontSize: 10 }}>
+            Omschrijving voor AI
+          </span>
+          <textarea
+            className="input"
+            rows={3}
+            disabled={pending}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            style={{ marginTop: 4, width: "100%", fontSize: 12, resize: "vertical" }}
+          />
+        </label>
         <select
           className="input"
           value={minTier}
@@ -263,14 +307,30 @@ function CuratedCard({
             className="btn sm gold"
             type="button"
             disabled={pending}
-            onClick={() => void onSave(item, { description, minIntimacyTier: minTier })}
+            onClick={() => {
+              void (async () => {
+                const ok = await onSave(item, { description, minIntimacyTier: minTier, label });
+                if (ok) setSavedNote(true);
+              })();
+            }}
           >
-            Opslaan
+            Opslaan wijzigingen
           </button>
-          <button className="btn sm" type="button" disabled={pending} onClick={() => void onRemove(item.id)}>
+          <button
+            className="btn sm"
+            type="button"
+            disabled={pending}
+            style={{ color: "var(--coral)" }}
+            onClick={() => void onRemove(item.id, item.sentToPlayer)}
+          >
             Verwijder
           </button>
         </div>
+        {savedNote ? (
+          <p className="muted" style={{ marginTop: 8, fontSize: 11, color: "var(--jade)" }}>
+            Opgeslagen.
+          </p>
+        ) : null}
         <div className="td-sub mono" style={{ marginTop: 8, fontSize: 10 }}>
           {item.id}
         </div>

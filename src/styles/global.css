@@ -351,6 +351,18 @@ a.card { text-decoration: none; color: inherit; display: block; }
   overflow: visible;
 }
 .nyx-fab img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.nyx-fab .nyx-alert-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e05252;
+  border: 2px solid var(--night);
+  z-index: 3;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
 .nyx-fab .bubble {
   position: absolute;
   top: -8px;

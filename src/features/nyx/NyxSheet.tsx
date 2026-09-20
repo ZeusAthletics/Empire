@@ -34,6 +34,8 @@ export function NyxSheet() {
   }, [talk?.messages.length]);
 
   async function loadTalk() {
+    await fetch("/api/nyx/seen", { method: "POST" }).catch(() => undefined);
+    window.dispatchEvent(new Event("nyx-badge-refresh"));
     const response = await fetch("/api/nyx/message");
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState };
     if (response.ok && data.talk) setTalk(data.talk);

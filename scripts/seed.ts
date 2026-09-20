@@ -17,6 +17,7 @@ import {
   applyNyxIdentityFacePromptSchema,
   applyNyxCuratedLibrarySchema,
   applyNyxMessageMediaContextSchema,
+  applyNyxMessageSeenSchema,
 } from "./apply-schema";
 import { compilePersona, DEFAULT_PERSONA } from "../src/server/ai/prompts/persona";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
@@ -887,6 +888,7 @@ async function main() {
     "supabase/migrations/20260920120000_nyx_curated_library.sql",
   );
   await applyNyxMessageMediaContextSchema();
+  await applyNyxMessageSeenSchema();
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
   const adminAuth = await ensureAuthUser(admin, adminEmail, adminPassword);
