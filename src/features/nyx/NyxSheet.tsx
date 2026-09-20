@@ -19,6 +19,7 @@ export function NyxSheet() {
   const { closeSheet, toast } = useEmpireUI();
   const [talk, setTalk] = useState<NyxTalkState | null>(null);
   const [pending, setPending] = useState(false);
+  const [pendingMedia, setPendingMedia] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editXp, setEditXp] = useState("");
@@ -45,6 +46,7 @@ export function NyxSheet() {
     const trimmed = text.trim();
     if (!trimmed || pending) return;
     setPending(true);
+    setPendingMedia(/\b(foto|video|selfie|beeld|plaatje)\b|stuur.*(foto|video)/i.test(trimmed));
     const response = await fetch("/api/nyx/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,11 +54,15 @@ export function NyxSheet() {
     });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
     setPending(false);
+    setPendingMedia(false);
     if (!response.ok || !data.ok || !data.talk) {
       toast(data.error ?? "Nyx kon niet antwoorden.");
       return;
     }
     setTalk(data.talk);
+    if (data.talk.messages.some((m) => m.role === "nyx" && m.mediaSrc)) {
+      window.dispatchEvent(new Event("nyx-badge-refresh"));
+    }
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -234,6 +240,7 @@ export function NyxSheet() {
                     src={message.mediaSrc}
                     alt=""
                     style={{ width: "100%", marginTop: 8, borderRadius: 10, display: "block" }}
+                    onError={() => toast("Foto kon niet laden — probeer opnieuw in te loggen of ververs de pagina.")}
                   />
                 )
               ) : null}
@@ -378,7 +385,11 @@ export function NyxSheet() {
             )}
           </div>
         ) : (
-          <p className="body">Geen open voorstellen. Vraag iets en ik maak er een missie van.</p>
+          <p className="body">
+            {pending && pendingMedia
+              ? "Nyx zoekt een foto of video — dit kan even duren…"
+              : "Geen open voorstellen. Vraag iets en ik maak er een missie van."}
+          </p>
         )}
       </div>
       <div className="sheet-foot">
@@ -389,6 +400,7 @@ export function NyxSheet() {
             placeholder="Vraag Nyx iets…"
             aria-label="Bericht aan Nyx"
             disabled={pending}
+            aria-busy={pending}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
