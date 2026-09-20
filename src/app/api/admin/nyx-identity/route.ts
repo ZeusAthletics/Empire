@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/server/auth/session";
+import { NYX_IMAGE_EDIT_MODELS, parseNyxImageEditModel } from "@/server/domain/nyx/identity/imageModel";
 import {
   deleteIdentityRef,
   getCanonicalFacePrompt,
+  getNyxImageEditModel,
   listIdentityRefs,
   setCanonicalFacePrompt,
+  setNyxImageEditModel,
   uploadIdentityRef,
   type NyxIdentityRefRole,
 } from "@/server/domain/nyx/identity/repository";
@@ -16,31 +19,44 @@ const ROLES: NyxIdentityRefRole[] = ["FACE", "BODY", "SIGNATURE_OUTFIT", "VARIAN
 export async function GET() {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
-  const [refs, facePrompt] = await Promise.all([listIdentityRefs(), getCanonicalFacePrompt()]);
-  return NextResponse.json({ ok: true, refs, facePrompt });
+  const [refs, facePrompt, imageEditModel] = await Promise.all([
+    listIdentityRefs(),
+    getCanonicalFacePrompt(),
+    getNyxImageEditModel(),
+  ]);
+  return NextResponse.json({ ok: true, refs, facePrompt, imageEditModel });
 }
 
 export async function PATCH(request: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ ok: false, error: "Geen toegang." }, { status: 403 });
 
-  let body: { facePrompt?: string };
+  let body: { facePrompt?: string; imageEditModel?: string };
   try {
-    body = (await request.json()) as { facePrompt?: string };
+    body = (await request.json()) as { facePrompt?: string; imageEditModel?: string };
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige JSON." }, { status: 400 });
   }
-  if (typeof body.facePrompt !== "string") {
-    return NextResponse.json({ ok: false, error: "facePrompt ontbreekt." }, { status: 400 });
+  const hasFace = typeof body.facePrompt === "string";
+  const hasModel = typeof body.imageEditModel === "string";
+  if (!hasFace && !hasModel) {
+    return NextResponse.json({ ok: false, error: "Geen velden om op te slaan." }, { status: 400 });
   }
-  if (body.facePrompt.length > 8000) {
+  if (hasFace && body.facePrompt!.length > 8000) {
     return NextResponse.json({ ok: false, error: "Face prompt te lang (max 8000)." }, { status: 400 });
+  }
+  if (hasModel) {
+    const model = parseNyxImageEditModel(body.imageEditModel);
+    if (!NYX_IMAGE_EDIT_MODELS.includes(model)) {
+      return NextResponse.json({ ok: false, error: "Ongeldig image model." }, { status: 400 });
+    }
   }
 
   try {
-    await setCanonicalFacePrompt(body.facePrompt);
-    const facePrompt = await getCanonicalFacePrompt();
-    return NextResponse.json({ ok: true, facePrompt });
+    if (hasFace) await setCanonicalFacePrompt(body.facePrompt!);
+    if (hasModel) await setNyxImageEditModel(parseNyxImageEditModel(body.imageEditModel));
+    const [facePrompt, imageEditModel] = await Promise.all([getCanonicalFacePrompt(), getNyxImageEditModel()]);
+    return NextResponse.json({ ok: true, facePrompt, imageEditModel });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Opslaan mislukt.";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });

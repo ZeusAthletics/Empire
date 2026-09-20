@@ -1,9 +1,11 @@
 import { toFile } from "openai";
 import { getOpenAIClient, openaiConfigured } from "@/server/ai/client/openai";
 import { buildNyxEditPrompt } from "@/server/ai/prompts/nyx-identity";
+import type { NyxImageEditModel } from "@/server/domain/nyx/identity/imageModel";
 import {
   downloadIdentityRefBytes,
   getCanonicalFacePrompt,
+  getNyxImageEditModel,
   listIdentityRefs,
   type NyxIdentityRef,
 } from "@/server/domain/nyx/identity/repository";
@@ -15,6 +17,26 @@ function mimeForRef(ref: NyxIdentityRef): string {
   if (path.endsWith(".png")) return "image/png";
   if (path.endsWith(".webp")) return "image/webp";
   return "image/jpeg";
+}
+
+function buildEditParams(
+  model: NyxImageEditModel,
+  imageFiles: Awaited<ReturnType<typeof toFile>>[],
+  prompt: string,
+) {
+  const image = imageFiles.length === 1 ? imageFiles[0] : imageFiles;
+  const shared = {
+    model,
+    image,
+    prompt,
+    size: "1024x1024" as const,
+    quality: "high" as const,
+    output_format: "jpeg" as const,
+  };
+  if (model === "gpt-image-1") {
+    return { ...shared, input_fidelity: "high" as const };
+  }
+  return shared;
 }
 
 async function refsForEdit(): Promise<NyxIdentityRef[]> {
@@ -30,7 +52,7 @@ export async function generateNyxStill(scene: string): Promise<ArrayBuffer | nul
   const refs = await refsForEdit();
   if (!refs.length) return null;
 
-  const facePrompt = await getCanonicalFacePrompt();
+  const [facePrompt, model] = await Promise.all([getCanonicalFacePrompt(), getNyxImageEditModel()]);
   const prompt = buildNyxEditPrompt(scene, facePrompt || undefined);
   const client = getOpenAIClient();
 
@@ -43,15 +65,7 @@ export async function generateNyxStill(scene: string): Promise<ArrayBuffer | nul
   );
 
   try {
-    const result = await client.images.edit({
-      model: "gpt-image-1",
-      image: imageFiles.length === 1 ? imageFiles[0] : imageFiles,
-      prompt,
-      size: "1024x1024",
-      input_fidelity: "high",
-      quality: "high",
-      output_format: "jpeg",
-    });
+    const result = await client.images.edit(buildEditParams(model, imageFiles, prompt));
     const b64 = result.data?.[0]?.b64_json;
     if (b64) {
       const buf = Buffer.from(b64, "base64");

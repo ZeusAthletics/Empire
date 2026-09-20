@@ -1,5 +1,10 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { MEDIA_BUCKET } from "@/server/domain/media/repository";
+import {
+  DEFAULT_NYX_IMAGE_EDIT_MODEL,
+  parseNyxImageEditModel,
+  type NyxImageEditModel,
+} from "@/server/domain/nyx/identity/imageModel";
 
 export type NyxIdentityRefRole = "FACE" | "BODY" | "SIGNATURE_OUTFIT" | "VARIANT_OK";
 
@@ -12,33 +17,59 @@ export type NyxIdentityRef = {
 };
 
 const FACE_PROMPT_KEY = "face_prompt";
+const IMAGE_EDIT_MODEL_KEY = "image_edit_model";
 
-export async function getCanonicalFacePrompt(): Promise<string> {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("nyx_identity_settings")
-    .select("value")
-    .eq("key", FACE_PROMPT_KEY)
-    .maybeSingle();
-  if (error) {
-    if (error.code === "42P01") return "";
-    throw error;
-  }
-  return (data?.value as string | undefined)?.trim() ?? "";
+function isMissingIdentitySettingsTable(error: { code?: string; message?: string }): boolean {
+  if (error.code === "42P01" || error.code === "PGRST205") return true;
+  const msg = error.message?.toLowerCase() ?? "";
+  return msg.includes("nyx_identity_settings") && (msg.includes("does not exist") || msg.includes("could not find"));
 }
 
-export async function setCanonicalFacePrompt(value: string): Promise<void> {
+function missingSettingsMigrationError(): Error {
+  return new Error("Database-migratie ontbreekt: voer 20260920110000_nyx_identity_face_prompt.sql uit in Supabase.");
+}
+
+async function getIdentitySetting(key: string, defaultValue = ""): Promise<string> {
   const admin = createSupabaseAdminClient();
-  const trimmed = value.trim();
+  const { data, error } = await admin.from("nyx_identity_settings").select("value").eq("key", key).maybeSingle();
+  if (error) {
+    if (isMissingIdentitySettingsTable(error)) return defaultValue;
+    throw error;
+  }
+  return (data?.value as string | undefined)?.trim() ?? defaultValue;
+}
+
+async function setIdentitySetting(key: string, value: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
   const { error } = await admin.from("nyx_identity_settings").upsert(
     {
-      key: FACE_PROMPT_KEY,
-      value: trimmed,
+      key,
+      value,
       updated_at: new Date().toISOString(),
     } as never,
     { onConflict: "key" },
   );
-  if (error) throw error;
+  if (error) {
+    if (isMissingIdentitySettingsTable(error)) throw missingSettingsMigrationError();
+    throw error;
+  }
+}
+
+export async function getCanonicalFacePrompt(): Promise<string> {
+  return getIdentitySetting(FACE_PROMPT_KEY, "");
+}
+
+export async function setCanonicalFacePrompt(value: string): Promise<void> {
+  await setIdentitySetting(FACE_PROMPT_KEY, value.trim());
+}
+
+export async function getNyxImageEditModel(): Promise<NyxImageEditModel> {
+  const raw = await getIdentitySetting(IMAGE_EDIT_MODEL_KEY, DEFAULT_NYX_IMAGE_EDIT_MODEL);
+  return parseNyxImageEditModel(raw);
+}
+
+export async function setNyxImageEditModel(model: NyxImageEditModel): Promise<void> {
+  await setIdentitySetting(IMAGE_EDIT_MODEL_KEY, model);
 }
 
 function mapRow(row: Record<string, unknown>): NyxIdentityRef {

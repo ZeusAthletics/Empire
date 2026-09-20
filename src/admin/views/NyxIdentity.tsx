@@ -6,6 +6,11 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { NyxGalleryItem } from "@/server/domain/nyx/galleryRepository";
 import type { NyxIdentityRef } from "@/server/domain/nyx/identity/repository";
+import {
+  NYX_IMAGE_EDIT_MODEL_LABELS,
+  NYX_IMAGE_EDIT_MODELS,
+  type NyxImageEditModel,
+} from "@/server/domain/nyx/identity/imageModel";
 import { relTime } from "@/admin/format";
 
 const ROLES = [
@@ -19,10 +24,12 @@ export function NyxIdentityView({
   refs,
   gallery,
   facePrompt: initialFacePrompt,
+  imageEditModel: initialImageEditModel,
 }: {
   refs: NyxIdentityRef[];
   gallery: NyxGalleryItem[];
   facePrompt: string;
+  imageEditModel: NyxImageEditModel;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -32,6 +39,8 @@ export function NyxIdentityView({
   const [testNote, setTestNote] = useState<string | null>(null);
   const [facePrompt, setFacePrompt] = useState(initialFacePrompt);
   const [facePromptNote, setFacePromptNote] = useState<string | null>(null);
+  const [imageEditModel, setImageEditModel] = useState<NyxImageEditModel>(initialImageEditModel);
+  const [imageModelNote, setImageModelNote] = useState<string | null>(null);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -106,6 +115,37 @@ export function NyxIdentityView({
     }
   }
 
+  async function saveImageEditModel(next: NyxImageEditModel) {
+    setImageEditModel(next);
+    setPending(true);
+    setError(null);
+    setImageModelNote(null);
+    try {
+      const response = await fetch("/api/admin/nyx-identity", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageEditModel: next }),
+      });
+      const payload = (await response.json()) as {
+        ok: boolean;
+        error?: string;
+        imageEditModel?: NyxImageEditModel;
+      };
+      if (!response.ok || !payload.ok) {
+        setError(payload.error ?? "Model kon niet worden opgeslagen.");
+        setImageEditModel(initialImageEditModel);
+        return;
+      }
+      if (payload.imageEditModel) setImageEditModel(payload.imageEditModel);
+      setImageModelNote(`Actief voor test + outreach: ${payload.imageEditModel ?? next}`);
+    } catch {
+      setError("Geen verbinding.");
+      setImageEditModel(initialImageEditModel);
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function forceTestPhoto() {
     setPending(true);
     setError(null);
@@ -133,7 +173,7 @@ export function NyxIdentityView({
           Nyx — identity vault
         </h1>
         <span className="muted">
-          Face-ref + face prompt = identity lock · gpt-image-1 edit · niet de spelergalerij
+          Face-ref + face prompt = identity lock · images.edit · niet de spelergalerij
         </span>
       </div>
 
@@ -141,7 +181,7 @@ export function NyxIdentityView({
         <div className="eyebrow">Canon face prompt (tekst)</div>
         <p className="muted" style={{ margin: "8px 0 10px", fontSize: 12.5 }}>
           Plak hier je gedetailleerde gezichtsbeschrijving (leeftijd, ogen, neus, kaak, huid, haar, sieraden). Wordt
-          samen met de Face-still naar gpt-image-1 en de vision gate gestuurd.
+          samen met de Face-still naar het gekozen image model en de vision gate gestuurd.
         </p>
         <textarea
           className="input"
@@ -210,9 +250,42 @@ export function NyxIdentityView({
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
+        <div className="eyebrow">Image editor (test)</div>
+        <p className="muted" style={{ margin: "8px 0 10px", fontSize: 12.5 }}>
+          Kies welk OpenAI-model <code>images.edit</code> gebruikt voor Nyx-stills. Geldt voor force test én autonome
+          outreach-foto&apos;s.
+        </p>
+        <label className="field" style={{ display: "block", maxWidth: 420 }}>
+          <span className="eyebrow">Model</span>
+          <select
+            className="input"
+            value={imageEditModel}
+            disabled={pending}
+            onChange={(event) => void saveImageEditModel(event.target.value as NyxImageEditModel)}
+            style={{ marginTop: 6, width: "100%" }}
+          >
+            {NYX_IMAGE_EDIT_MODELS.map((value) => (
+              <option key={value} value={value}>
+                {NYX_IMAGE_EDIT_MODEL_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {imageModelNote ? (
+          <p className="muted" style={{ marginTop: 8, fontSize: 12, color: "var(--jade)" }}>
+            {imageModelNote}
+          </p>
+        ) : (
+          <p className="muted" style={{ marginTop: 8, fontSize: 11.5 }}>
+            Huidige keuze: <span className="mono">{imageEditModel}</span>
+          </p>
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
         <div className="eyebrow">Test outreach</div>
         <p className="muted" style={{ margin: "8px 0 12px", fontSize: 12.5 }}>
-          Genereert één identity-locked still (gpt-image-1 + vision gate) en stuurt die naar de gescope speler. Telt
+          Genereert één identity-locked still ({imageEditModel} + vision gate) en stuurt die naar de gescope speler. Telt
           niet mee als echte outreach-beslissing.
         </p>
         <button
