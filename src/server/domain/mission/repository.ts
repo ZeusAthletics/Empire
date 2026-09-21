@@ -153,14 +153,18 @@ async function loadMission(playerId: string, missionId: string): Promise<{
   return { row: missionRow, objectives: objectiveRows, mission };
 }
 
-export async function listMissions(playerId: string): Promise<PublicMission[]> {
+async function loadMissionList(playerId: string, includeHiddenPlanned: boolean): Promise<PublicMission[]> {
   const admin = createSupabaseAdminClient();
-  const { data: rows, error } = await admin
+  let query = admin
     .from("missions")
     .select("*")
     .eq("player_id", playerId)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
+  if (!includeHiddenPlanned) {
+    query = query.not("status", "in", '("PLANNED","ARCHIVED")');
+  }
+  const { data: rows, error } = await query;
   if (error) throw error;
   const missions = (rows ?? []) as MissionRow[];
   const ids = missions.map((row) => row.id);
@@ -200,6 +204,14 @@ export async function listMissions(playerId: string): Promise<PublicMission[]> {
     ),
     missions,
   );
+}
+
+export async function listMissions(playerId: string): Promise<PublicMission[]> {
+  return loadMissionList(playerId, false);
+}
+
+export async function listAllMissionsForAdmin(playerId: string): Promise<PublicMission[]> {
+  return loadMissionList(playerId, true);
 }
 
 export async function getMission(playerId: string, missionId: string): Promise<PublicMission> {
@@ -252,7 +264,7 @@ async function attestAndPersist(
 ) {
   const rewardState: RewardMission = {
     kind: loaded.row.kind,
-    status: loaded.row.status,
+    status: loaded.row.status as RewardMission["status"],
     xpReward: loaded.row.xp_reward,
     xpGranted: loaded.row.xp_granted,
     statReward: { key: loaded.row.stat_reward_key, amount: loaded.row.stat_reward_amount },
@@ -300,6 +312,13 @@ async function attestAndPersist(
 
   await applyPlayerReward(playerId, result.xpDelta, result.statDelta);
 
+  if (result.completed) {
+    const { scheduleCampaignProgressAfterMissionComplete } = await import(
+      "@/server/domain/mission/campaignProgressTrigger"
+    );
+    scheduleCampaignProgressAfterMissionComplete(playerId, loaded.row.id);
+  }
+
   const mission = (await loadMission(playerId, loaded.row.id)).mission;
   const label = mission.objectives.find((objective) => objective.id === objectiveId)?.label ?? "objectief";
   return {
@@ -317,7 +336,7 @@ async function finalizeAndPersist(
 ) {
   const rewardState: RewardMission = {
     kind: loaded.row.kind,
-    status: loaded.row.status,
+    status: loaded.row.status as RewardMission["status"],
     xpReward: loaded.row.xp_reward,
     xpGranted: loaded.row.xp_granted,
     statReward: { key: loaded.row.stat_reward_key, amount: loaded.row.stat_reward_amount },
@@ -339,6 +358,10 @@ async function finalizeAndPersist(
     .eq("id", loaded.row.id);
   if (missionError) throw missionError;
   await applyPlayerReward(playerId, result.xpDelta, result.statDelta);
+  const { scheduleCampaignProgressAfterMissionComplete } = await import(
+    "@/server/domain/mission/campaignProgressTrigger"
+  );
+  scheduleCampaignProgressAfterMissionComplete(playerId, loaded.row.id);
   const mission = (await loadMission(playerId, loaded.row.id)).mission;
   return { mission, xpDelta: result.xpDelta, message: `Missie voltooid · +${result.xpDelta} XP` };
 }

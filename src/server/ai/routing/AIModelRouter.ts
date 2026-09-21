@@ -28,6 +28,7 @@ export type ModelRoutingDecision = {
 function effortFor(tier: ModelTier): ReasoningEffort {
   if (tier === "ECONOMY") return "none";
   if (tier === "BALANCED") return "low";
+  if (tier === "DIRECTOR") return "high";
   return "high";
 }
 

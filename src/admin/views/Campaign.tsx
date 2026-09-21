@@ -1,18 +1,27 @@
 import type { PublicCampaign } from "@/server/domain/campaign/types";
+import type { ChapterExitCriterionRow } from "@/server/domain/campaign/types";
 import type { PublicMission } from "@/server/domain/mission/types";
 import type { SessionPlayer } from "@/server/domain/player/types";
 import { tagTone } from "@/admin/format";
+import { CampaignActions } from "@/admin/views/CampaignActions";
 
 export function CampaignView({
   campaign,
   missions,
   counts,
   stats,
+  chapterDetail,
 }: {
   campaign: PublicCampaign | null;
   missions: PublicMission[];
   counts: Record<string, number>;
   stats: SessionPlayer["stats"];
+  chapterDetail?: {
+    strategicPurpose: string | null;
+    skeleton: Record<string, unknown> | null;
+    exitCriteria: ChapterExitCriterionRow[];
+    lockedFields: string[];
+  } | null;
 }) {
   const chapter = campaign?.chapter;
   return (
@@ -53,6 +62,32 @@ export function CampaignView({
           </div>
         </div>
       </div>
+      <CampaignActions />
+      {chapterDetail ? (
+        <div className="card" style={{ marginTop: 12 }}>
+          <span className="eyebrow">Skeleton & exit criteria</span>
+          {chapterDetail.strategicPurpose ? (
+            <div className="quote" style={{ marginTop: 8 }}>{chapterDetail.strategicPurpose}</div>
+          ) : null}
+          <div className="table" style={{ marginTop: 10 }}>
+            {chapterDetail.exitCriteria.map((row) => (
+              <div key={row.id} className="tr" style={{ gridTemplateColumns: "1.4fr .5fr .4fr .4fr" }}>
+                <span className="td-main">{row.label}</span>
+                <span className="tag">{row.kind}</span>
+                <span className="tag">{row.status}</span>
+                <span className="mono muted">
+                  {row.target_value != null ? String(row.target_value) : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+          {chapterDetail.lockedFields.length ? (
+            <div className="mono muted" style={{ marginTop: 8 }}>
+              Locked: {chapterDetail.lockedFields.join(", ")}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="card" style={{ marginTop: 12 }}>
         <span className="eyebrow">Stats</span>
         <div className="grid g4" style={{ marginTop: 10 }}>

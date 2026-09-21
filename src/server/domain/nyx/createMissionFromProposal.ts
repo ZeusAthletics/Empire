@@ -75,6 +75,8 @@ export async function createMissionFromProposal(
     .is("deleted_at", null)
     .maybeSingle();
 
+  const initialStatus = blueprint.track === "MAIN_STORY" ? "PROPOSED" : "ACTIVE";
+
   const { data: mission, error } = await admin
     .from("missions")
     .insert({
@@ -86,7 +88,7 @@ export async function createMissionFromProposal(
       title: payload.title,
       why: blueprint.why,
       main_objective: blueprint.mainObjective,
-      status: "ACTIVE",
+      status: initialStatus,
       difficulty: mapDifficulty(payload.difficulty),
       estimate_label: blueprint.estimate,
       impact: payload.impact,

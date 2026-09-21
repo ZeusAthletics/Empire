@@ -24,6 +24,7 @@ export const DIFFICULTY_LABEL: Record<MissionDifficulty, string> = {
 };
 
 export const STATUS_LABEL: Record<MissionStatus, string> = {
+  PLANNED: "Gepland",
   PROPOSED: "Voorgesteld",
   ACTIVE: "Actief",
   BLOCKED: "Geblokkeerd",
@@ -31,6 +32,7 @@ export const STATUS_LABEL: Record<MissionStatus, string> = {
   COMPLETED_UNVERIFIED: "Voltooid zonder bewijs",
   ABANDONED: "Losgelaten",
   LOCKED: "Vergrendeld",
+  ARCHIVED: "Gearchiveerd",
 };
 
 export function firstSentence(text: string) {

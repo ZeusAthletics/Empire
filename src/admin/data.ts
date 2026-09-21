@@ -2,7 +2,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { findPublicCampaignByPlayerId } from "@/server/domain/campaign/repository";
 import { listMedia } from "@/server/domain/media/repository";
 import { listMemories } from "@/server/domain/memory/repository";
-import { listMissions } from "@/server/domain/mission/repository";
+import { listAllMissionsForAdmin } from "@/server/domain/mission/repository";
+import { listExitCriteria } from "@/server/domain/campaign/chapterRepository";
+import { getCampaignRecord } from "@/server/domain/campaign/review";
 import { getNotificationBudget } from "@/server/domain/notify/repository";
 import { listAllOpportunities } from "@/server/domain/opportunity/repository";
 import { listPatterns } from "@/server/domain/pattern/repository";
@@ -223,15 +225,26 @@ export async function loadRadarPage(player: SessionPlayer) {
 }
 
 export async function loadCampaignPage(player: SessionPlayer) {
-  const [campaign, missions] = await Promise.all([
+  const [campaign, missions, record] = await Promise.all([
     findPublicCampaignByPlayerId(player.id),
-    listMissions(player.id),
+    listAllMissionsForAdmin(player.id),
+    getCampaignRecord(player.id),
   ]);
   const counts: Record<string, number> = {};
   for (const mission of missions) {
     counts[mission.status] = (counts[mission.status] ?? 0) + 1;
   }
-  return { campaign, missions, counts, stats: player.stats };
+  const chapterId = record?.chapter?.id ?? null;
+  const exitCriteria = chapterId ? await listExitCriteria(chapterId).catch(() => []) : [];
+  const chapterDetail = record?.chapter
+    ? {
+        strategicPurpose: record.chapter.strategic_purpose,
+        skeleton: record.chapter.skeleton,
+        exitCriteria,
+        lockedFields: record.chapter.locked_fields ?? [],
+      }
+    : null;
+  return { campaign, missions, counts, stats: player.stats, chapterDetail };
 }
 
 export async function loadPromptsPage() {

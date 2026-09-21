@@ -68,8 +68,8 @@ function fallbackCompile(transcript: string): IntakeCompile {
         xp: 400,
         impact: "Zet de north star om in één meetbare actie deze week.",
         blueprint: {
-          kind: "MAIN",
-          track: "MAIN_STORY",
+          kind: "NETWORK",
+          track: "SIDE_QUEST",
           why: "Zonder één concrete eerste zet blijft het profiel een intentie.",
           mainObjective: "Kies één actie die deze week bewijs levert voor uw doel.",
           objectives: [{ label: "Schrijf het doel in één zin." }, { label: "Zet één afspraak of levering in de agenda." }],
@@ -128,7 +128,8 @@ function parseCompile(raw: string | null, transcript: string): IntakeCompile {
     const missions = (parsed.missions ?? [])
       .map((mission, index) => sanitizeMission(mission, index))
       .filter((item): item is SideQuestProposalPayload => Boolean(item))
-      .slice(0, 4);
+      .filter((item) => item.blueprint.track === "SIDE_QUEST")
+      .slice(0, 2);
     return {
       title: (parsed.title ?? fallback.title).trim() || fallback.title,
       principles: (parsed.principles ?? []).map((item) => item.trim()).filter(Boolean).slice(0, 8),
@@ -168,7 +169,7 @@ export async function confirmIntake(playerId: string): Promise<{ next: "/home"; 
     ? await runNyxTask({
         playerId,
         task: "TARGET_STATE_ANALYSIS",
-        text: `Compileer het intake-gesprek tot een bevestigd profiel. Alleen feiten die de speler zelf zei. Constraints bevatten altijd: nooit JDI-relaties benaderen. Missions: 1 MAIN_STORY + 2 SIDE_QUEST als SIDE_QUEST-voorstellen. people blijft leeg tot er contacten zijn. locationAddress alleen als hij een echt Belgisch adres noemde.\n\n${transcript}`,
+        text: `Compileer het intake-gesprek tot een bevestigd profiel. Alleen feiten die de speler zelf zei. Constraints bevatten altijd: nooit JDI-relaties benaderen. Missions: maximaal 2 SIDE_QUEST als SIDE_QUEST-voorstellen (geen MAIN_STORY — die komt uit de Campaign Director). people blijft leeg tot er contacten zijn. locationAddress alleen als hij een echt Belgisch adres noemde.\n\n${transcript}`,
         invokeModel: true,
         jsonSchema: INTAKE_COMPILE_SCHEMA as unknown as Record<string, unknown>,
       }).catch(() => null)
@@ -207,6 +208,9 @@ export async function confirmIntake(playerId: string): Promise<{ next: "/home"; 
   for (const mission of compiled.missions) {
     await createSideQuestProposal(playerId, mission, mission.blueprint.why);
   }
+
+  const { scheduleDirectorBootstrap } = await import("@/server/domain/campaign/director/intakeBootstrap");
+  scheduleDirectorBootstrap(playerId);
 
   return { next: "/home", missionCount: compiled.missions.length };
 }

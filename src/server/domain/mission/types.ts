@@ -3,13 +3,15 @@ import type { StatKey } from "@/server/domain/player/types";
 export type MissionKind = "MAIN" | "BOSS" | "EVENT" | "BUSINESS" | "CONTENT" | "NETWORK" | "OPPORTUNITY";
 export type MissionTrack = "MAIN_STORY" | "SIDE_QUEST";
 export type MissionStatus =
+  | "PLANNED"
   | "PROPOSED"
   | "ACTIVE"
   | "BLOCKED"
   | "COMPLETED"
   | "COMPLETED_UNVERIFIED"
   | "ABANDONED"
-  | "LOCKED";
+  | "LOCKED"
+  | "ARCHIVED";
 export type MissionDifficulty = "LOW" | "MEDIUM" | "HIGH" | "BOSS";
 export type ObjectiveStatus = "OPEN" | "COMPLETED" | "SKIPPED";
 export type EvidenceKind = "JOURNAL_ENTRY" | "PHOTO" | "CONTACT_LINK" | "DOCUMENT" | "USER_ATTESTED";

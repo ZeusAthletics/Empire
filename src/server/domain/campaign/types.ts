@@ -16,9 +16,30 @@ export type CampaignRow = {
   status: CampaignStatus;
   source: RecordSource;
   locked_by_admin: boolean;
+  progression_lock_at: string | null;
+  plan_version: number;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+};
+
+export type ExitCriterionKind = "STAT" | "EMPIRE_VALUE" | "MISSION_COUNT" | "MANUAL";
+export type ExitComparator = "GTE" | "LTE" | "EQ";
+export type ExitCriterionStatus = "OPEN" | "MET" | "WAIVED";
+
+export type ChapterExitCriterionRow = {
+  id: string;
+  chapter_id: string;
+  player_id: string;
+  label: string;
+  kind: ExitCriterionKind;
+  stat_key: StatKey | null;
+  comparator: ExitComparator | null;
+  target_value: number | null;
+  status: ExitCriterionStatus;
+  met_at: string | null;
+  locked_by_admin: boolean;
+  sort_order: number;
 };
 
 export type ChapterRow = {
@@ -29,6 +50,16 @@ export type ChapterRow = {
   roman: string;
   name: string;
   tagline: string;
+  subtitle: string | null;
+  strategic_purpose: string | null;
+  start_conditions: string[];
+  desired_state: string[];
+  dependencies: string[];
+  related_stats: StatKey[];
+  strategic_risks: string[];
+  assumptions: string[];
+  skeleton: Record<string, unknown> | null;
+  locked_fields: string[];
   economic_from: number;
   economic_to: number;
   economic_current: number;

@@ -12,6 +12,7 @@ import { handleCasualUserTurn } from "../fallback/nyxReply";
 const LUNA = getModelForTier("ECONOMY");
 const TERRA = getModelForTier("BALANCED");
 const SOL = getModelForTier("STRATEGIC");
+const DIRECTOR = getModelForTier("DIRECTOR");
 
 test("1 MEMORY_EXTRACTION routes to Luna", () => {
   const { decision } = planMemoryExtraction();
@@ -37,16 +38,16 @@ test("4 SIDE_QUEST_GENERATION with strategicImpact 0.95 escalates to Sol", () =>
   assert.equal(decision.model, SOL);
 });
 
-test("5 MAIN_QUEST_GENERATION is always at least Sol", () => {
+test("5 MAIN_QUEST_GENERATION routes to Director", () => {
   const { decision } = planMainQuest();
-  assert.equal(decision.modelTier, "STRATEGIC");
-  assert.equal(decision.model, SOL);
+  assert.equal(decision.modelTier, "DIRECTOR");
+  assert.equal(decision.model, DIRECTOR);
 });
 
-test("6 CHAPTER_PLANNING routes to Sol", () => {
+test("6 CHAPTER_PLANNING routes to Director", () => {
   const { decision } = planChapter();
-  assert.equal(decision.modelTier, "STRATEGIC");
-  assert.equal(decision.model, SOL);
+  assert.equal(decision.modelTier, "DIRECTOR");
+  assert.equal(decision.model, DIRECTOR);
 });
 
 test("7 CONTENT_FORMATTING routes to Luna", () => {

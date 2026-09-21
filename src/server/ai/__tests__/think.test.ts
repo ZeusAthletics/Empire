@@ -103,8 +103,9 @@ test("24 campaign replan without materiality keeps the campaign", () => {
   assert.equal(locked.replan, false);
 });
 
-test("25 CAMPAIGN_REVIEW and CAMPAIGN_REPLAN stay on Sol", () => {
+test("25 CAMPAIGN_REVIEW stays on Sol; director tasks use Director", () => {
+  const DIRECTOR = getModelForTier("DIRECTOR");
   assert.equal(planCampaignReview().decision.model, SOL);
-  assert.equal(planCampaignReplan().decision.model, SOL);
-  assert.equal(planChapter().decision.model, SOL);
+  assert.equal(planCampaignReplan().decision.model, DIRECTOR);
+  assert.equal(planChapter().decision.model, DIRECTOR);
 });

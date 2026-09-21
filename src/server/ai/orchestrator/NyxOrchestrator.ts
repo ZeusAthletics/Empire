@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { callOpenAIResponses, openaiConfigured } from "@/server/ai/client/openai";
 import { buildNyxContext } from "@/server/ai/context/NyxContextBuilder";
 import { writeNyxRun } from "@/server/ai/orchestrator/nyxRuns";
+import { CAMPAIGN_DIRECTOR_GUIDE } from "@/server/ai/prompts/campaign-director";
 import { MISSION_PLANNER } from "@/server/ai/prompts/mission-planner";
 import { INTAKE_GUIDE } from "@/server/ai/prompts/intake";
 import { NYX_CASUAL_CHAT_GUIDE } from "@/server/ai/prompts/nyx-casual";
@@ -83,10 +84,14 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
       success = false;
       errorMessage = "OPENAI_API_KEY ontbreekt.";
     } else {
+      const directorTasks =
+        task === "CHAPTER_PLANNING" || task === "MAIN_QUEST_GENERATION" || task === "CAMPAIGN_REPLAN";
       const extra =
-        task === "SIDE_QUEST_GENERATION" || task === "HIGH_IMPACT_SIDE_QUEST" || task === "MAIN_QUEST_GENERATION"
-          ? `\n\n${MISSION_PLANNER}`
-          : task === "PLAYER_INTAKE"
+        directorTasks
+          ? `\n\n${CAMPAIGN_DIRECTOR_GUIDE}`
+          : task === "SIDE_QUEST_GENERATION" || task === "HIGH_IMPACT_SIDE_QUEST"
+            ? `\n\n${MISSION_PLANNER}`
+            : task === "PLAYER_INTAKE"
             ? `\n\n${INTAKE_GUIDE}`
             : task === "NYX_OUTREACH"
               ? `\n\n${NYX_OUTREACH_GUIDE}`
@@ -149,7 +154,11 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
     runId = null;
   }
 
-  if (input.invokeModel && !success && decision.modelTier === "STRATEGIC") {
+  if (
+    input.invokeModel &&
+    !success &&
+    (decision.modelTier === "STRATEGIC" || decision.modelTier === "DIRECTOR")
+  ) {
     throw new StrategicPendingError(errorMessage);
   }
 

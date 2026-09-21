@@ -1,5 +1,11 @@
 import { planNyxTask } from "@/server/ai/orchestrator/NyxOrchestrator";
+import { generateChapterSkeleton } from "@/server/ai/services/ChapterPlanner";
 import type { ChapterProposal } from "@/server/ai/schemas/chapter.schema";
+import { parseChapterSkeletonPlan } from "@/server/ai/schemas/chapter-skeleton.schema";
+import {
+  applySkeletonPlan,
+  replaceExitCriteriaFromPlan,
+} from "@/server/domain/campaign/chapterRepository";
 import { assessCampaignReplan } from "@/server/domain/campaign/replan";
 import { getCampaignRecord } from "@/server/domain/campaign/review";
 import { createCampaignReviewProposal } from "@/server/domain/nyx/proposalRepository";
@@ -18,11 +24,26 @@ export function proposeChapterChange(proposal: ChapterProposal, lockedByAdmin = 
   return { persisted: true as const, payload: proposal };
 }
 
-export async function runChapterPipeline(playerId: string, proposal: ChapterProposal) {
+export async function runChapterPipeline(playerId: string, rawPlan: string | ChapterProposal) {
   const record = await getCampaignRecord(playerId);
-  const locked = Boolean(record?.chapter?.locked_by_admin);
+  if (!record?.chapter) return { persisted: false as const, reason: "Geen actief hoofdstuk." };
+  const locked = Boolean(record.chapter.locked_by_admin);
+
+  if (typeof rawPlan === "string") {
+    const plan = parseChapterSkeletonPlan(rawPlan);
+    if (!plan) return { persisted: false as const, reason: "Ongeldig chapter-skeleton JSON." };
+    await applySkeletonPlan(record.chapter, plan);
+    await replaceExitCriteriaFromPlan(playerId, record.chapter.id, plan, locked);
+    return { persisted: true as const, payload: plan };
+  }
+
   try {
-    const result = proposeChapterChange(proposal, locked);
+    const result = proposeChapterChange(rawPlan, locked);
+    const generated = await generateChapterSkeleton(playerId, record.chapter, "replan");
+    if (generated) {
+      await applySkeletonPlan(record.chapter, generated);
+      await replaceExitCriteriaFromPlan(playerId, record.chapter.id, generated, locked);
+    }
     return result;
   } catch (error) {
     if (error instanceof CampaignRuleError) return { persisted: false as const, reason: error.message };
