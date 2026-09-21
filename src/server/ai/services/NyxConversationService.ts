@@ -13,6 +13,8 @@ import {
   getOrCreateTalk,
 } from "@/server/domain/nyx/talkRepository";
 import type { NyxTalkState } from "@/server/domain/nyx/types";
+import { findPlayerById } from "@/server/domain/player/repository";
+import { formatPlayerLocalTime, formatPlayerLocalTimeLine } from "@/server/domain/player/localTime";
 
 export function planCasualChat(text: string, risk?: Partial<IntelligenceRiskProfile>) {
   return planNyxTask({ task: "CASUAL_CHAT", text, risk });
@@ -63,8 +65,12 @@ export async function sendNyxMessage(playerId: string, input: SendNyxMessageInpu
     attachmentContext: attachmentContext || null,
   });
 
-  const ctx = await featuredTalkContext(playerId);
-  const recent = await recentPlayerChatTurns(playerId);
+  const [ctx, recent, player] = await Promise.all([
+    featuredTalkContext(playerId),
+    recentPlayerChatTurns(playerId),
+    findPlayerById(playerId),
+  ]);
+  const localLine = player ? formatPlayerLocalTimeLine(formatPlayerLocalTime(player.timeZone)) : "";
 
   const hasUserAttachment = Boolean(mediaId || linkedUrl);
   const mediaAttempt =
@@ -99,7 +105,7 @@ export async function sendNyxMessage(playerId: string, input: SendNyxMessageInpu
     ? await runNyxTask({
         playerId,
         task: "CASUAL_CHAT",
-        text: `${userContent}\n\nRecente beurten:\n${recent.join("\n")}\n${formatActiveMissionsForPrompt(ctx.activeMissions)}${attachmentNote}${mediaFailNote}`,
+        text: `${userContent}\n\n${localLine ? `${localLine}\n` : ""}Recente beurten:\n${recent.join("\n")}\n${formatActiveMissionsForPrompt(ctx.activeMissions)}${attachmentNote}${mediaFailNote}`,
         invokeModel: true,
       }).catch(() => null)
     : null;

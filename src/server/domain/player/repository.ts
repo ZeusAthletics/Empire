@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { geocodePlace } from "@/server/domain/geo/geocode";
+import { normalizePlayerTimeZone } from "@/server/domain/player/localTime";
 import { mapPlayer, type SessionPlayer } from "@/server/domain/player/types";
 import type { PlayerRow, StatValueRow } from "@/server/domain/player/types";
 
@@ -108,4 +109,12 @@ export async function updateHomeAddress(playerId: string, raw: string): Promise<
     throw error ?? new Error("Home Base kon niet worden bewaard.");
   }
   return withStats(data as PlayerRow);
+}
+
+export async function updatePlayerTimeZone(playerId: string, timeZone: string): Promise<void> {
+  const tz = normalizePlayerTimeZone(timeZone);
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.from("players").update({ timezone: tz } as never).eq("id", playerId);
+  if (error && /timezone|schema cache|column/i.test(error.message)) return;
+  if (error) throw error;
 }

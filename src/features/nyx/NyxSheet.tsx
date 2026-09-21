@@ -15,6 +15,15 @@ const SHORTCUTS = [
   "Geef me één high-impact move.",
 ];
 
+function playerTimeZoneHeaders(): HeadersInit {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return tz ? { "x-player-timezone": tz } : {};
+  } catch {
+    return {};
+  }
+}
+
 export function NyxSheet() {
   const router = useRouter();
   const { closeSheet, toast } = useEmpireUI();
@@ -42,12 +51,16 @@ export function NyxSheet() {
     logRef.current?.lastElementChild?.scrollIntoView({ block: "nearest" });
   }, [talk?.messages.length]);
 
-  async function loadTalk() {
+  async function markNyxSeen() {
     await fetch("/api/nyx/seen", { method: "POST" }).catch(() => undefined);
     window.dispatchEvent(new Event("nyx-badge-refresh"));
-    const response = await fetch("/api/nyx/message");
+  }
+
+  async function loadTalk() {
+    const response = await fetch("/api/nyx/message", { headers: playerTimeZoneHeaders() });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState };
     if (response.ok && data.talk) setTalk(data.talk);
+    await markNyxSeen();
   }
 
   function clearAttachment() {
@@ -85,7 +98,7 @@ export function NyxSheet() {
     );
     const response = await fetch("/api/nyx/message", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
       body: JSON.stringify({
         text: trimmed,
         mediaId: attachMediaId,
@@ -100,9 +113,7 @@ export function NyxSheet() {
       return;
     }
     setTalk(data.talk);
-    if (data.talk.messages.some((m) => m.role === "nyx" && m.mediaSrc)) {
-      window.dispatchEvent(new Event("nyx-badge-refresh"));
-    }
+    await markNyxSeen();
     if (inputRef.current) inputRef.current.value = "";
     clearAttachment();
     setLinkUrl("");

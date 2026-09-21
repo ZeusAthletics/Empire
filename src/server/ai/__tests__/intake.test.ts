@@ -50,6 +50,7 @@ test("unconfirmed Hardwig is sent to intake, not home", () => {
     lifetimeXp: 0,
     homeAddress: null,
     intakeCompletedAt: null,
+    timeZone: "Europe/Brussels",
     stats: [],
   } satisfies SessionPlayer;
   assert.equal(playerNeedsIntake(player), true);

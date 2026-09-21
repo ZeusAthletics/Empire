@@ -1,3 +1,5 @@
+import { normalizePlayerTimeZone } from "@/server/domain/player/localTime";
+
 export type Role = "PLAYER" | "ADMIN";
 
 export type StatKey =
@@ -49,6 +51,7 @@ export type PlayerRow = {
   home_lat?: number | null;
   home_lng?: number | null;
   intake_completed_at?: string | null;
+  timezone?: string | null;
 };
 
 export type StatValueRow = {
@@ -77,6 +80,7 @@ export type PublicPlayer = {
 export type SessionPlayer = PublicPlayer & {
   authUserId: string;
   intakeCompletedAt: string | null;
+  timeZone: string;
 };
 
 export function mapPlayer(row: PlayerRow, stats: StatValueRow[]): SessionPlayer {
@@ -93,6 +97,7 @@ export function mapPlayer(row: PlayerRow, stats: StatValueRow[]): SessionPlayer 
     lifetimeXp: row.lifetime_xp,
     homeAddress: row.home_address ?? null,
     intakeCompletedAt: row.intake_completed_at ?? null,
+    timeZone: normalizePlayerTimeZone(row.timezone),
     stats: STAT_KEYS.map((key) => ({ key, value: byKey.get(key) ?? 0 })),
   };
 }

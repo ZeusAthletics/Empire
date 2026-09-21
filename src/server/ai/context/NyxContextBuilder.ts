@@ -7,6 +7,7 @@ import { listOpenPatterns } from "@/server/domain/pattern/repository";
 import { listMissions } from "@/server/domain/mission/repository";
 import { activeMissionsForNyx, type NyxActiveMissionBrief } from "@/server/domain/mission/nyxContext";
 import { featuredMission } from "@/server/domain/mission/types";
+import { formatPlayerLocalTime, type PlayerLocalTime } from "@/server/domain/player/localTime";
 import { findPlayerById } from "@/server/domain/player/repository";
 import { getPlayerModel, summarizePlayerModel } from "@/server/domain/player/playerModel";
 import { listVisibleContacts } from "@/server/domain/contact/repository";
@@ -26,6 +27,7 @@ export type NyxContext = {
   liveOpportunities: string[];
   knownAddresses: string[];
   locationRule: string;
+  playerLocalTime: PlayerLocalTime | null;
 };
 
 export async function buildNyxContext(
@@ -55,6 +57,17 @@ export async function buildNyxContext(
   const patterns = await listOpenPatterns(playerId).catch(() => []);
   const opportunities = await listLiveOpportunities(playerId).catch(() => []);
 
+  const timeAwareTasks =
+    task === "CASUAL_CHAT" ||
+    task === "NYX_CHECKIN" ||
+    task === "NYX_EXPLANATION" ||
+    task === "NYX_OUTREACH" ||
+    task === "NYX_RELATIONSHIP_REVIEW" ||
+    task === "PLAYER_INTAKE" ||
+    missionAwareTasks;
+  const playerLocalTime =
+    player && timeAwareTasks ? formatPlayerLocalTime(player.timeZone) : null;
+
   const contacts = await listVisibleContacts(playerId).catch(() => []);
   const knownAddresses = [
     player?.homeAddress ? `Home Base: ${player.homeAddress}` : null,
@@ -80,5 +93,6 @@ export async function buildNyxContext(
     knownAddresses,
     locationRule:
       "Map pins require a real Belgian street address (street + house number + town). Look the address up. Never invent coordinates or use only a municipality. Never target restricted contacts.",
+    playerLocalTime,
   };
 }

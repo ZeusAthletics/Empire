@@ -8,6 +8,9 @@
     "src/app/api/cron/nyx-outreach/route.ts": {
       "maxDuration": 300
     },
+    "src/app/api/cron/nyx-checkin/route.ts": {
+      "maxDuration": 300
+    },
     "src/app/api/nyx/message/route.ts": {
       "maxDuration": 300
     },
@@ -20,6 +23,7 @@
   },
   "crons": [
     { "path": "/api/cron/nyx-night", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/nyx-outreach", "schedule": "23 11 * * *" }
+    { "path": "/api/cron/nyx-outreach", "schedule": "23 11 * * *" },
+    { "path": "/api/cron/nyx-checkin", "schedule": "0 * * * *" }
   ]
 }
