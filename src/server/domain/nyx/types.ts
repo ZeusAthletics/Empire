@@ -6,7 +6,8 @@ export type NyxChatMessage = {
   role: "me" | "nyx";
   text: string;
   mediaSrc?: string | null;
-  mediaKind?: "image" | "video" | null;
+  mediaKind?: "image" | "video" | "file" | null;
+  linkedUrl?: string | null;
 };
 
 export type NyxProposalCard = {

@@ -36,20 +36,45 @@ async function mediaMetaForIds(ids: string[]): Promise<Map<string, { src: string
 }
 
 async function mapMessages(
-  rows: { id: string; role: string; content: string; media_id?: string | null }[],
+  rows: {
+    id: string;
+    role: string;
+    content: string;
+    media_id?: string | null;
+    linked_url?: string | null;
+  }[],
 ): Promise<NyxChatMessage[]> {
   const mediaIds = rows.map((row) => row.media_id).filter(Boolean) as string[];
   const coverMap = await mediaMetaForIds(mediaIds);
+  const kindMap = new Map<string, { kind: string; storage_path: string }>();
+  if (mediaIds.length) {
+    const admin = createSupabaseAdminClient();
+    const { data: kindRows } = await admin.from("media_assets").select("id, kind, storage_path").in("id", mediaIds);
+    for (const row of kindRows ?? []) {
+      kindMap.set(row.id as string, row as { kind: string; storage_path: string });
+    }
+  }
+
   return rows.map((row) => {
     const mediaId = row.media_id ?? null;
     const cover = mediaId ? coverMap.get(mediaId) : undefined;
     const mediaSrc = cover?.src ?? null;
+    const asset = mediaId ? kindMap.get(mediaId) : undefined;
+    const path = String(asset?.storage_path ?? "");
+    const chatFile = asset?.kind === "CHAT_ATTACHMENT";
+    let mediaKind: NyxChatMessage["mediaKind"] = null;
+    if (mediaSrc) {
+      if (cover?.video) mediaKind = "video";
+      else if (chatFile && !/\.(png|jpe?g|webp|gif)$/i.test(path)) mediaKind = "file";
+      else mediaKind = "image";
+    }
     return {
       id: row.id,
       role: row.role === "USER" ? "me" : "nyx",
       text: row.content,
       mediaSrc,
-      mediaKind: mediaSrc ? (cover?.video ? "video" : "image") : null,
+      mediaKind,
+      linkedUrl: (row.linked_url as string | null) ?? null,
     };
   });
 }
@@ -116,7 +141,7 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
 
   const { data: rows, error: msgError } = await admin
     .from("nyx_messages")
-    .select("id, role, content, media_id, created_at")
+    .select("id, role, content, media_id, linked_url, created_at")
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: true });
   if (msgError) throw msgError;
@@ -187,6 +212,9 @@ export async function appendMessage(input: {
   role: "USER" | "NYX";
   content: string;
   runId?: string | null;
+  mediaId?: string | null;
+  linkedUrl?: string | null;
+  attachmentContext?: string | null;
 }) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -197,6 +225,9 @@ export async function appendMessage(input: {
       role: input.role,
       content: input.content,
       mode: "MISSION_CONTROL",
+      media_id: input.mediaId ?? null,
+      linked_url: input.linkedUrl?.trim() || null,
+      attachment_context: input.attachmentContext?.trim() || null,
       run_id: input.runId ?? null,
     } as never)
     .select("id, role, content")

@@ -17,14 +17,18 @@ export async function POST(request: Request) {
   const player = await getSessionPlayer();
   if (!player) return NextResponse.json({ ok: false, error: "Niet aangemeld." }, { status: 401 });
   let text = "";
+  let mediaId: string | null = null;
+  let linkedUrl: string | null = null;
   try {
-    const body = (await request.json()) as { text?: string };
+    const body = (await request.json()) as { text?: string; mediaId?: string; linkedUrl?: string };
     text = body.text ?? "";
+    mediaId = body.mediaId?.trim() || null;
+    linkedUrl = body.linkedUrl?.trim() || null;
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige invoer." }, { status: 400 });
   }
   try {
-    const talk = await sendNyxMessage(player.id, text);
+    const talk = await sendNyxMessage(player.id, { text, mediaId, linkedUrl });
     const lastNyx = [...talk.messages].reverse().find((message) => message.role === "nyx");
     after(() =>
       afterNyxReply({

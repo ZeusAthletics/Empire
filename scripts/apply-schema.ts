@@ -145,3 +145,10 @@ export async function applyNyxMessageSeenSchema() {
     "nyx message seen at for media badge",
   );
 }
+
+export async function applyNyxChatAttachmentsSchema() {
+  await applySqlFile(
+    "supabase/migrations/20260921100000_nyx_chat_attachments.sql",
+    "nyx chat attachments and links",
+  );
+}

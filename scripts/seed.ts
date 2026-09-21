@@ -18,6 +18,7 @@ import {
   applyNyxCuratedLibrarySchema,
   applyNyxMessageMediaContextSchema,
   applyNyxMessageSeenSchema,
+  applyNyxChatAttachmentsSchema,
 } from "./apply-schema";
 import { compilePersona, DEFAULT_PERSONA } from "../src/server/ai/prompts/persona";
 import { SEED_JOURNAL, SEED_WRAP_AUGUST } from "./seed-journal";
@@ -889,6 +890,7 @@ async function main() {
   );
   await applyNyxMessageMediaContextSchema();
   await applyNyxMessageSeenSchema();
+  await applyNyxChatAttachmentsSchema();
 
   const playerAuth = await ensureAuthUser(admin, playerEmail, playerPassword);
   const adminAuth = await ensureAuthUser(admin, adminEmail, adminPassword);

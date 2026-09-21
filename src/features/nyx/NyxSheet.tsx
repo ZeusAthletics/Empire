@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Link2, Paperclip, X } from "lucide-react";
 import { Tag } from "@/components/ui/Tag";
 import { useEmpireUI } from "@/components/empire-ui-context";
 import type { NyxTalkState } from "@/server/domain/nyx/types";
@@ -24,7 +25,14 @@ export function NyxSheet() {
   const [editTitle, setEditTitle] = useState("");
   const [editXp, setEditXp] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const [attachMediaId, setAttachMediaId] = useState<string | null>(null);
+  const [attachPreview, setAttachPreview] = useState<string | null>(null);
+  const [attachName, setAttachName] = useState<string | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [showLink, setShowLink] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     void loadTalk();
@@ -42,15 +50,47 @@ export function NyxSheet() {
     if (response.ok && data.talk) setTalk(data.talk);
   }
 
+  function clearAttachment() {
+    setAttachMediaId(null);
+    setAttachPreview(null);
+    setAttachName(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function onPickFile(file: File | undefined) {
+    if (!file || pending || uploading) return;
+    setUploading(true);
+    const body = new FormData();
+    body.set("file", file);
+    const response = await fetch("/api/nyx/attach", { method: "POST", body });
+    const data = (await response.json()) as { ok: boolean; mediaId?: string; src?: string; error?: string };
+    setUploading(false);
+    if (!response.ok || !data.ok || !data.mediaId) {
+      toast(data.error ?? "Upload mislukt.");
+      return;
+    }
+    setAttachMediaId(data.mediaId);
+    setAttachName(file.name);
+    if (file.type.startsWith("image/")) setAttachPreview(data.src ?? null);
+    else setAttachPreview(null);
+  }
+
   async function ask(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || pending) return;
+    const url = linkUrl.trim();
+    if ((!trimmed && !attachMediaId && !url) || pending) return;
     setPending(true);
-    setPendingMedia(/\b(foto|video|selfie|beeld|plaatje)\b|stuur.*(foto|video)/i.test(trimmed));
+    setPendingMedia(
+      !attachMediaId && !url && /\b(foto|video|selfie|beeld|plaatje)\b|stuur.*(foto|video)/i.test(trimmed),
+    );
     const response = await fetch("/api/nyx/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: trimmed }),
+      body: JSON.stringify({
+        text: trimmed,
+        mediaId: attachMediaId,
+        linkedUrl: url || undefined,
+      }),
     });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
     setPending(false);
@@ -64,6 +104,9 @@ export function NyxSheet() {
       window.dispatchEvent(new Event("nyx-badge-refresh"));
     }
     if (inputRef.current) inputRef.current.value = "";
+    clearAttachment();
+    setLinkUrl("");
+    setShowLink(false);
   }
 
   async function accept(edits?: { title?: string; xp?: number }) {
@@ -227,6 +270,17 @@ export function NyxSheet() {
               <p className="body" style={{ margin: "5px 0 0", color: "var(--ink-1)" }}>
                 {message.text}
               </p>
+              {message.linkedUrl ? (
+                <a
+                  href={message.linkedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mono"
+                  style={{ display: "block", marginTop: 6, fontSize: 11, color: "var(--gold-soft)", wordBreak: "break-all" }}
+                >
+                  {message.linkedUrl}
+                </a>
+              ) : null}
               {message.mediaSrc ? (
                 message.mediaKind === "video" ? (
                   <video
@@ -235,6 +289,16 @@ export function NyxSheet() {
                     playsInline
                     style={{ width: "100%", marginTop: 8, borderRadius: 10 }}
                   />
+                ) : message.mediaKind === "file" ? (
+                  <a
+                    href={message.mediaSrc}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn sm"
+                    style={{ marginTop: 8, display: "inline-block" }}
+                  >
+                    Open bijlage
+                  </a>
                 ) : (
                   <img
                     src={message.mediaSrc}
@@ -393,14 +457,70 @@ export function NyxSheet() {
         )}
       </div>
       <div className="sheet-foot">
-        <div style={{ display: "flex", gap: 8 }}>
+        {attachMediaId || attachName ? (
+          <div
+            className="card flat"
+            style={{ marginBottom: 8, padding: 8, display: "flex", alignItems: "center", gap: 8 }}
+          >
+            {attachPreview ? (
+              <img src={attachPreview} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover" }} />
+            ) : (
+              <span className="tag">Bijlage</span>
+            )}
+            <span className="mono muted" style={{ flex: 1, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {attachName}
+            </span>
+            <button className="btn btn-quiet btn-icon" type="button" aria-label="Verwijder bijlage" onClick={clearAttachment}>
+              <X size={16} />
+            </button>
+          </div>
+        ) : null}
+        {showLink ? (
+          <input
+            className="input"
+            placeholder="https://…"
+            aria-label="Website link"
+            value={linkUrl}
+            disabled={pending}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            style={{ marginBottom: 8 }}
+          />
+        ) : null}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,application/pdf,text/*,.txt,.md,.csv,.json"
+          style={{ display: "none" }}
+          onChange={(e) => void onPickFile(e.target.files?.[0])}
+        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            className="btn btn-quiet btn-icon"
+            type="button"
+            aria-label="Bestand uploaden"
+            disabled={pending || uploading}
+            onClick={() => fileRef.current?.click()}
+          >
+            <Paperclip size={18} strokeWidth={2.2} />
+          </button>
+          <button
+            className="btn btn-quiet btn-icon"
+            type="button"
+            aria-label="Link toevoegen"
+            disabled={pending}
+            onClick={() => setShowLink((value) => !value)}
+            style={showLink || linkUrl ? { color: "var(--gold)" } : undefined}
+          >
+            <Link2 size={18} strokeWidth={2.2} />
+          </button>
           <input
             ref={inputRef}
             className="input"
-            placeholder="Vraag Nyx iets…"
+            placeholder="Vraag Nyx iets… (optioneel bij bijlage/link)"
             aria-label="Bericht aan Nyx"
-            disabled={pending}
+            disabled={pending || uploading}
             aria-busy={pending}
+            style={{ flex: 1 }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
@@ -412,7 +532,7 @@ export function NyxSheet() {
             className="btn btn-gold btn-icon"
             type="button"
             aria-label="Versturen"
-            disabled={pending}
+            disabled={pending || uploading}
             onClick={() => void ask(inputRef.current?.value ?? "")}
           >
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">

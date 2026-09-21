@@ -4,7 +4,8 @@ import { handleCasualUserTurn, stripModelNames } from "@/server/ai/fallback/nyxR
 import { afterNyxReply } from "@/server/ai/services/MemoryExtractionService";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
 import { recentPlayerChatTurns } from "@/server/domain/nyx/recentChat";
-import { tryFulfillChatMediaRequest } from "@/server/ai/services/NyxChatMediaService";
+import { buildChatAttachmentContext } from "@/server/ai/services/NyxChatAttachmentContext";
+import { tryFulfillChatMediaRequest, userWantsMediaInChat } from "@/server/ai/services/NyxChatMediaService";
 import {
   appendMessage,
   featuredTalkContext,
@@ -20,25 +21,61 @@ export async function getNyxTalk(playerId: string): Promise<NyxTalkState> {
   return getOrCreateTalk(playerId);
 }
 
-export async function sendNyxMessage(playerId: string, text: string): Promise<NyxTalkState> {
-  const trimmed = text.trim();
-  if (!trimmed) throw new Error("Zeg Nyx eerst iets.");
+export type SendNyxMessageInput = {
+  text?: string;
+  mediaId?: string | null;
+  linkedUrl?: string | null;
+};
+
+export async function sendNyxMessage(playerId: string, input: SendNyxMessageInput | string): Promise<NyxTalkState> {
+  const payload = typeof input === "string" ? { text: input } : input;
+  const trimmed = (payload.text ?? "").trim();
+  const mediaId = payload.mediaId?.trim() || null;
+  const linkedUrlRaw = payload.linkedUrl?.trim() || null;
+  if (!trimmed && !mediaId && !linkedUrlRaw) throw new Error("Zeg Nyx iets, voeg een link toe, of upload een bestand.");
 
   const talk = await getOrCreateTalk(playerId);
-  await appendMessage({ playerId, conversationId: talk.conversationId, role: "USER", content: trimmed });
+
+  let attachmentContext = "";
+  let linkedUrl: string | null = linkedUrlRaw;
+  let userContent = trimmed;
+
+  if (mediaId || linkedUrlRaw) {
+    const built = await buildChatAttachmentContext({
+      playerId,
+      userQuestion: trimmed,
+      mediaId,
+      linkedUrl: linkedUrlRaw,
+    });
+    attachmentContext = built.attachmentContext;
+    linkedUrl = built.linkedUrl;
+    userContent = built.displayText;
+  }
+
+  await appendMessage({
+    playerId,
+    conversationId: talk.conversationId,
+    role: "USER",
+    content: userContent,
+    mediaId,
+    linkedUrl,
+    attachmentContext: attachmentContext || null,
+  });
 
   const ctx = await featuredTalkContext(playerId);
   const recent = await recentPlayerChatTurns(playerId);
 
-  const mediaAttempt = openaiConfigured()
-    ? await tryFulfillChatMediaRequest({
-        playerId,
-        userText: trimmed,
-        conversationId: talk.conversationId,
-        recentChat: recent,
-        featuredTitle: ctx.featuredTitle,
-      }).catch(() => ({ handled: false as const }))
-    : { handled: false as const };
+  const hasUserAttachment = Boolean(mediaId || linkedUrl);
+  const mediaAttempt =
+    !hasUserAttachment && openaiConfigured() && userWantsMediaInChat(trimmed)
+      ? await tryFulfillChatMediaRequest({
+          playerId,
+          userText: trimmed,
+          conversationId: talk.conversationId,
+          recentChat: recent,
+          featuredTitle: ctx.featuredTitle,
+        }).catch(() => ({ handled: false as const }))
+      : { handled: false as const };
 
   if (mediaAttempt.handled && mediaAttempt.action !== "FAILED") {
     return getOrCreateTalk(playerId);
@@ -53,11 +90,15 @@ export async function sendNyxMessage(playerId: string, text: string): Promise<Ny
       ? `\n\n[Systeem: Hardwig vroeg om beeld maar leveren mislukte (${mediaAttempt.reason}). Antwoord alleen in tekst — geen fictieve foto tussen haken, geen "hier is een foto".]`
       : "";
 
+  const attachmentNote = attachmentContext
+    ? `\n\n${attachmentContext}\n\nGeef concrete feedback op wat Hardwig deelde (document, screenshot of website). Verwijs naar specifieke details uit de extractie.`
+    : "";
+
   const live = openaiConfigured()
     ? await runNyxTask({
         playerId,
         task: "CASUAL_CHAT",
-        text: `${trimmed}\n\nRecente beurten:\n${recent.join("\n")}\nHoofdmissie: ${ctx.featuredTitle}${mediaFailNote}`,
+        text: `${userContent}\n\nRecente beurten:\n${recent.join("\n")}\nHoofdmissie: ${ctx.featuredTitle}${attachmentNote}${mediaFailNote}`,
         invokeModel: true,
       }).catch(() => null)
     : null;
