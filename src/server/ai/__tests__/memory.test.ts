@@ -38,13 +38,29 @@ test("13 greeting yields no memories", () => {
   assert.deepEqual(extractMemoryCandidatesOffline("Goede avond"), []);
 });
 
-test("14 high preference becomes an Onthouden proposal", () => {
+test("14 high preference in chat domain stores automatically", () => {
   const [candidate] = extractMemoryCandidatesOffline("Ik wil bedrijven bouwen in plaats van mijn tijd te verkopen");
   assert.ok(candidate);
   assert.equal(candidate.importance, "HIGH");
+  assert.equal(candidate.domain, "PREFERENCE");
+  const decision = applyMemoryDecision(candidate, []);
+  assert.equal(decision.store, "AUTO");
+  assert.equal(decision.campaignTouched, false);
+});
+
+test("14b critical strategic still needs confirmation", () => {
+  const candidate = {
+    domain: "STRATEGIC" as const,
+    category: "NORTH_STAR",
+    normalizedFact: "vrijheid is kritiek",
+    confidence: "CONFIRMED" as const,
+    importance: "CRITICAL" as const,
+    status: "CONFIRMED" as const,
+    shouldStore: true,
+    reasoningSummary: "",
+  };
   const decision = applyMemoryDecision(candidate, []);
   assert.equal(decision.store, "PROPOSAL");
-  assert.equal(decision.campaignTouched, false);
 });
 
 test("15 tentative preference does not change chapter or goals", () => {

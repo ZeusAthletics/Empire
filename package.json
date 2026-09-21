@@ -15,6 +15,7 @@
     "db:verify:map": "tsx scripts/verify-phase5.ts",
     "db:verify:journal": "tsx scripts/verify-phase6.ts",
     "db:verify:memory": "tsx scripts/verify-phase8.ts",
+    "db:reindex:nyx-memories": "tsx scripts/reindex-nyx-memories.ts",
     "db:verify:think": "tsx scripts/verify-phase9.ts",
     "db:verify:radar": "tsx scripts/verify-phase10.ts"
   },

@@ -27,16 +27,17 @@ export async function collectOutreachHooks(playerId: string): Promise<OutreachHo
     );
 
   const recentUser = (messages ?? []).filter((row) => row.role === "USER");
-  if (recentUser.length) {
-    const latest = recentUser[0];
-    const ageH = (Date.now() - new Date(latest.created_at as string).getTime()) / (1000 * 60 * 60);
-    if (ageH < 48) hooks.push(`Recent chat (${Math.round(ageH)}h): ${latest.content}`);
+  const latestUser = recentUser[0];
+  if (latestUser) {
+    const ageH = (Date.now() - new Date(latestUser.created_at as string).getTime()) / (1000 * 60 * 60);
+    if (ageH < 48) hooks.push(`Recent chat (${Math.round(ageH)}h): ${latestUser.content}`);
   }
 
-  const memories = await retrieveRelevantMemories(playerId).catch(() => []);
+  const memoryQuery = typeof latestUser?.content === "string" ? latestUser.content : "";
+  const memories = await retrieveRelevantMemories(playerId, memoryQuery).catch(() => []);
   for (const memory of memories.slice(0, 6)) {
-    if (memory.importance === "HIGH" || memory.domain === "RELATIONSHIP") {
-      hooks.push(`Memory (${memory.domain}): ${memory.normalizedFact}`);
+    if (memory.importance === "HIGH" || memory.domain === "RELATIONSHIP" || memory.domain === "CONVERSATION_SUMMARY") {
+      hooks.push(`Memory (${memory.domain}/${memory.category}): ${memory.normalizedFact}`);
     }
   }
 

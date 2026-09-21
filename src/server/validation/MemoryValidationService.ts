@@ -1,5 +1,13 @@
 import type { MemoryCandidate } from "@/server/ai/schemas/memory.schema";
-import type { Memory } from "@/server/domain/memory/types";
+import type { Memory, MemoryDomain } from "@/server/domain/memory/types";
+
+/** Stored automatically — no Onthouden chip — so chat facts survive long threads. */
+const PERSISTENT_CHAT_DOMAINS = new Set<MemoryDomain>([
+  "RELATIONSHIP",
+  "PREFERENCE",
+  "PERSONAL",
+  "CONVERSATION_SUMMARY",
+]);
 
 export type MemoryStoreAction = "AUTO" | "PROPOSAL" | "OBSERVE" | "REVISION" | "SKIP";
 
@@ -17,6 +25,13 @@ export function normalizeFact(value: string) {
 
 export function validateMemoryCandidate(candidate: MemoryCandidate) {
   if (!candidate.normalizedFact.trim()) return { ok: false as const, reason: "leeg feit" };
+  if (
+    candidate.shouldStore &&
+    PERSISTENT_CHAT_DOMAINS.has(candidate.domain) &&
+    candidate.importance !== "CRITICAL"
+  ) {
+    return { ok: true as const, store: "AUTO" as const };
+  }
   if (candidate.importance === "HIGH" || candidate.importance === "CRITICAL") {
     return { ok: true as const, store: "PROPOSAL" as const };
   }

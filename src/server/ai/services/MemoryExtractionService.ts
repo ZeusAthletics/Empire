@@ -10,11 +10,13 @@ import { insertMemory, bumpObservation, listActiveMemories } from "@/server/doma
 import type { Memory } from "@/server/domain/memory/types";
 import { createMemoryProposal } from "@/server/domain/nyx/proposalRepository";
 import { afterHighMemory } from "@/server/ai/services/StrategicPatternService";
-import { applyMemoryDecision } from "@/server/validation/MemoryValidationService";
+import { MEMORY_EXTRACTION_GUIDE, normalizeMemoryCategory } from "@/server/domain/memory/categories";
+import { applyMemoryDecision, normalizeFact } from "@/server/validation/MemoryValidationService";
 
-const EXTRACT_PROMPT = `Haal 0 tot 3 memories uit deze beurt. Nul is normaal.
+const EXTRACT_PROMPT = `Haal 0 tot 5 memories uit deze beurt. Nul is normaal.
 Alleen feiten of voorkeuren die de speler zelf zegt. Geen inferenties.
 Geen hoofdstuk, doelen of campagne wijzigen.
+${MEMORY_EXTRACTION_GUIDE}
 JSON: { "candidates": MemoryCandidate[] }`;
 
 export function planMemoryExtraction() {
@@ -57,7 +59,11 @@ export async function collectTurnCandidates(input: {
   }
   if (!entities.length) entities = extractEntitiesOffline(input.userText);
 
-  return [...extracted, ...entities].slice(0, 3);
+  const merged = [...extracted, ...entities].slice(0, 5);
+  return merged.map((candidate) => ({
+    ...candidate,
+    category: normalizeMemoryCategory(candidate.domain, candidate.category),
+  }));
 }
 
 /** After the Nyx reply is persisted. Models never write memory rows. Campaign stays untouched. */
@@ -78,11 +84,12 @@ export async function afterNyxReply(input: {
     const content = candidate.reasoningSummary
       ? `${candidate.normalizedFact[0]?.toUpperCase() ?? ""}${candidate.normalizedFact.slice(1)}.`
       : candidate.normalizedFact;
+    const factKey = normalizeFact(candidate.normalizedFact) || candidate.normalizedFact.trim();
     const draft = {
       domain: candidate.domain,
       category: candidate.category,
       content,
-      normalizedFact: candidate.normalizedFact,
+      normalizedFact: factKey,
       confidence: candidate.confidence,
       importance: candidate.importance,
       sourceType: "CHAT" as const,

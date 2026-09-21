@@ -42,6 +42,19 @@ function canRetry(tier: ModelRoutingDecision["modelTier"]) {
   return tier === "ECONOMY" || tier === "BALANCED";
 }
 
+const MEMORY_QUERY_TASKS = new Set<IntelligenceTask>([
+  "CASUAL_CHAT",
+  "NYX_EXPLANATION",
+  "NYX_OUTREACH",
+  "SIDE_QUEST_GENERATION",
+  "HIGH_IMPACT_SIDE_QUEST",
+]);
+
+function memoryQueryForTask(task: IntelligenceTask, text?: string) {
+  if (!text?.trim()) return "";
+  return MEMORY_QUERY_TASKS.has(task) ? text.trim() : "";
+}
+
 export function planNyxTask(input: Pick<OrchestratorInput, "task" | "text" | "risk">): {
   task: IntelligenceTask;
   decision: ModelRoutingDecision;
@@ -53,7 +66,7 @@ export function planNyxTask(input: Pick<OrchestratorInput, "task" | "text" | "ri
 export async function runNyxTask(input: OrchestratorInput): Promise<OrchestratorResult> {
   const requestId = randomUUID();
   const { task, decision } = planNyxTask(input);
-  const context = await buildNyxContext(input.playerId, task);
+  const context = await buildNyxContext(input.playerId, task, memoryQueryForTask(task, input.text));
   const { core, version } = await loadNyxCore();
   const started = Date.now();
   let fallbackUsed = false;

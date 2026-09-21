@@ -1,4 +1,5 @@
 import type { MemoryCandidate } from "@/server/ai/schemas/memory.schema";
+import { normalizeMemoryCategory } from "@/server/domain/memory/categories";
 import { normalizeFact } from "@/server/validation/MemoryValidationService";
 
 const GREETING = /^(goede (avond|morgen|middag)|hey|hoi|hallo|ok|oké)[\s.!?]*$/i;
@@ -49,7 +50,7 @@ export function extractMemoryCandidatesOffline(userText: string): MemoryCandidat
     found.push(
       candidate({
         domain: "PREFERENCE",
-        category: "LIFESTYLE_PREFERENCE",
+        category: "LIFESTYLE",
         normalizedFact: "drinkt liever koffie",
         confidence: "LIKELY",
         importance: "LOW",
@@ -62,7 +63,7 @@ export function extractMemoryCandidatesOffline(userText: string): MemoryCandidat
     found.push(
       candidate({
         domain: "PREFERENCE",
-        category: "LIFESTYLE_PREFERENCE",
+        category: "LIFESTYLE",
         normalizedFact: text.slice(0, 80),
         confidence: "TENTATIVE",
         importance: "LOW",
@@ -90,7 +91,7 @@ export function extractEntitiesOffline(userText: string): MemoryCandidate[] {
     .map((item) =>
       candidate({
         domain: "RELATIONSHIP",
-        category: "MENTION",
+        category: "PERSON",
         normalizedFact: item.fact,
         confidence: "LIKELY",
         importance: "LOW",
@@ -111,7 +112,7 @@ export function parseMemoryCandidates(raw: string | null | undefined): MemoryCan
       .map((item) =>
         candidate({
           domain: item.domain,
-          category: item.category || "GENERAL",
+          category: normalizeMemoryCategory(item.domain, item.category || "GENERAL"),
           normalizedFact: item.normalizedFact,
           confidence: item.confidence,
           importance: item.importance,

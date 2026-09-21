@@ -6,7 +6,8 @@ import { listMissions } from "@/server/domain/mission/repository";
 import { getNotificationBudget } from "@/server/domain/notify/repository";
 import { listAllOpportunities } from "@/server/domain/opportunity/repository";
 import { listPatterns } from "@/server/domain/pattern/repository";
-import { listProposals } from "@/server/domain/nyx/proposalRepository";
+import { listProposals, type PublicProposal } from "@/server/domain/nyx/proposalRepository";
+import { isMemoryPayload } from "@/server/domain/nyx/proposalTypes";
 import { getActivePersona } from "@/server/domain/persona/repository";
 import { NYX_CORE, NYX_CORE_VERSION } from "@/server/ai/prompts/nyx-core";
 import { DEFAULT_PERSONA } from "@/server/ai/prompts/persona";
@@ -126,21 +127,70 @@ export async function loadProposalsPage(player: SessionPlayer) {
   return listProposals(player.id);
 }
 
-export async function loadMemoryPage(player: SessionPlayer) {
-  const memories = await listMemories(player.id);
-  const admin = createSupabaseAdminClient();
-  const ids = memories.map((item) => item.id);
-  const { data } = ids.length
-    ? await admin.from("memory_versions").select("memory_id, changed_by, reason, created_at").in("memory_id", ids).order("created_at", { ascending: true })
-    : { data: [] };
-  const versions = new Map<string, { at: string; by: string; reason: string }[]>();
-  for (const row of data ?? []) {
-    const id = row.memory_id as string;
-    const list = versions.get(id) ?? [];
-    list.push({ at: row.created_at as string, by: row.changed_by as string, reason: (row.reason as string) ?? "" });
-    versions.set(id, list);
+export type AdminMemoryRow = {
+  memory: Awaited<ReturnType<typeof listMemories>>[number];
+  versions: { at: string; by: string; reason: string }[];
+};
+
+export async function loadMemoryPage(player: SessionPlayer): Promise<{
+  rows: AdminMemoryRow[];
+  memoryProposals: PublicProposal[];
+  loadError: string | null;
+}> {
+  let memories: Awaited<ReturnType<typeof listMemories>>;
+  try {
+    memories = await listMemories(player.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Memories laden mislukt.";
+    const hint = /memories|schema cache|PGRST/i.test(message)
+      ? " Controleer of migratie phase8_memory op Supabase is gedraaid."
+      : "";
+    return { rows: [], memoryProposals: [], loadError: `${message}${hint}` };
   }
-  return memories.map((memory) => ({ memory, versions: versions.get(memory.id) ?? [] }));
+
+  let memoryProposals: PublicProposal[] = [];
+  try {
+    const proposals = await listProposals(player.id);
+    memoryProposals = proposals.filter(
+      (item) =>
+        (item.kind === "MEMORY" || item.kind === "MEMORY_REVISION") &&
+        isMemoryPayload(item.payload),
+    );
+  } catch {
+    memoryProposals = [];
+  }
+
+  const versions = new Map<string, { at: string; by: string; reason: string }[]>();
+  const ids = memories.map((item) => item.id);
+  if (ids.length) {
+    try {
+      const admin = createSupabaseAdminClient();
+      const { data, error } = await admin
+        .from("memory_versions")
+        .select("memory_id, changed_by, reason, created_at")
+        .in("memory_id", ids)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      for (const row of data ?? []) {
+        const id = row.memory_id as string;
+        const list = versions.get(id) ?? [];
+        list.push({
+          at: row.created_at as string,
+          by: row.changed_by as string,
+          reason: (row.reason as string) ?? "",
+        });
+        versions.set(id, list);
+      }
+    } catch {
+      // Version history is optional for the inspector — still list memories.
+    }
+  }
+
+  return {
+    rows: memories.map((memory) => ({ memory, versions: versions.get(memory.id) ?? [] })),
+    memoryProposals,
+    loadError: null,
+  };
 }
 
 export async function loadPatternsPage(player: SessionPlayer) {
