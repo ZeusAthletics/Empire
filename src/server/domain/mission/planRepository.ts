@@ -92,7 +92,11 @@ export async function insertMainMissionPlan(
     const removable = (existing ?? []).map((row) => row.id as string);
     if (removable.length) {
       await admin.from("mission_dependencies").delete().in("mission_id", removable);
-      await admin.from("missions").delete().in("id", removable);
+      const { error: archiveError } = await admin
+        .from("missions")
+        .update({ status: "ARCHIVED", deleted_at: new Date().toISOString() } as never)
+        .in("id", removable);
+      if (archiveError) throw archiveError;
     }
   }
 

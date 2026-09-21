@@ -14,6 +14,18 @@ test("caps playable MAIN_STORY at 3", () => {
   assert.deepEqual(playableIds, ["m1", "m2", "m3"]);
 });
 
+test("completed missions are never demoted", () => {
+  const { demoteToPlanned, demoteToLocked } = selectPlayable(
+    [
+      { id: "done", track: "MAIN_STORY", status: "COMPLETED", narrativeOrder: null },
+      { id: "m2", track: "MAIN_STORY", status: "PLANNED", narrativeOrder: 2 },
+    ],
+    3,
+  );
+  assert.equal(demoteToPlanned.includes("done"), false);
+  assert.equal(demoteToLocked.includes("done"), false);
+});
+
 test("ACTIVE missions count toward cap", () => {
   const { playableIds } = selectPlayable(
     [

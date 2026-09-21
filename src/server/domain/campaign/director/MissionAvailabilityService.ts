@@ -12,6 +12,7 @@ export type PlayableSelection = {
 };
 
 const PLAYABLE = new Set(["PROPOSED", "ACTIVE"]);
+const TERMINAL = new Set(["COMPLETED", "COMPLETED_UNVERIFIED", "ABANDONED", "ARCHIVED"]);
 
 /** Pick up to max playable MAIN_STORY missions; demote overflow and non-selected LOCKED/PLANNED. */
 export function selectPlayable(candidates: PlayableCandidate[], max = 3): PlayableSelection {
@@ -20,7 +21,7 @@ export function selectPlayable(candidates: PlayableCandidate[], max = 3): Playab
     .sort((a, b) => (a.narrativeOrder ?? 999) - (b.narrativeOrder ?? 999));
 
   const alreadyActive = mains.filter((m) => m.status === "ACTIVE");
-  const proposedOrLocked = mains.filter((m) => m.status !== "ACTIVE");
+  const proposedOrLocked = mains.filter((m) => m.status !== "ACTIVE" && !TERMINAL.has(m.status));
 
   const playableIds: string[] = [];
   for (const m of alreadyActive) playableIds.push(m.id);
@@ -37,7 +38,7 @@ export function selectPlayable(candidates: PlayableCandidate[], max = 3): Playab
   const demoteToPlanned: string[] = [];
 
   for (const m of mains) {
-    if (playableSet.has(m.id)) continue;
+    if (playableSet.has(m.id) || TERMINAL.has(m.status)) continue;
     if (PLAYABLE.has(m.status) || m.status === "LOCKED") demoteToLocked.push(m.id);
     else if (m.status === "PROPOSED") demoteToLocked.push(m.id);
     else demoteToPlanned.push(m.id);

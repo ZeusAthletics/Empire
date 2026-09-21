@@ -1,4 +1,4 @@
-import { runNyxTask } from "@/server/ai/orchestrator/NyxOrchestrator";
+import { runNyxTask, StrategicPendingError } from "@/server/ai/orchestrator/NyxOrchestrator";
 import {
   MAIN_MISSION_PLAN_JSON_SCHEMA,
   parseMainMissionPlan,
@@ -20,13 +20,17 @@ export async function generateMainMissionBatch(
     .filter(Boolean)
     .join("\n");
 
-  const result = await runNyxTask({
-    playerId,
-    task: "MAIN_QUEST_GENERATION",
-    text: prompt,
-    invokeModel: true,
-    jsonSchema: MAIN_MISSION_PLAN_JSON_SCHEMA as unknown as Record<string, unknown>,
-  });
-
-  return parseMainMissionPlan(result.text);
+  try {
+    const result = await runNyxTask({
+      playerId,
+      task: "MAIN_QUEST_GENERATION",
+      text: prompt,
+      invokeModel: true,
+      jsonSchema: MAIN_MISSION_PLAN_JSON_SCHEMA as unknown as Record<string, unknown>,
+    });
+    return parseMainMissionPlan(result.text);
+  } catch (error) {
+    if (error instanceof StrategicPendingError) return null;
+    throw error;
+  }
 }

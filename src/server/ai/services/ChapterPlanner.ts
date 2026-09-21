@@ -1,4 +1,4 @@
-import { runNyxTask } from "@/server/ai/orchestrator/NyxOrchestrator";
+import { runNyxTask, StrategicPendingError } from "@/server/ai/orchestrator/NyxOrchestrator";
 import {
   CHAPTER_SKELETON_JSON_SCHEMA,
   parseChapterSkeletonPlan,
@@ -21,13 +21,17 @@ export async function generateChapterSkeleton(
     .filter(Boolean)
     .join("\n");
 
-  const result = await runNyxTask({
-    playerId,
-    task: "CHAPTER_PLANNING",
-    text: prompt,
-    invokeModel: true,
-    jsonSchema: CHAPTER_SKELETON_JSON_SCHEMA as unknown as Record<string, unknown>,
-  });
-
-  return parseChapterSkeletonPlan(result.text);
+  try {
+    const result = await runNyxTask({
+      playerId,
+      task: "CHAPTER_PLANNING",
+      text: prompt,
+      invokeModel: true,
+      jsonSchema: CHAPTER_SKELETON_JSON_SCHEMA as unknown as Record<string, unknown>,
+    });
+    return parseChapterSkeletonPlan(result.text);
+  } catch (error) {
+    if (error instanceof StrategicPendingError) return null;
+    throw error;
+  }
 }

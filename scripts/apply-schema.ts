@@ -152,3 +152,10 @@ export async function applyNyxChatAttachmentsSchema() {
     "nyx chat attachments and links",
   );
 }
+
+export async function applyCampaignDirectorSchema() {
+  await applySqlFile(
+    "supabase/migrations/20260921140000_campaign_director.sql",
+    "campaign director schema",
+  );
+}

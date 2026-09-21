@@ -8,6 +8,13 @@ import type {
   ExitCriterionKind,
 } from "@/server/domain/campaign/types";
 import type { StatKey } from "@/server/domain/player/types";
+import { STAT_KEYS } from "@/server/domain/player/types";
+
+function criterionStatKey(kind: ExitCriterionKind, raw: string | null): StatKey | null {
+  if (kind !== "STAT" || !raw?.trim()) return null;
+  const key = raw.trim().toLowerCase() as StatKey;
+  return STAT_KEYS.includes(key) ? key : null;
+}
 
 export async function listExitCriteria(chapterId: string): Promise<ChapterExitCriterionRow[]> {
   const admin = createSupabaseAdminClient();
@@ -44,7 +51,7 @@ export async function replaceExitCriteriaFromPlan(
     player_id: playerId,
     label: item.label,
     kind: item.kind as ExitCriterionKind,
-    stat_key: item.statKey as StatKey | null,
+    stat_key: criterionStatKey(item.kind as ExitCriterionKind, item.statKey),
     comparator: item.comparator as ExitComparator | null,
     target_value: item.targetValue,
     status: "OPEN" as const,

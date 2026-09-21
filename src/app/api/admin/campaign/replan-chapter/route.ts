@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveAdminScope } from "@/admin/scope";
 import { requireAdmin } from "@/server/auth/session";
 import { replanChapterInPlace } from "@/server/domain/campaign/director/CampaignDirector";
+import { formatReplanError, formatReplanReason } from "@/server/domain/campaign/director/replanErrors";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -15,11 +16,14 @@ export async function POST() {
   try {
     const result = await replanChapterInPlace(scoped.id);
     if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.reason ?? "Replan mislukt." }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: formatReplanReason(result.reason ?? "Replan mislukt.") },
+        { status: 400 },
+      );
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Replan mislukt.";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const { status, error: message } = formatReplanError(error);
+    return NextResponse.json({ ok: false, error: message }, { status });
   }
 }

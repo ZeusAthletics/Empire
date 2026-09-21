@@ -23,7 +23,7 @@ export const CHAPTER_SKELETON_JSON_SCHEMA = {
           label: { type: "string" },
           kind: { type: "string", enum: ["STAT", "EMPIRE_VALUE", "MISSION_COUNT", "MANUAL"] },
           statKey: { type: ["string", "null"] },
-          comparator: { type: ["string", "null"], enum: ["GTE", "LTE", "EQ", null] },
+          comparator: { type: ["string", "null"] },
           targetValue: { type: ["number", "null"] },
         },
         required: ["label", "kind", "statKey", "comparator", "targetValue"],
