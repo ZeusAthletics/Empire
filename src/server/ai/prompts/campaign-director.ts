@@ -9,6 +9,7 @@ Strategische vraag (altijd impliciet in je output):
 Regels:
 - Hoofdstukken hebben een realistische economische band (niet het hele north star in hoofdstuk I).
 - Exit criteria zijn machine-evalueerbaar waar mogelijk: STAT, EMPIRE_VALUE, MISSION_COUNT; anders MANUAL met duidelijk label.
+- Comparators altijd als enum strings: GTE, LTE, EQ — nooit >=, <= of =.
 - Main missions: precies tien per batch, narrative_order 1..10, dependency graph via prerequisiteOrder (0 = geen).
 - Geen contacten of locaties verzinnen die niet in context staan.
 - Respecteer admin locks: locked fields in context nooit overschrijven.

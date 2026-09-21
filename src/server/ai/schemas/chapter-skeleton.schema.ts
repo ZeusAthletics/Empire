@@ -49,13 +49,36 @@ export const CHAPTER_SKELETON_JSON_SCHEMA = {
   ],
 } as const;
 
+export type ExitComparator = "GTE" | "LTE" | "EQ";
+
 export type ExitCriterionDraft = {
   label: string;
   kind: "STAT" | "EMPIRE_VALUE" | "MISSION_COUNT" | "MANUAL";
   statKey: string | null;
-  comparator: "GTE" | "LTE" | "EQ" | null;
+  comparator: ExitComparator | null;
   targetValue: number | null;
 };
+
+/** Map model symbols (>=) to Postgres exit_comparator enum (GTE). */
+export function normalizeExitComparator(value: string | null | undefined): ExitComparator | null {
+  if (value == null || !String(value).trim()) return null;
+  const key = String(value).trim().toUpperCase();
+  if (key === "GTE" || key === ">=" || key === "GE") return "GTE";
+  if (key === "LTE" || key === "<=" || key === "LE") return "LTE";
+  if (key === "EQ" || key === "=" || key === "==" || key === "EQUAL") return "EQ";
+  return null;
+}
+
+function normalizeExitCriterionDraft(raw: ExitCriterionDraft): ExitCriterionDraft {
+  const kind = raw.kind;
+  const comparator =
+    kind === "MANUAL" ? null : normalizeExitComparator(raw.comparator) ?? (kind === "STAT" ? "GTE" : "GTE");
+  return {
+    ...raw,
+    comparator: kind === "MANUAL" ? null : comparator,
+    targetValue: raw.targetValue != null ? Number(raw.targetValue) : null,
+  };
+}
 
 export type ChapterSkeletonPlan = {
   subtitle: string | null;
@@ -89,7 +112,10 @@ export function parseChapterSkeletonPlan(raw: string | null): ChapterSkeletonPla
   try {
     const parsed = JSON.parse(extractJsonPayload(raw)) as ChapterSkeletonPlan;
     if (!parsed.strategicPurpose || !Array.isArray(parsed.exitCriteria)) return null;
-    return parsed;
+    return {
+      ...parsed,
+      exitCriteria: parsed.exitCriteria.map((row) => normalizeExitCriterionDraft(row)),
+    };
   } catch {
     return null;
   }

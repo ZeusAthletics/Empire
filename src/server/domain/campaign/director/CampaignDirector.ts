@@ -30,6 +30,7 @@ import {
 } from "@/server/domain/mission/planRepository";
 import type { StatKey } from "@/server/domain/player/types";
 import { STAT_KEYS } from "@/server/domain/player/types";
+import { extractErrorMessage } from "@/server/domain/campaign/director/replanErrors";
 
 const PLAYABLE_CAP = 3;
 const BUFFER_MIN = 3;
@@ -115,28 +116,32 @@ export async function bootstrapChapter(
   playerId: string,
   options: { mode?: "bootstrap" | "replan" } = {},
 ): Promise<{ ok: boolean; reason?: string }> {
-  const record = await getCampaignRecord(playerId);
-  if (!record?.chapter) return { ok: false, reason: "no_chapter" };
+  try {
+    const record = await getCampaignRecord(playerId);
+    if (!record?.chapter) return { ok: false, reason: "no_chapter" };
 
-  const chapter = record.chapter;
-  const mode = options.mode ?? "bootstrap";
+    const chapter = record.chapter;
+    const mode = options.mode ?? "bootstrap";
 
-  const skeleton = await generateChapterSkeleton(playerId, chapter, mode === "replan" ? "replan" : "bootstrap");
-  if (!skeleton) return { ok: false, reason: "planner_failed" };
+    const skeleton = await generateChapterSkeleton(playerId, chapter, mode === "replan" ? "replan" : "bootstrap");
+    if (!skeleton) return { ok: false, reason: "planner_failed" };
 
-  const updated = await applySkeletonPlan(chapter, skeleton);
-  await replaceExitCriteriaFromPlan(playerId, chapter.id, skeleton, chapter.locked_by_admin);
+    const updated = await applySkeletonPlan(chapter, skeleton);
+    await replaceExitCriteriaFromPlan(playerId, chapter.id, skeleton, chapter.locked_by_admin);
 
-  const plan = await generateMainMissionBatch(
-    playerId,
-    updated,
-    mode === "replan" ? "Replann hoofdstuk in place — ten nieuwe main missions." : "Eerste batch main missions.",
-  );
-  if (!plan) return { ok: false, reason: "mission_planner_failed" };
+    const plan = await generateMainMissionBatch(
+      playerId,
+      updated,
+      mode === "replan" ? "Replann hoofdstuk in place — ten nieuwe main missions." : "Eerste batch main missions.",
+    );
+    if (!plan) return { ok: false, reason: "mission_planner_failed" };
 
-  await insertMainMissionPlan(playerId, chapter.id, plan, mode === "replan");
-  await syncPlayableAndUnlock(playerId, chapter.id);
-  return { ok: true };
+    await insertMainMissionPlan(playerId, chapter.id, plan, mode === "replan");
+    await syncPlayableAndUnlock(playerId, chapter.id);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: extractErrorMessage(error) };
+  }
 }
 
 export async function replanChapterInPlace(playerId: string): Promise<{ ok: boolean; reason?: string }> {

@@ -40,6 +40,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  if (error instanceof Error) console.error(error.message);
+  else console.error(typeof error === "object" ? JSON.stringify(error, null, 2) : String(error));
   process.exit(1);
 });

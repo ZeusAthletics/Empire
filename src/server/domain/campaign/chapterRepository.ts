@@ -1,6 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { ChapterSkeletonPlan } from "@/server/ai/schemas/chapter-skeleton.schema";
-import { asStatKeys } from "@/server/ai/schemas/chapter-skeleton.schema";
+import { asStatKeys, normalizeExitComparator } from "@/server/ai/schemas/chapter-skeleton.schema";
 import type {
   ChapterExitCriterionRow,
   ChapterRow,
@@ -52,7 +52,10 @@ export async function replaceExitCriteriaFromPlan(
     label: item.label,
     kind: item.kind as ExitCriterionKind,
     stat_key: criterionStatKey(item.kind as ExitCriterionKind, item.statKey),
-    comparator: item.comparator as ExitComparator | null,
+    comparator:
+      item.kind === "MANUAL"
+        ? null
+        : normalizeExitComparator(item.comparator) ?? ("GTE" as ExitComparator),
     target_value: item.targetValue,
     status: "OPEN" as const,
     sort_order: index,
