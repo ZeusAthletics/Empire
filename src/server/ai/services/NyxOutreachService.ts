@@ -5,7 +5,8 @@ import { deliverStillOrVideo, fulfillNyxMediaDecision } from "@/server/ai/servic
 import { appendCompanionNyxMessage } from "@/server/domain/nyx/companionRepository";
 import { openArtVideoEnabled } from "@/server/domain/media/openArtVideo";
 import { collectOutreachHooks, hasOutreachHook } from "@/server/domain/nyx/outreach/hooks";
-import { computeIntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
+import { INTIMACY_CATALOG_ACCESS_RULE } from "@/server/domain/nyx/curated/tier";
+import { resolvePlayerIntimacyTier, computeIntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 import { shouldWakeOutreachDecision } from "@/server/domain/nyx/outreach/gate";
 import { logOutreachRun } from "@/server/domain/nyx/outreach/repository";
 import {
@@ -16,7 +17,7 @@ import { hasFaceIdentityRef } from "@/server/domain/nyx/identity/repository";
 import { canSendMediaType, mediaBudgetRemaining } from "@/server/domain/nyx/relationship/mediaBudget";
 
 export async function runNyxOutreachTick(playerId: string) {
-  const intimacyTier = await computeIntimacyTier(playerId);
+  const intimacyTier = await resolvePlayerIntimacyTier(playerId);
   const wake = await shouldWakeOutreachDecision(playerId, intimacyTier);
   if (!wake) {
     await logOutreachRun({
@@ -45,7 +46,7 @@ export async function runNyxOutreachTick(playerId: string) {
   const budgetLine = budget
     ? `Dagbudget media (max, niet verplicht): foto's ${budget.sent.photos}/${budget.budget.maxPhotosPerDay} (nog ${budget.photosLeft}), video's ${budget.sent.videos}/${budget.budget.maxVideosPerDay} (nog ${budget.videosLeft}).`
     : "";
-  const prompt = `${NYX_OUTREACH_GUIDE}\n\nIntimacy tier: ${intimacyTier}\nIdentity refs beschikbaar: ${hasRefs}\nOpenArt video: ${openArtVideoEnabled()}\n${budgetLine}\n${formatCuratedCatalogForPrompt(catalog)}\nHooks:\n${hookContext.hooks.join("\n")}\n\nRecent chat:\n${hookContext.recentChat.join("\n")}`;
+  const prompt = `${NYX_OUTREACH_GUIDE}\n\n${INTIMACY_CATALOG_ACCESS_RULE}\n\nIntimacy tier: ${intimacyTier}\nIdentity refs beschikbaar: ${hasRefs}\nOpenArt video: ${openArtVideoEnabled()}\n${budgetLine}\n${formatCuratedCatalogForPrompt(catalog, intimacyTier)}\nHooks:\n${hookContext.hooks.join("\n")}\n\nRecent chat:\n${hookContext.recentChat.join("\n")}`;
 
   const result = await runNyxTask({
     playerId,

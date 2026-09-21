@@ -10,17 +10,18 @@ import {
 import { deliverStillOrVideo, fulfillNyxMediaDecision } from "@/server/ai/services/NyxMediaDelivery";
 import { deliverCuratedToPlayer } from "@/server/domain/nyx/curated/deliver";
 import {
-  chatGenerateScene,
   chatMediaCaption,
+  generateSceneForTier,
   pickCuratedForChat,
 } from "@/server/domain/nyx/curated/pickForChat";
+import { INTIMACY_CATALOG_ACCESS_RULE } from "@/server/domain/nyx/curated/tier";
 import {
   formatCuratedCatalogForPrompt,
   listCuratedAvailableForOutreach,
   type NyxCuratedItem,
 } from "@/server/domain/nyx/curated/repository";
 import { hasFaceIdentityRef } from "@/server/domain/nyx/identity/repository";
-import { computeIntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
+import { resolvePlayerIntimacyTier, type IntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 import { canSendMediaType, mediaBudgetRemaining } from "@/server/domain/nyx/relationship/mediaBudget";
 import { openArtVideoEnabled } from "@/server/domain/media/openArtVideo";
 
@@ -45,6 +46,8 @@ function alignDecisionWithCatalog(
   catalog: NyxCuratedItem[],
   userText: string,
   wantVideo: boolean,
+  intimacyTier: IntimacyTier,
+  featuredTitle: string,
 ): NyxOutreachDecision {
   const next = { ...decision };
   const id = next.curatedMediaId?.trim();
@@ -70,7 +73,13 @@ function alignDecisionWithCatalog(
       next.mediaSource = "CURATED";
     }
     if (!next.caption?.trim()) next.caption = chatMediaCaption(userText);
-    if (!next.scene?.trim()) next.scene = chatGenerateScene(userText, "");
+    if (!next.scene?.trim()) {
+      next.scene = generateSceneForTier({
+        tier: intimacyTier,
+        userText,
+        featuredTitle,
+      });
+    }
   }
 
   return normalizeOutreachDecision(next);
@@ -82,7 +91,7 @@ async function deliverCatalogFallback(input: {
   catalog: NyxCuratedItem[];
   userText: string;
   featuredTitle: string;
-  intimacyTier: Awaited<ReturnType<typeof computeIntimacyTier>>;
+  intimacyTier: IntimacyTier;
   wantVideo: boolean;
   runId: string | null;
 }): Promise<ChatMediaFulfillResult | null> {
@@ -111,6 +120,7 @@ async function deliverGenerateFallback(input: {
   conversationId: string;
   userText: string;
   featuredTitle: string;
+  intimacyTier: IntimacyTier;
   wantVideo: boolean;
   runId: string | null;
 }): Promise<ChatMediaFulfillResult | null> {
@@ -119,7 +129,11 @@ async function deliverGenerateFallback(input: {
 
   const delivered = await deliverStillOrVideo({
     playerId: input.playerId,
-    scene: chatGenerateScene(input.userText, input.featuredTitle),
+    scene: generateSceneForTier({
+      tier: input.intimacyTier,
+      userText: input.userText,
+      featuredTitle: input.featuredTitle,
+    }),
     caption: chatMediaCaption(input.userText),
     wantVideo: input.wantVideo,
     runId: input.runId,
@@ -150,7 +164,7 @@ export async function tryFulfillChatMediaRequest(input: {
   if (budget && !canSendMediaType(budget, mediaAction)) {
     return { handled: false };
   }
-  const intimacyTier = await computeIntimacyTier(input.playerId);
+  const intimacyTier = await resolvePlayerIntimacyTier(input.playerId);
   const [hasRefs, catalog] = await Promise.all([
     hasFaceIdentityRef(),
     listCuratedAvailableForOutreach(input.playerId, intimacyTier),
@@ -162,11 +176,13 @@ export async function tryFulfillChatMediaRequest(input: {
   if (openaiConfigured()) {
     const prompt = `${NYX_CHAT_MEDIA_GUIDE}
 
+${INTIMACY_CATALOG_ACCESS_RULE}
+
 Intimacy tier: ${intimacyTier}
 Identity refs beschikbaar: ${hasRefs}
 OpenArt video: ${openArtVideoEnabled()}
 Hoofdmissie: ${input.featuredTitle}
-${formatCuratedCatalogForPrompt(catalog)}
+${formatCuratedCatalogForPrompt(catalog, intimacyTier)}
 
 Hardwig vroeg nu:
 ${input.userText}
@@ -185,8 +201,21 @@ ${input.recentChat.join("\n")}`;
     runId = result?.runId ?? null;
     decision = parseOutreachDecision(result?.text ?? null);
     if (decision) {
-      decision = alignDecisionWithCatalog(decision, catalog, input.userText, wantVideo);
-      if (!decision.scene?.trim()) decision.scene = chatGenerateScene(input.userText, input.featuredTitle);
+      decision = alignDecisionWithCatalog(
+        decision,
+        catalog,
+        input.userText,
+        wantVideo,
+        intimacyTier,
+        input.featuredTitle,
+      );
+      if (!decision.scene?.trim()) {
+        decision.scene = generateSceneForTier({
+          tier: intimacyTier,
+          userText: input.userText,
+          featuredTitle: input.featuredTitle,
+        });
+      }
     }
   }
 
@@ -227,6 +256,7 @@ ${input.recentChat.join("\n")}`;
     conversationId: input.conversationId,
     userText: input.userText,
     featuredTitle: input.featuredTitle,
+    intimacyTier,
     wantVideo,
     runId,
   });

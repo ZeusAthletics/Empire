@@ -1,4 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { stricterIntimacyTier } from "@/server/domain/nyx/curated/tier";
+import { latestRelationshipSnapshot } from "@/server/domain/nyx/relationship/repository";
 
 export type IntimacyTier = "EARLY" | "FRIEND" | "TRUST";
 
@@ -26,4 +28,15 @@ export async function computeIntimacyTier(playerId: string): Promise<IntimacyTie
   if (highCount >= 2 || (relationshipCount >= 4 && depth >= 25)) return "TRUST";
   if (relationshipCount >= 2 || depth >= 12) return "FRIEND";
   return "EARLY";
+}
+
+/** Band for curated photos/videos: live compute, capped by latest relationship snapshot when present. */
+export async function resolvePlayerIntimacyTier(playerId: string): Promise<IntimacyTier> {
+  const [computed, snapshot] = await Promise.all([
+    computeIntimacyTier(playerId),
+    latestRelationshipSnapshot(playerId).catch(() => null),
+  ]);
+  const fromSnapshot = snapshot?.intimacyTier;
+  if (!fromSnapshot) return computed;
+  return stricterIntimacyTier(computed, fromSnapshot);
 }

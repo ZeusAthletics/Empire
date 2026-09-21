@@ -245,13 +245,16 @@ export async function recordCuratedDelivery(input: {
   if (error) throw error;
 }
 
-export function formatCuratedCatalogForPrompt(items: NyxCuratedItem[]): string {
+export function formatCuratedCatalogForPrompt(items: NyxCuratedItem[], playerTier?: IntimacyTier): string {
+  const tierNote = playerTier
+    ? `Spelerband: ${playerTier} — alleen onderstaande items (minTier ≤ band, cumulatief EARLY→FRIEND→TRUST).`
+    : "Alleen ids in deze lijst zijn toegestaan voor deze speler/band.";
   if (!items.length) {
-    return "CATALOGUS: (leeg — geen curated stills/clips beschikbaar voor deze speler/tier; gebruik GENERATE als je beeld wilt sturen.)";
+    return `CATALOGUS: (leeg — geen curated stills/clips voor deze band; GENERATE alleen binnen band-sfeer, geen hogere-tier content.) ${tierNote}`;
   }
   const lines = items.map(
     (item) =>
       `- id=${item.id} type=${item.mediaType} minTier=${item.minIntimacyTier} — ${item.description || "(geen beschrijving)"}`,
   );
-  return `CATALOGUS (elk id max 1× naar deze speler; alleen ids hieronder):\n${lines.join("\n")}`;
+  return `CATALOGUS (elk id max 1× naar deze speler; ${tierNote})\n${lines.join("\n")}`;
 }

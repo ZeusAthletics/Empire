@@ -1,4 +1,5 @@
 import type { NyxCuratedItem } from "@/server/domain/nyx/curated/repository";
+import type { IntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 
 function tokenize(text: string): Set<string> {
   return new Set(
@@ -54,7 +55,27 @@ export function chatMediaCaption(userText: string): string {
   return "Even voor u. x";
 }
 
-export function chatGenerateScene(userText: string, featuredTitle: string): string {
+export function chatGenerateScene(userText: string, featuredTitle: string, tier: IntimacyTier = "EARLY"): string {
   const snippet = userText.trim().slice(0, 160);
-  return `Portrait Nyx, gold latex top, black leather, confident warm gaze, Kempen dusk light, same identity. Hardwig context: ${featuredTitle}. Verzoek: ${snippet}`;
+  if (tier === "EARLY") {
+    return `Portrait Nyx, gold latex top, black leather, warm friendly smile, supportive mood, Kempen dusk light, same identity. Hardwig context: ${featuredTitle}. Verzoek: ${snippet}. Geen sensuele pose.`;
+  }
+  if (tier === "FRIEND") {
+    return `Portrait Nyx, gold latex top, black leather, confident warm gaze, light playful tease, Kempen dusk light, same identity. Hardwig context: ${featuredTitle}. Verzoek: ${snippet}`;
+  }
+  return `Portrait Nyx, gold latex top, black leather, confident warm gaze, subtle sensual elegance (never vulgar), Kempen dusk light, same identity. Hardwig context: ${featuredTitle}. Verzoek: ${snippet}`;
+}
+
+export function generateSceneForTier(input: {
+  tier: IntimacyTier;
+  userText: string;
+  featuredTitle: string;
+  proposedScene?: string | null;
+}): string {
+  const proposed = input.proposedScene?.trim();
+  if (input.tier === "TRUST" && proposed) return proposed;
+  if (input.tier === "FRIEND" && proposed && !/\bsensueel|seduct|vulgar|lingerie\b/i.test(proposed)) {
+    return proposed;
+  }
+  return chatGenerateScene(input.userText, input.featuredTitle, input.tier);
 }

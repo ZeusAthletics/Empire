@@ -6,6 +6,8 @@ import { generateNyxStill } from "@/server/domain/nyx/identity/generateStill";
 import { hasFaceIdentityRef } from "@/server/domain/nyx/identity/repository";
 import { checkNyxIdentityGate } from "@/server/domain/nyx/identity/visionGate";
 import { imageToVideoFromStill, openArtVideoEnabled } from "@/server/domain/media/openArtVideo";
+import { generateSceneForTier } from "@/server/domain/nyx/curated/pickForChat";
+import { isCuratedIntimacyBlockedReason } from "@/server/domain/nyx/curated/tier";
 import type { IntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 import { appendOutboundNyxMessage } from "@/server/domain/nyx/talkRepository";
 
@@ -145,8 +147,13 @@ export async function fulfillNyxMediaDecision(input: {
   }
 
   const caption = decision.caption?.trim() || "…";
-  const scene = decision.scene?.trim() || decision.reason;
   const wantVideo = decision.action === "VIDEO";
+  const scene = generateSceneForTier({
+    tier: intimacyTier,
+    userText: decision.reason,
+    featuredTitle: "",
+    proposedScene: decision.scene?.trim() || decision.reason,
+  });
   const expectedType = wantVideo ? "VIDEO" : "PHOTO";
   const hasRefs = await hasFaceIdentityRef();
 
@@ -170,7 +177,7 @@ export async function fulfillNyxMediaDecision(input: {
         mediaId: curated.mediaId,
         messageId: curated.messageId,
       };
-    } else if (hasRefs) {
+    } else if (hasRefs && !isCuratedIntimacyBlockedReason(curated.reason)) {
       delivered = await deliverStillOrVideo({
         playerId,
         scene,
