@@ -145,7 +145,7 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
   return (
     <>
       <header className="hero">
-        <HeroArt seed={2} />
+        <HeroArt src="/missions-header.jpg" objectPosition="50% 42%" />
         <div className="hero-corner">
           <span className="eyebrow">A better you builds a larger tomorrow</span>
         </div>
