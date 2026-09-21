@@ -136,6 +136,7 @@ export async function loadMemoryPage(player: SessionPlayer): Promise<{
   rows: AdminMemoryRow[];
   memoryProposals: PublicProposal[];
   loadError: string | null;
+  totalMemories: number;
 }> {
   let memories: Awaited<ReturnType<typeof listMemories>>;
   try {
@@ -145,7 +146,7 @@ export async function loadMemoryPage(player: SessionPlayer): Promise<{
     const hint = /memories|schema cache|PGRST/i.test(message)
       ? " Controleer of migratie phase8_memory op Supabase is gedraaid."
       : "";
-    return { rows: [], memoryProposals: [], loadError: `${message}${hint}` };
+    return { rows: [], memoryProposals: [], loadError: `${message}${hint}`, totalMemories: 0 };
   }
 
   let memoryProposals: PublicProposal[] = [];
@@ -186,10 +187,19 @@ export async function loadMemoryPage(player: SessionPlayer): Promise<{
     }
   }
 
+  const sorted = [...memories].sort((a, b) => {
+    const rank = (status: string) => (status === "ACTIVE" ? 0 : 1);
+    const byStatus = rank(a.status) - rank(b.status);
+    if (byStatus !== 0) return byStatus;
+    return new Date(b.lastObservedAt).getTime() - new Date(a.lastObservedAt).getTime();
+  });
+  const capped = sorted.slice(0, 200);
+
   return {
-    rows: memories.map((memory) => ({ memory, versions: versions.get(memory.id) ?? [] })),
+    rows: capped.map((memory) => ({ memory, versions: versions.get(memory.id) ?? [] })),
     memoryProposals,
     loadError: null,
+    totalMemories: memories.length,
   };
 }
 

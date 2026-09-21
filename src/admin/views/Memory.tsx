@@ -8,32 +8,34 @@ export function MemoryView({
   memoryProposals,
   loadError,
   playerName,
+  totalMemories,
 }: {
   rows: AdminMemoryRow[];
   memoryProposals: PublicProposal[];
   loadError: string | null;
   playerName: string;
+  totalMemories: number;
 }) {
   const active = rows.filter((row) => row.memory.status === "ACTIVE").length;
   const pendingMem = memoryProposals.filter((item) => item.status === "PENDING");
 
   return (
-    <>
+    <div className="memory-page">
       <div className="head">
         <h1 className="display" style={{ fontSize: 22 }}>
           Memory inspector
         </h1>
         <span className="muted mono">
-          {playerName} · {active} actief · {rows.length} totaal
+          {playerName} · {active} actief · {totalMemories} totaal
+          {totalMemories > rows.length ? ` · toont ${rows.length}` : ""}
         </span>
       </div>
 
-      <p className="body muted" style={{ margin: "0 0 14px", maxWidth: 720, lineHeight: 1.55 }}>
-        Nyx voelt &quot;alsof ze veel weet&quot; door <strong style={{ color: "var(--ink-2)" }}>recente chat</strong> én
-        onderstaande opgeslagen feiten. Na elk gesprek draait extractie: belangrijke feiten worden vaak eerst een{" "}
-        <strong style={{ color: "var(--ink-2)" }}>voorstel</strong> (chips in chat) — pas na &quot;Onthouden&quot; of
-        admin-goedkeuring komen ze in deze tabel. Alleen <strong style={{ color: "var(--ink-2)" }}>ACTIVE</strong>{" "}
-        memories gaan structureel mee in prompts.
+      <p className="memory-explainer">
+        Nyx voelt &quot;alsof ze veel weet&quot; door <strong>recente chat</strong> én onderstaande opgeslagen feiten.
+        Na elk gesprek draait extractie: belangrijke feiten worden vaak eerst een <strong>voorstel</strong> (chips in
+        chat) — pas na &quot;Onthouden&quot; of admin-goedkeuring komen ze in deze tabel. Alleen{" "}
+        <strong>ACTIVE</strong> memories gaan structureel mee in prompts.
       </p>
 
       {loadError ? (
@@ -75,9 +77,9 @@ export function MemoryView({
             </div>
           ))
         ) : (
-          <div className="empty tr" role="status" style={{ display: "block", minHeight: 120, color: "var(--ink-2)" }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Geen memories voor {playerName}</div>
-            <div className="mono muted" style={{ fontSize: 11, lineHeight: 1.6, maxWidth: 520, margin: "0 auto" }}>
+          <div className="empty" role="status" style={{ minHeight: 120 }}>
+            <div className="empty-title">Geen memories voor {playerName}</div>
+            <div className="mono" style={{ fontSize: 11, lineHeight: 1.6, maxWidth: 520, margin: "0 auto", color: "var(--ink-3)" }}>
               Normaal na intake-bevestiging (STRATEGIC feiten) of wanneer Hardwig in Nyx-chat op &quot;Onthouden&quot; tikt.
               Seed vult geen demo-memories meer — chat met Nyx of rond intake af om rijen te zien.
             </div>
@@ -128,6 +130,6 @@ export function MemoryView({
           ) : null}
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

@@ -33,12 +33,20 @@ body::before {
     radial-gradient(80% 50% at 50% 100%, rgba(104, 28, 53, 0.18), transparent 70%),
     var(--night);
 }
+html:has(.ops) {
+  overflow: auto;
+  max-height: none;
+  height: auto;
+}
 html:has(.ops),
 html:has(.ops) body {
   position: static;
   height: auto;
   max-height: none;
   overflow: auto;
+}
+html:has(.ops) body::before {
+  z-index: -1;
 }
 button, input, textarea { font: inherit; color: inherit; }
 button { background: none; border: 0; padding: 0; cursor: pointer; }
