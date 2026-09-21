@@ -21,6 +21,7 @@ import {
 } from "@/server/domain/nyx/curated/repository";
 import { hasFaceIdentityRef } from "@/server/domain/nyx/identity/repository";
 import { computeIntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
+import { canSendMediaType, mediaBudgetRemaining } from "@/server/domain/nyx/relationship/mediaBudget";
 import { openArtVideoEnabled } from "@/server/domain/media/openArtVideo";
 
 const MEDIA_ASK =
@@ -144,6 +145,11 @@ export async function tryFulfillChatMediaRequest(input: {
   if (!userWantsMediaInChat(input.userText)) return { handled: false };
 
   const wantVideo = userWantsVideo(input.userText);
+  const budget = await mediaBudgetRemaining(input.playerId).catch(() => null);
+  const mediaAction = wantVideo ? "VIDEO" : "PHOTO";
+  if (budget && !canSendMediaType(budget, mediaAction)) {
+    return { handled: false };
+  }
   const intimacyTier = await computeIntimacyTier(input.playerId);
   const [hasRefs, catalog] = await Promise.all([
     hasFaceIdentityRef(),

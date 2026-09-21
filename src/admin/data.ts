@@ -12,6 +12,17 @@ import { getActivePersona } from "@/server/domain/persona/repository";
 import { NYX_CORE, NYX_CORE_VERSION } from "@/server/ai/prompts/nyx-core";
 import { DEFAULT_PERSONA } from "@/server/ai/prompts/persona";
 import type { SessionPlayer } from "@/server/domain/player/types";
+import {
+  getMediaBudget,
+  mediaBudgetRemaining,
+  type MediaBudgetRemaining,
+  type NyxMediaBudget,
+} from "@/server/domain/nyx/relationship/mediaBudget";
+import {
+  latestRelationshipSnapshot,
+  listRelationshipSnapshots,
+  type RelationshipSnapshot,
+} from "@/server/domain/nyx/relationship/repository";
 
 export type AdminRun = {
   id: string;
@@ -234,6 +245,36 @@ export async function loadPromptsPage() {
 
 export async function loadAssetsPage(player: SessionPlayer) {
   return listMedia(player.id);
+}
+
+export async function loadNyxRelationshipPage(player: SessionPlayer): Promise<{
+  latest: RelationshipSnapshot | null;
+  history: RelationshipSnapshot[];
+  budget: NyxMediaBudget;
+  usage: MediaBudgetRemaining | null;
+  loadError: string | null;
+}> {
+  try {
+    const [latest, history, budget, usage] = await Promise.all([
+      latestRelationshipSnapshot(player.id),
+      listRelationshipSnapshots(player.id, 12),
+      getMediaBudget(player.id),
+      mediaBudgetRemaining(player.id).catch(() => null),
+    ]);
+    return { latest, history, budget, usage, loadError: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Relatiepagina laden mislukt.";
+    const hint = /nyx_relationship|nyx_media_budget|schema cache|PGRST/i.test(message)
+      ? " Controleer of migratie 20260921120000_nyx_relationship op Supabase is gedraaid."
+      : "";
+    return {
+      latest: null,
+      history: [],
+      budget: { maxPhotosPerDay: 2, maxVideosPerDay: 1 },
+      usage: null,
+      loadError: `${message}${hint}`,
+    };
+  }
 }
 
 export async function pendingCount(playerId: string) {

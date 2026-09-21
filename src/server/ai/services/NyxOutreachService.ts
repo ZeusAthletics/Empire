@@ -13,6 +13,7 @@ import {
   listCuratedAvailableForOutreach,
 } from "@/server/domain/nyx/curated/repository";
 import { hasFaceIdentityRef } from "@/server/domain/nyx/identity/repository";
+import { canSendMediaType, mediaBudgetRemaining } from "@/server/domain/nyx/relationship/mediaBudget";
 
 export async function runNyxOutreachTick(playerId: string) {
   const intimacyTier = await computeIntimacyTier(playerId);
@@ -40,7 +41,11 @@ export async function runNyxOutreachTick(playerId: string) {
 
   const hasRefs = await hasFaceIdentityRef();
   const catalog = await listCuratedAvailableForOutreach(playerId, intimacyTier);
-  const prompt = `${NYX_OUTREACH_GUIDE}\n\nIntimacy tier: ${intimacyTier}\nIdentity refs beschikbaar: ${hasRefs}\nOpenArt video: ${openArtVideoEnabled()}\n${formatCuratedCatalogForPrompt(catalog)}\nHooks:\n${hookContext.hooks.join("\n")}\n\nRecent chat:\n${hookContext.recentChat.join("\n")}`;
+  const budget = await mediaBudgetRemaining(playerId).catch(() => null);
+  const budgetLine = budget
+    ? `Dagbudget media (max, niet verplicht): foto's ${budget.sent.photos}/${budget.budget.maxPhotosPerDay} (nog ${budget.photosLeft}), video's ${budget.sent.videos}/${budget.budget.maxVideosPerDay} (nog ${budget.videosLeft}).`
+    : "";
+  const prompt = `${NYX_OUTREACH_GUIDE}\n\nIntimacy tier: ${intimacyTier}\nIdentity refs beschikbaar: ${hasRefs}\nOpenArt video: ${openArtVideoEnabled()}\n${budgetLine}\n${formatCuratedCatalogForPrompt(catalog)}\nHooks:\n${hookContext.hooks.join("\n")}\n\nRecent chat:\n${hookContext.recentChat.join("\n")}`;
 
   const result = await runNyxTask({
     playerId,
@@ -60,6 +65,21 @@ export async function runNyxOutreachTick(playerId: string) {
       runId: result.runId,
     });
     return { action: "SILENCE" as const, skipped: true };
+  }
+
+  if (
+    budget &&
+    (decision.action === "PHOTO" || decision.action === "VIDEO") &&
+    !canSendMediaType(budget, decision.action)
+  ) {
+    await logOutreachRun({
+      playerId,
+      action: "SILENCE",
+      reason: "Dagbudget media bereikt.",
+      intimacyTier,
+      runId: result.runId,
+    });
+    return { action: "SILENCE" as const };
   }
 
   if (decision.action === "SILENCE") {

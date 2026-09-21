@@ -22,6 +22,7 @@ export const INTELLIGENCE_TASKS = [
   "MONTHLY_WRAP_ANALYSIS",
   "PATTERN_DETECTION",
   "NYX_OUTREACH",
+  "NYX_RELATIONSHIP_REVIEW",
 ] as const;
 
 export type IntelligenceTask = (typeof INTELLIGENCE_TASKS)[number];
