@@ -5,6 +5,7 @@ import { retrieveRelevantMemories } from "@/server/domain/memory/repository";
 import { listLiveOpportunities } from "@/server/domain/opportunity/repository";
 import { listOpenPatterns } from "@/server/domain/pattern/repository";
 import { listMissions } from "@/server/domain/mission/repository";
+import { activeMissionsForNyx, type NyxActiveMissionBrief } from "@/server/domain/mission/nyxContext";
 import { featuredMission } from "@/server/domain/mission/types";
 import { findPlayerById } from "@/server/domain/player/repository";
 import { getPlayerModel, summarizePlayerModel } from "@/server/domain/player/playerModel";
@@ -18,6 +19,7 @@ export type NyxContext = {
   currentCampaignState: string | null;
   currentChapter: string | null;
   currentMainQuest: string | null;
+  activeMissions: { mainStory: NyxActiveMissionBrief[]; sideQuests: NyxActiveMissionBrief[] } | null;
   relevantJournalEntries: string[];
   relevantMemories: string[];
   openPatterns: string[];
@@ -34,14 +36,17 @@ export async function buildNyxContext(
   const player = await findPlayerById(playerId).catch(() => null);
   const campaign = player ? await findPublicCampaignByPlayerId(playerId).catch(() => null) : null;
   const model = player ? await getPlayerModel(playerId).catch(() => null) : null;
-  const missions =
+  const missionAwareTasks =
     task === "CASUAL_CHAT" ||
     task === "NYX_EXPLANATION" ||
+    task === "NYX_OUTREACH" ||
+    task === "NYX_RELATIONSHIP_REVIEW" ||
     task === "SIDE_QUEST_GENERATION" ||
+    task === "HIGH_IMPACT_SIDE_QUEST" ||
     task === "PLAYER_INTAKE" ||
-    task === "MAIN_QUEST_GENERATION"
-      ? await listMissions(playerId).catch(() => [])
-      : [];
+    task === "MAIN_QUEST_GENERATION";
+  const missions = missionAwareTasks ? await listMissions(playerId).catch(() => []) : [];
+  const activeMissions = missionAwareTasks ? activeMissionsForNyx(missions) : null;
   const journal =
     task === "MEMORY_EXTRACTION" || task === "JOURNAL_CLASSIFICATION" || task === "MONTHLY_WRAP_ANALYSIS"
       ? await getJournalState(playerId).catch(() => null)
@@ -65,6 +70,7 @@ export async function buildNyxContext(
       : null,
     currentChapter: campaign?.chapter ? `${campaign.chapter.roman} ${campaign.chapter.name}` : null,
     currentMainQuest: featuredMission(missions)?.title ?? null,
+    activeMissions,
     relevantJournalEntries: (journal?.entries ?? []).slice(0, 10).map((entry) => entry.title),
     relevantMemories: memories.map((memory) =>
       formatMemoryLine(memory.domain, memory.category, memory.content || memory.normalizedFact),

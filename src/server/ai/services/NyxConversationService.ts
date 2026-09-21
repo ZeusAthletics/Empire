@@ -6,6 +6,7 @@ import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRi
 import { recentPlayerChatTurns } from "@/server/domain/nyx/recentChat";
 import { buildChatAttachmentContext } from "@/server/ai/services/NyxChatAttachmentContext";
 import { tryFulfillChatMediaRequest, userWantsMediaInChat } from "@/server/ai/services/NyxChatMediaService";
+import { formatActiveMissionsForPrompt } from "@/server/domain/mission/nyxContext";
 import {
   appendMessage,
   featuredTalkContext,
@@ -98,7 +99,7 @@ export async function sendNyxMessage(playerId: string, input: SendNyxMessageInpu
     ? await runNyxTask({
         playerId,
         task: "CASUAL_CHAT",
-        text: `${userContent}\n\nRecente beurten:\n${recent.join("\n")}\nHoofdmissie: ${ctx.featuredTitle}${attachmentNote}${mediaFailNote}`,
+        text: `${userContent}\n\nRecente beurten:\n${recent.join("\n")}\n${formatActiveMissionsForPrompt(ctx.activeMissions)}${attachmentNote}${mediaFailNote}`,
         invokeModel: true,
       }).catch(() => null)
     : null;

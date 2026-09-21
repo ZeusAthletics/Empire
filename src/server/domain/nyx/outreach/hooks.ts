@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { formatChatLineForPrompt } from "@/server/domain/nyx/chatFormat";
+import { activeMissionsForNyx } from "@/server/domain/mission/nyxContext";
 import { listMissions } from "@/server/domain/mission/repository";
 import { retrieveRelevantMemories } from "@/server/domain/memory/repository";
 
@@ -42,6 +43,11 @@ export async function collectOutreachHooks(playerId: string): Promise<OutreachHo
   }
 
   const missions = await listMissions(playerId).catch(() => []);
+  const active = activeMissionsForNyx(missions);
+  for (const brief of [...active.mainStory, ...active.sideQuests].slice(0, 4)) {
+    const next = brief.nextStep ? ` · volgende: ${brief.nextStep}` : "";
+    hooks.push(`Actieve missie (${brief.track === "MAIN_STORY" ? "hoofd" : "side"}): ${brief.title}${next}`);
+  }
   const won = missions
     .filter((m) => m.status === "COMPLETED" || m.status === "COMPLETED_UNVERIFIED")
     .slice(0, 2);

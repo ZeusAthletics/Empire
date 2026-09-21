@@ -162,7 +162,9 @@ async function loadMissionList(playerId: string, includeHiddenPlanned: boolean):
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
   if (!includeHiddenPlanned) {
-    query = query.not("status", "in", '("PLANNED","ARCHIVED")');
+    query = query
+      .not("status", "in", '("PLANNED","ARCHIVED")')
+      .not("status", "in", '("COMPLETED","COMPLETED_UNVERIFIED")');
   }
   const { data: rows, error } = await query;
   if (error) throw error;
@@ -316,7 +318,11 @@ async function attestAndPersist(
     const { scheduleCampaignProgressAfterMissionComplete } = await import(
       "@/server/domain/mission/campaignProgressTrigger"
     );
+    const { scheduleMissionCompletionJournal } = await import(
+      "@/server/domain/mission/missionJournalTrigger"
+    );
     scheduleCampaignProgressAfterMissionComplete(playerId, loaded.row.id);
+    scheduleMissionCompletionJournal(playerId, loaded.row.id);
   }
 
   const mission = (await loadMission(playerId, loaded.row.id)).mission;
@@ -361,7 +367,11 @@ async function finalizeAndPersist(
   const { scheduleCampaignProgressAfterMissionComplete } = await import(
     "@/server/domain/mission/campaignProgressTrigger"
   );
+  const { scheduleMissionCompletionJournal } = await import(
+    "@/server/domain/mission/missionJournalTrigger"
+  );
   scheduleCampaignProgressAfterMissionComplete(playerId, loaded.row.id);
+  scheduleMissionCompletionJournal(playerId, loaded.row.id);
   const mission = (await loadMission(playerId, loaded.row.id)).mission;
   return { mission, xpDelta: result.xpDelta, message: `Missie voltooid · +${result.xpDelta} XP` };
 }

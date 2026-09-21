@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Calendar,
-  Check,
   ChevronRight,
   Flag,
   MoreHorizontal,
@@ -41,8 +40,16 @@ const FILTERS = [
   { k: "active", label: "Active", icon: Target },
   { k: "main", label: "Main story", icon: Star },
   { k: "side", label: "Side quests", icon: Flag },
-  { k: "done", label: "Completed", icon: Check },
 ] as const;
+
+function isOpenMission(mission: PublicMission) {
+  return (
+    mission.status === "ACTIVE" ||
+    mission.status === "PROPOSED" ||
+    mission.status === "BLOCKED" ||
+    mission.status === "LOCKED"
+  );
+}
 
 type FilterKey = (typeof FILTERS)[number]["k"];
 
@@ -108,18 +115,15 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
 
   const counts = {
     active: missions.filter((mission) => mission.status === "ACTIVE").length,
-    main: missions.filter((mission) => mission.track === "MAIN_STORY").length,
-    side: missions.filter((mission) => mission.track === "SIDE_QUEST").length,
-    done: missions.filter((mission) => mission.status === "COMPLETED" || mission.status === "COMPLETED_UNVERIFIED").length,
+    main: missions.filter((mission) => mission.track === "MAIN_STORY" && isOpenMission(mission)).length,
+    side: missions.filter((mission) => mission.track === "SIDE_QUEST" && isOpenMission(mission)).length,
   };
   const list =
     filter === "active"
       ? missions.filter((mission) => mission.status === "ACTIVE")
       : filter === "main"
-        ? missions.filter((mission) => mission.track === "MAIN_STORY")
-        : filter === "side"
-          ? missions.filter((mission) => mission.track === "SIDE_QUEST")
-          : missions.filter((mission) => mission.status === "COMPLETED" || mission.status === "COMPLETED_UNVERIFIED");
+        ? missions.filter((mission) => mission.track === "MAIN_STORY" && isOpenMission(mission))
+        : missions.filter((mission) => mission.track === "SIDE_QUEST" && isOpenMission(mission));
   const featured = featuredMission(missions);
   const suggested = missions.filter((mission) => mission.status === "PROPOSED");
   const required = featured ? requiredCount(featured) : 0;
@@ -243,7 +247,7 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
 
       <div className="section">
         <div className="section-head">
-          <h2 className="display d-sm">{filter === "done" ? "Voltooide missies" : "Active missions"}</h2>
+          <h2 className="display d-sm">Active missions</h2>
           <span className="eyebrow muted">Sort: priority</span>
         </div>
         <div className="stack">

@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { activeMissionsForNyx } from "@/server/domain/mission/nyxContext";
 import { featuredMission } from "@/server/domain/mission/types";
 import { listMissions } from "@/server/domain/mission/repository";
 import { findPublicCampaignByPlayerId } from "@/server/domain/campaign/repository";
@@ -99,6 +100,7 @@ export async function featuredTalkContext(playerId: string) {
   ]);
   return {
     featuredTitle: featuredMission(missions)?.title ?? "uw actieve missie",
+    activeMissions: activeMissionsForNyx(missions),
     network: player?.stats.find((stat) => stat.key === "network")?.value ?? 0,
     economicCurrent: campaign?.chapter?.economicCurrent ?? 0,
   };

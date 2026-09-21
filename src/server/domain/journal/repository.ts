@@ -123,6 +123,9 @@ async function loadLookups(playerId: string) {
 }
 
 export async function getJournalState(playerId: string): Promise<JournalState> {
+  const { syncMissingMissionJournalEntries } = await import("@/server/domain/journal/missionJournal");
+  await syncMissingMissionJournalEntries(playerId).catch(() => undefined);
+
   const { admin, contactsById, missionTitle } = await loadLookups(playerId);
   const [{ data: rows, error }, { data: wraps, error: wrapError }] = await Promise.all([
     admin
