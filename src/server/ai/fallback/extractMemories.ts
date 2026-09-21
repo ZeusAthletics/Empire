@@ -1,16 +1,15 @@
 import type { MemoryCandidate } from "@/server/ai/schemas/memory.schema";
-import { normalizeMemoryCategory } from "@/server/domain/memory/categories";
-import { normalizeFact } from "@/server/validation/MemoryValidationService";
+import { normalizeFact, sanitizeMemoryCandidate } from "@/server/validation/MemoryValidationService";
 
 const GREETING = /^(goede (avond|morgen|middag)|hey|hoi|hallo|ok|oké)[\s.!?]*$/i;
 
 function candidate(partial: Omit<MemoryCandidate, "status" | "shouldStore"> & { shouldStore?: boolean }): MemoryCandidate {
-  return {
+  return sanitizeMemoryCandidate({
     ...partial,
     normalizedFact: normalizeFact(partial.normalizedFact),
     status: partial.confidence,
     shouldStore: partial.shouldStore ?? true,
-  };
+  });
 }
 
 /** Deterministic extractor. Zero memories is the common result. */
@@ -108,11 +107,11 @@ export function parseMemoryCandidates(raw: string | null | undefined): MemoryCan
     if (!Array.isArray(list)) return [];
     return list
       .filter((item) => item && typeof item.normalizedFact === "string")
-      .slice(0, 3)
+      .slice(0, 5)
       .map((item) =>
         candidate({
           domain: item.domain,
-          category: normalizeMemoryCategory(item.domain, item.category || "GENERAL"),
+          category: item.category || "GENERAL",
           normalizedFact: item.normalizedFact,
           confidence: item.confidence,
           importance: item.importance,

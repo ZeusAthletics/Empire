@@ -3,7 +3,11 @@ import test from "node:test";
 import { extractMemoryCandidatesOffline } from "../fallback/extractMemories";
 import { retrieveRelevantMemoriesFrom } from "../../domain/memory/retrieval";
 import type { Memory } from "../../domain/memory/types";
-import { applyMemoryDecision, validateMemoryCandidate } from "../../validation/MemoryValidationService";
+import {
+  applyMemoryDecision,
+  normalizeMemoryConfidence,
+  validateMemoryCandidate,
+} from "../../validation/MemoryValidationService";
 import { handleCasualUserTurn } from "../fallback/nyxReply";
 import { planEntityExtraction } from "../services/EntityExtractionService";
 import { getModelForTier } from "../routing/modelConfig";
@@ -33,6 +37,12 @@ function memory(partial: Partial<Memory> & Pick<Memory, "id" | "normalizedFact">
     ...partial,
   };
 }
+
+test("12b model aliases hoog/high confidence for Postgres enum", () => {
+  assert.equal(normalizeMemoryConfidence("hoog"), "CONFIRMED");
+  assert.equal(normalizeMemoryConfidence("high"), "CONFIRMED");
+  assert.equal(normalizeMemoryConfidence("medium"), "LIKELY");
+});
 
 test("13 greeting yields no memories", () => {
   assert.deepEqual(extractMemoryCandidatesOffline("Goede avond"), []);

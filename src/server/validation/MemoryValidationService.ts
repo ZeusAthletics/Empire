@@ -1,5 +1,17 @@
 import type { MemoryCandidate } from "@/server/ai/schemas/memory.schema";
-import type { Memory, MemoryDomain } from "@/server/domain/memory/types";
+import { normalizeMemoryCategory } from "@/server/domain/memory/categories";
+import type { Memory, MemoryConfidence, MemoryDomain, MemoryImportance } from "@/server/domain/memory/types";
+
+const CONFIDENCE_VALUES = new Set<MemoryConfidence>(["TENTATIVE", "LIKELY", "CONFIRMED", "EXPLICIT"]);
+const IMPORTANCE_VALUES = new Set<MemoryImportance>(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+const DOMAIN_VALUES = new Set<MemoryDomain>([
+  "PERSONAL",
+  "CAMPAIGN",
+  "STRATEGIC",
+  "RELATIONSHIP",
+  "PREFERENCE",
+  "CONVERSATION_SUMMARY",
+]);
 
 /** Stored automatically — no Onthouden chip — so chat facts survive long threads. */
 const PERSISTENT_CHAT_DOMAINS = new Set<MemoryDomain>([
@@ -21,6 +33,70 @@ export type MemoryDecision = {
 
 export function normalizeFact(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function enumKey(raw: unknown) {
+  return String(raw ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+export function normalizeMemoryConfidence(raw: unknown): MemoryConfidence {
+  const key = enumKey(raw);
+  if (CONFIDENCE_VALUES.has(key as MemoryConfidence)) return key as MemoryConfidence;
+  const aliases: Record<string, MemoryConfidence> = {
+    HOOG: "CONFIRMED",
+    HIGH: "CONFIRMED",
+    MEDIUM: "LIKELY",
+    MED: "LIKELY",
+    GEMIDDELD: "LIKELY",
+    LAAG: "TENTATIVE",
+    LOW: "TENTATIVE",
+    ZEKER: "EXPLICIT",
+    EXPLICIET: "EXPLICIT",
+    EXPLICIT: "EXPLICIT",
+  };
+  return aliases[key] ?? "LIKELY";
+}
+
+export function normalizeMemoryImportance(raw: unknown): MemoryImportance {
+  const key = enumKey(raw);
+  if (IMPORTANCE_VALUES.has(key as MemoryImportance)) return key as MemoryImportance;
+  const aliases: Record<string, MemoryImportance> = {
+    HOOG: "HIGH",
+    HIGH: "HIGH",
+    LAAG: "LOW",
+    LOW: "LOW",
+    GEMIDDELD: "MEDIUM",
+    MEDIUM: "MEDIUM",
+    MED: "MEDIUM",
+    KRITIEK: "CRITICAL",
+    CRITICAL: "CRITICAL",
+  };
+  return aliases[key] ?? "MEDIUM";
+}
+
+export function normalizeMemoryDomain(raw: unknown): MemoryDomain {
+  const key = enumKey(raw);
+  if (DOMAIN_VALUES.has(key as MemoryDomain)) return key as MemoryDomain;
+  return "PREFERENCE";
+}
+
+/** Coerce model JSON (incl. Dutch/lowercase enums) before DB writes. */
+export function sanitizeMemoryCandidate(candidate: MemoryCandidate): MemoryCandidate {
+  const domain = normalizeMemoryDomain(candidate.domain);
+  const confidence = normalizeMemoryConfidence(candidate.confidence);
+  return {
+    ...candidate,
+    domain,
+    category: normalizeMemoryCategory(domain, candidate.category),
+    normalizedFact: normalizeFact(candidate.normalizedFact),
+    confidence,
+    importance: normalizeMemoryImportance(candidate.importance),
+    status: normalizeMemoryConfidence(candidate.status),
+    shouldStore: candidate.shouldStore !== false,
+  };
 }
 
 export function validateMemoryCandidate(candidate: MemoryCandidate) {
