@@ -21,6 +21,10 @@ import {
   type NyxMediaBudget,
 } from "@/server/domain/nyx/relationship/mediaBudget";
 import {
+  getRelationshipDirection,
+  type RelationshipDirection,
+} from "@/server/domain/nyx/relationship/direction";
+import {
   latestRelationshipSnapshot,
   listRelationshipSnapshots,
   type RelationshipSnapshot,
@@ -265,26 +269,36 @@ export async function loadNyxRelationshipPage(player: SessionPlayer): Promise<{
   history: RelationshipSnapshot[];
   budget: NyxMediaBudget;
   usage: MediaBudgetRemaining | null;
+  direction: RelationshipDirection;
   loadError: string | null;
 }> {
   try {
-    const [latest, history, budget, usage] = await Promise.all([
+    const [latest, history, budget, usage, direction] = await Promise.all([
       latestRelationshipSnapshot(player.id),
       listRelationshipSnapshots(player.id, 12),
       getMediaBudget(player.id),
       mediaBudgetRemaining(player.id).catch(() => null),
+      getRelationshipDirection(player.id),
     ]);
-    return { latest, history, budget, usage, loadError: null };
+    return { latest, history, budget, usage, direction, loadError: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Relatiepagina laden mislukt.";
     const hint = /nyx_relationship|nyx_media_budget|schema cache|PGRST/i.test(message)
-      ? " Controleer of migratie 20260921120000_nyx_relationship op Supabase is gedraaid."
+      ? " Controleer of migratie 20260921120000_nyx_relationship (en 20260922150000 scenario's) op Supabase is gedraaid."
       : "";
     return {
       latest: null,
       history: [],
       budget: { maxPhotosPerDay: 2, maxVideosPerDay: 1 },
       usage: null,
+      direction: {
+        mode: "natural",
+        scenarioId: null,
+        scenarioTitle: null,
+        scenarioSummary: null,
+        sourceSnapshotId: null,
+        updatedAt: null,
+      },
       loadError: `${message}${hint}`,
     };
   }

@@ -11,6 +11,10 @@ import { formatPlayerLocalTime, type PlayerLocalTime } from "@/server/domain/pla
 import { findPlayerById } from "@/server/domain/player/repository";
 import { getPlayerModel, summarizePlayerModel } from "@/server/domain/player/playerModel";
 import { listVisibleContacts } from "@/server/domain/contact/repository";
+import {
+  formatRelationshipDirectionForContext,
+  getRelationshipDirection,
+} from "@/server/domain/nyx/relationship/direction";
 import type { IntelligenceTask } from "@/server/ai/routing/IntelligenceTask";
 
 export type NyxContext = {
@@ -28,6 +32,7 @@ export type NyxContext = {
   knownAddresses: string[];
   locationRule: string;
   playerLocalTime: PlayerLocalTime | null;
+  relationshipDirection: string | null;
 };
 
 export async function buildNyxContext(
@@ -68,6 +73,19 @@ export async function buildNyxContext(
   const playerLocalTime =
     player && timeAwareTasks ? formatPlayerLocalTime(player.timeZone) : null;
 
+  const directionAwareTasks =
+    task === "CASUAL_CHAT" || task === "NYX_CHECKIN" || task === "NYX_OUTREACH";
+  const relationshipDirection = directionAwareTasks
+    ? formatRelationshipDirectionForContext(await getRelationshipDirection(playerId).catch(() => ({
+        mode: "natural" as const,
+        scenarioId: null,
+        scenarioTitle: null,
+        scenarioSummary: null,
+        sourceSnapshotId: null,
+        updatedAt: null,
+      })))
+    : null;
+
   const contacts = await listVisibleContacts(playerId).catch(() => []);
   const knownAddresses = [
     player?.homeAddress ? `Home Base: ${player.homeAddress}` : null,
@@ -94,5 +112,6 @@ export async function buildNyxContext(
     locationRule:
       "Map pins require a real Belgian street address (street + house number + town). Look the address up. Never invent coordinates or use only a municipality. Never target restricted contacts.",
     playerLocalTime,
+    relationshipDirection,
   };
 }

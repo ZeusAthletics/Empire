@@ -34,6 +34,20 @@ function offlineReview(input: {
       input.relationshipMemories > 0 ? "Er staan relatie-memories in het systeem" : "Nog weinig expliciete relatie-feiten opgeslagen",
     ],
     concerns: input.intimacyTier === "EARLY" ? ["Band is nog vroeg — ik houd reserve"] : [],
+    progressScenarios: [
+      {
+        id: "organic_pace",
+        title: "Organisch vertrouwen",
+        summary:
+          "We blijven veel tekst, weinig druk. Ik deel geleidelijk meer van mijn echte dagen; hij bewijst consistentie voordat ik warmer word.",
+      },
+      {
+        id: "playful_closer",
+        title: "Meer speels contact",
+        summary:
+          "De band wordt lichter: inside jokes, vaker korte check-ins, soms een foto als het past. Spanning blijft laag zolang hij respectvol blijft.",
+      },
+    ],
   };
 }
 
@@ -109,6 +123,7 @@ ${hooks.recentChat.join("\n") || "(geen)"}`;
     analysis: review.analysis,
     highlights: review.highlights,
     concerns: review.concerns,
+    progressScenarios: review.progressScenarios,
     runId,
   });
 }

@@ -4,7 +4,7 @@ import { NyxRelationshipView } from "@/admin/views/NyxRelationship";
 
 export default async function AdminNyxRelationshipPage() {
   const player = await adminScoped("/admin/nyx-relationship");
-  const { latest, history, budget, usage, loadError } = await loadNyxRelationshipPage(player);
+  const { latest, history, budget, usage, direction, loadError } = await loadNyxRelationshipPage(player);
   return (
     <NyxRelationshipView
       playerName={player.displayName}
@@ -12,6 +12,7 @@ export default async function AdminNyxRelationshipPage() {
       history={history}
       budget={budget}
       usage={usage}
+      direction={direction}
       loadError={loadError}
     />
   );

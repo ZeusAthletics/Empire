@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import type { NyxProgressScenario } from "@/server/ai/schemas/relationship.schema";
 import type { IntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 
 export type RelationshipSnapshot = {
@@ -12,6 +13,7 @@ export type RelationshipSnapshot = {
   analysis: string;
   highlights: string[];
   concerns: string[];
+  progressScenarios: NyxProgressScenario[];
   runId: string | null;
   createdAt: string;
 };
@@ -30,6 +32,20 @@ function asStringList(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
+function asProgressScenarios(value: unknown): NyxProgressScenario[] {
+  if (!Array.isArray(value)) return [];
+  const out: NyxProgressScenario[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const title = typeof row.title === "string" ? row.title.trim() : "";
+    const summary = typeof row.summary === "string" ? row.summary.trim() : "";
+    const id = typeof row.id === "string" ? row.id.trim() : "";
+    if (title && summary) out.push({ id: id || title, title, summary });
+  }
+  return out;
+}
+
 function mapSnapshot(row: Record<string, unknown>): RelationshipSnapshot {
   return {
     id: row.id as string,
@@ -42,6 +58,7 @@ function mapSnapshot(row: Record<string, unknown>): RelationshipSnapshot {
     analysis: (row.analysis as string) ?? "",
     highlights: asStringList(row.highlights),
     concerns: asStringList(row.concerns),
+    progressScenarios: asProgressScenarios(row.progress_scenarios),
     runId: (row.run_id as string | null) ?? null,
     createdAt: row.created_at as string,
   };
@@ -57,6 +74,7 @@ export async function insertRelationshipSnapshot(input: {
   analysis: string;
   highlights: string[];
   concerns: string[];
+  progressScenarios: NyxProgressScenario[];
   runId?: string | null;
 }): Promise<RelationshipSnapshot> {
   const admin = createSupabaseAdminClient();
@@ -72,6 +90,7 @@ export async function insertRelationshipSnapshot(input: {
       analysis: input.analysis.trim(),
       highlights: input.highlights,
       concerns: input.concerns,
+      progress_scenarios: input.progressScenarios,
       run_id: input.runId ?? null,
     } as never)
     .select("*")

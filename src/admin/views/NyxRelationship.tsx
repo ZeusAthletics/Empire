@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { relTime } from "@/admin/format";
 import { INTIMACY_TIER_LABELS } from "@/server/domain/nyx/curated/tier";
+import type { RelationshipDirection } from "@/server/domain/nyx/relationship/direction";
 import type { MediaBudgetRemaining, NyxMediaBudget } from "@/server/domain/nyx/relationship/mediaBudget";
 import type { RelationshipSnapshot } from "@/server/domain/nyx/relationship/repository";
 import type { IntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
@@ -29,6 +30,7 @@ export function NyxRelationshipView({
   history,
   budget: initialBudget,
   usage,
+  direction: initialDirection,
   loadError,
 }: {
   playerName: string;
@@ -36,6 +38,7 @@ export function NyxRelationshipView({
   history: RelationshipSnapshot[];
   budget: NyxMediaBudget;
   usage: MediaBudgetRemaining | null;
+  direction: RelationshipDirection;
   loadError: string | null;
 }) {
   const router = useRouter();
@@ -44,6 +47,19 @@ export function NyxRelationshipView({
   const [note, setNote] = useState<string | null>(null);
   const [maxPhotos, setMaxPhotos] = useState(initialBudget.maxPhotosPerDay);
   const [maxVideos, setMaxVideos] = useState(initialBudget.maxVideosPerDay);
+  const [directionChoice, setDirectionChoice] = useState<"natural" | string>(() =>
+    initialDirection.mode === "guided" && initialDirection.scenarioId
+      ? initialDirection.scenarioId
+      : "natural",
+  );
+
+  useEffect(() => {
+    setDirectionChoice(
+      initialDirection.mode === "guided" && initialDirection.scenarioId
+        ? initialDirection.scenarioId
+        : "natural",
+    );
+  }, [initialDirection]);
 
   async function runReview() {
     setPending(true);
@@ -57,6 +73,38 @@ export function NyxRelationshipView({
         return;
       }
       setNote("Nyx heeft een nieuwe relatie-analyse achtergelaten.");
+      router.refresh();
+    } catch {
+      setError("Geen verbinding.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function saveDirection() {
+    setPending(true);
+    setError(null);
+    setNote(null);
+    try {
+      const body =
+        directionChoice === "natural"
+          ? { directionMode: "natural" as const }
+          : { directionMode: "guided" as const, scenarioId: directionChoice };
+      const response = await fetch("/api/admin/nyx-relationship", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = (await response.json()) as { ok: boolean; error?: string };
+      if (!response.ok || !payload.ok) {
+        setError(payload.error ?? "Richting opslaan mislukt.");
+        return;
+      }
+      setNote(
+        directionChoice === "natural"
+          ? "Nyx volgt geen gekozen scenario — natuurlijke progressie."
+          : "Gekozen toekomstscenario opgeslagen voor Nyx (intern).",
+      );
       router.refresh();
     } catch {
       setError("Geen verbinding.");
@@ -90,6 +138,13 @@ export function NyxRelationshipView({
   }
 
   const tier = latest?.intimacyTier as IntimacyTier | null | undefined;
+  const scenarios = latest?.progressScenarios ?? [];
+  const guidedActive =
+    initialDirection.mode === "guided" &&
+    initialDirection.scenarioId &&
+    initialDirection.scenarioTitle;
+  const guidedInLatest =
+    guidedActive && scenarios.some((item) => item.id === initialDirection.scenarioId);
 
   return (
     <div className="memory-page">
@@ -104,8 +159,9 @@ export function NyxRelationshipView({
 
       <p className="memory-explainer">
         Interne meter: vertrouwen, warmte en spanning zoals Nyx die <strong>nu</strong> ervaart. Druk op de knop
-        voor een verse analyse. Het dagmaximum voor foto&apos;s/video&apos;s geldt voor outreach én chat-verzoeken
-        (Nyx mag altijd minder sturen).
+        voor een verse analyse. Onder <strong>Toekomstscenario&apos;s</strong> zie je wat Nyx voor zich ziet tussen
+        haar en Hardwig — kies één pad of laat open voor natuurlijke progressie. Het dagmaximum voor
+        foto&apos;s/video&apos;s geldt voor outreach én chat-verzoeken (Nyx mag altijd minder sturen).
       </p>
 
       {loadError ? (
@@ -216,6 +272,88 @@ export function NyxRelationshipView({
           </label>
           <button className="btn sm" type="button" disabled={pending} onClick={() => void saveBudget()}>
             Opslaan maximum
+          </button>
+        </div>
+
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="eyebrow">Toekomstscenario&apos;s</div>
+          <p className="muted" style={{ margin: "8px 0 12px", fontSize: 12.5 }}>
+            Nyx&apos; plausibele paden met Hardwig (intern). Alleen actief na opslaan; Hardwig ziet dit niet.
+          </p>
+          {guidedActive && !guidedInLatest ? (
+            <p className="mono muted" style={{ marginBottom: 10, fontSize: 11 }}>
+              Huidige keuze: «{initialDirection.scenarioTitle}» (van eerdere analyse — kies opnieuw na update
+              indien gewenst).
+            </p>
+          ) : null}
+          {!latest || scenarios.length === 0 ? (
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              Nog geen scenario&apos;s. Vraag Nyx om een relatie-update; daarna verschijnen opties hier.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label
+                className="card flat tap"
+                style={{
+                  display: "block",
+                  padding: "10px 12px",
+                  cursor: pending ? "default" : "pointer",
+                  borderColor: directionChoice === "natural" ? "rgba(201, 162, 39, 0.55)" : undefined,
+                }}
+              >
+                <input
+                  type="radio"
+                  name="nyx-direction"
+                  value="natural"
+                  checked={directionChoice === "natural"}
+                  disabled={pending}
+                  onChange={() => setDirectionChoice("natural")}
+                  style={{ marginRight: 8 }}
+                />
+                <span className="body" style={{ fontSize: 13 }}>
+                  <strong>Natuurlijk</strong> — geen gekozen scenario; band evolueert via chat.
+                </span>
+              </label>
+              {scenarios.map((scenario) => (
+                <label
+                  key={scenario.id}
+                  className="card flat tap"
+                  style={{
+                    display: "block",
+                    padding: "10px 12px",
+                    cursor: pending ? "default" : "pointer",
+                    borderColor: directionChoice === scenario.id ? "rgba(201, 162, 39, 0.55)" : undefined,
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="nyx-direction"
+                    value={scenario.id}
+                    checked={directionChoice === scenario.id}
+                    disabled={pending}
+                    onChange={() => setDirectionChoice(scenario.id)}
+                    style={{ marginRight: 8, verticalAlign: "top", marginTop: 3 }}
+                  />
+                  <span>
+                    <span className="display d-sm" style={{ display: "block", fontSize: 14, marginBottom: 4 }}>
+                      {scenario.title}
+                    </span>
+                    <span className="body" style={{ fontSize: 12, color: "var(--ink-2)", lineHeight: 1.5 }}>
+                      {scenario.summary}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+          <button
+            className="btn sm"
+            type="button"
+            style={{ marginTop: 12 }}
+            disabled={pending || !latest}
+            onClick={() => void saveDirection()}
+          >
+            Richting opslaan
           </button>
         </div>
       </div>

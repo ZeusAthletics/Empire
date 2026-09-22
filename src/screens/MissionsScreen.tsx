@@ -147,7 +147,11 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
       <header className="hero">
         <HeroArt src="/missions-header.jpg" objectPosition="50% 42%" />
         <div className="hero-corner">
-          <span className="eyebrow">A better you builds a larger tomorrow</span>
+          <div className="script" style={{ fontSize: 20, lineHeight: 1.1 }}>
+            Execution
+            <br />
+            changes everything.
+          </div>
         </div>
         <span className="eyebrow" style={{ display: "block", maxWidth: 90, lineHeight: 1.6 }}>
           Discipline builds freedom
@@ -156,11 +160,6 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
           Missions
         </h1>
         <span className="eyebrow muted">Real opportunities. Real progress.</span>
-        <div className="script" style={{ position: "absolute", right: 16, top: 96, textAlign: "right" }}>
-          Execution
-          <br />
-          changes everything.
-        </div>
       </header>
 
       <div className="chiprow" style={{ marginTop: 12 }} aria-label="Missiefilters">
