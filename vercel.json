@@ -24,6 +24,6 @@
   "crons": [
     { "path": "/api/cron/nyx-night", "schedule": "0 3 * * *" },
     { "path": "/api/cron/nyx-outreach", "schedule": "23 11 * * *" },
-    { "path": "/api/cron/nyx-checkin", "schedule": "0 * * * *" }
+    { "path": "/api/cron/nyx-checkin", "schedule": "30 12 * * *" }
   ]
 }
