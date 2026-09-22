@@ -1,5 +1,18 @@
 import { randomUUID } from "node:crypto";
 
+const ADMIN_INTIMACY_AXIS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    score: { type: "integer" },
+    recommendations: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+  required: ["score", "recommendations"],
+} as const;
+
 /** OpenAI strict JSON — all properties required; use null when unused. */
 export const NYX_RELATIONSHIP_JSON_SCHEMA = {
   type: "object",
@@ -31,6 +44,17 @@ export const NYX_RELATIONSHIP_JSON_SCHEMA = {
         required: ["id", "title", "summary"],
       },
     },
+    adminIntimacyProfile: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        physicalAttraction: ADMIN_INTIMACY_AXIS_SCHEMA,
+        dating: ADMIN_INTIMACY_AXIS_SCHEMA,
+        relationship: ADMIN_INTIMACY_AXIS_SCHEMA,
+        physicalIntimacy: ADMIN_INTIMACY_AXIS_SCHEMA,
+      },
+      required: ["physicalAttraction", "dating", "relationship", "physicalIntimacy"],
+    },
   },
   required: [
     "trustScore",
@@ -41,8 +65,29 @@ export const NYX_RELATIONSHIP_JSON_SCHEMA = {
     "highlights",
     "concerns",
     "progressScenarios",
+    "adminIntimacyProfile",
   ],
 } as const;
+
+export type AdminIntimacyAxis = {
+  score: number;
+  recommendations: string[];
+};
+
+/** Empire Ops only — never inject into player-facing Nyx chat context. */
+export type AdminIntimacyProfile = {
+  physicalAttraction: AdminIntimacyAxis;
+  dating: AdminIntimacyAxis;
+  relationship: AdminIntimacyAxis;
+  physicalIntimacy: AdminIntimacyAxis;
+};
+
+export const EMPTY_ADMIN_INTIMACY_PROFILE: AdminIntimacyProfile = {
+  physicalAttraction: { score: 0, recommendations: [] },
+  dating: { score: 0, recommendations: [] },
+  relationship: { score: 0, recommendations: [] },
+  physicalIntimacy: { score: 0, recommendations: [] },
+};
 
 export type NyxProgressScenario = {
   id: string;
@@ -59,6 +104,7 @@ export type NyxRelationshipReview = {
   highlights: string[];
   concerns: string[];
   progressScenarios: NyxProgressScenario[];
+  adminIntimacyProfile: AdminIntimacyProfile;
 };
 
 function extractJsonPayload(raw: string): string {
@@ -76,6 +122,29 @@ function clampScore(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return 50;
   return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+function parseAxis(value: unknown): AdminIntimacyAxis {
+  if (!value || typeof value !== "object") return { score: 0, recommendations: [] };
+  const row = value as Record<string, unknown>;
+  const recs = Array.isArray(row.recommendations)
+    ? row.recommendations.filter((item) => typeof item === "string" && item.trim()).map((s) => s.trim())
+    : [];
+  return {
+    score: clampScore(row.score),
+    recommendations: recs.slice(0, 5),
+  };
+}
+
+export function parseAdminIntimacyProfile(value: unknown): AdminIntimacyProfile {
+  if (!value || typeof value !== "object") return { ...EMPTY_ADMIN_INTIMACY_PROFILE };
+  const row = value as Record<string, unknown>;
+  return {
+    physicalAttraction: parseAxis(row.physicalAttraction),
+    dating: parseAxis(row.dating),
+    relationship: parseAxis(row.relationship),
+    physicalIntimacy: parseAxis(row.physicalIntimacy),
+  };
 }
 
 function parseProgressScenarios(value: unknown): NyxProgressScenario[] {
@@ -111,6 +180,7 @@ export function parseRelationshipReview(raw: string | null): NyxRelationshipRevi
         ? parsed.concerns.filter((item) => typeof item === "string" && item.trim()).map((s) => s.trim())
         : [],
       progressScenarios: parseProgressScenarios(parsed.progressScenarios),
+      adminIntimacyProfile: parseAdminIntimacyProfile(parsed.adminIntimacyProfile),
     };
   } catch {
     return null;

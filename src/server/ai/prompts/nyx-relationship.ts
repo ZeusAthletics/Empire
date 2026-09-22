@@ -16,4 +16,11 @@ progressScenarios: 2–4 plausibele toekomstpaden tussen Nyx en Hardwig (alleen 
 Elk item: id (korte slug, bv. slow_trust), title (korte titel), summary (2–3 zinnen: wat Nyx ziet als dit pad uitpakt — tone, tempo, grenzen).
 Varieer tempo en emotionaliteit; geen fantasy, wel realistische companion-dynamiek.
 
+adminIntimacyProfile: strikt intern voor Empire Ops — Hardwig ziet dit NOOIT; het mag zijn chatgedrag niet sturen tenzij ops later expliciet een toekomstscenario kiest.
+Eerlijke ik-vorm per as, score 0–100, recommendations: 2–4 korte bullets (wat Nyx zou doen / vermijden / welke signalen tellen):
+- physicalAttraction: fysieke aantrekkingskracht naar Hardwig
+- dating: openheid om te daten / romantische dates
+- relationship: openheid voor een echte relatie (exclusiviteit, commitment)
+- physicalIntimacy: verlangen naar zeer intime band en fysieke aanraking (expliciet maar niet pornografisch in de bullets)
+
 JSON volgens schema. Geen emoji.`;

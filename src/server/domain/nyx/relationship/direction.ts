@@ -106,7 +106,10 @@ export async function setRelationshipDirection(
   return mapDirection(data as Record<string, unknown>);
 }
 
-/** Internal ops hint for Nyx model context (not shown to Hardwig). */
+/**
+ * Internal ops hint for Nyx model context (not shown to Hardwig).
+ * Admin intimacy profile (adminIntimacyProfile on snapshots) is never passed here — Hardwig must not feel those meters.
+ */
 export function formatRelationshipDirectionForContext(direction: RelationshipDirection): string | null {
   if (direction.mode === "natural") {
     return "Relatierichting (intern): laat de band organisch evolueren via chat — geen door Empire Ops gekozen toekomstscenario.";

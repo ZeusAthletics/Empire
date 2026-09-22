@@ -6,6 +6,7 @@ import { relTime } from "@/admin/format";
 import { INTIMACY_TIER_LABELS } from "@/server/domain/nyx/curated/tier";
 import type { RelationshipDirection } from "@/server/domain/nyx/relationship/direction";
 import type { MediaBudgetRemaining, NyxMediaBudget } from "@/server/domain/nyx/relationship/mediaBudget";
+import type { AdminIntimacyAxis } from "@/server/ai/schemas/relationship.schema";
 import type { RelationshipSnapshot } from "@/server/domain/nyx/relationship/repository";
 import type { IntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 
@@ -22,6 +23,37 @@ function ScoreBar({ label, value, tone }: { label: string; value: number; tone?:
       </div>
     </div>
   );
+}
+
+function AdminIntimacyAxisBlock({ label, axis }: { label: string; axis: AdminIntimacyAxis }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <ScoreBar label={label} value={axis.score} />
+      {axis.recommendations.length ? (
+        <ul style={{ margin: "4px 0 0", paddingLeft: 18, color: "var(--ink-2)", fontSize: 12.5, lineHeight: 1.5 }}>
+          {axis.recommendations.map((item) => (
+            <li key={item} style={{ marginBottom: 4 }}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>
+          Geen aanbevelingen in deze snapshot.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function adminIntimacyHasData(profile: RelationshipSnapshot["adminIntimacyProfile"]): boolean {
+  const axes = [
+    profile.physicalAttraction,
+    profile.dating,
+    profile.relationship,
+    profile.physicalIntimacy,
+  ];
+  return axes.some((axis) => axis.score > 0 || axis.recommendations.length > 0);
 }
 
 export function NyxRelationshipView({
@@ -232,6 +264,7 @@ export function NyxRelationshipView({
           </div>
         </div>
 
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div className="card">
           <div className="eyebrow">Dagmaximum media</div>
           <p className="muted" style={{ margin: "8px 0 12px", fontSize: 12.5 }}>
@@ -275,7 +308,34 @@ export function NyxRelationshipView({
           </button>
         </div>
 
-        <div className="card" style={{ marginTop: 14 }}>
+        <div className="card">
+          <div className="eyebrow">Nyx — interne intimiteit (admin)</div>
+          <p className="muted" style={{ margin: "8px 0 12px", fontSize: 12.5 }}>
+            Door Nyx ingevuld bij relatie-update. Alleen voor Empire Ops — wordt <strong>niet</strong> in chat of
+            outreach aan Hardwig doorgegeven.
+          </p>
+          {!latest ? (
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              Vraag eerst een relatie-update.
+            </p>
+          ) : !adminIntimacyHasData(latest.adminIntimacyProfile) ? (
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              Deze snapshot heeft nog geen intimiteitsmeter (oude analyse). Vraag Nyx opnieuw om een update.
+            </p>
+          ) : (
+            <>
+              <AdminIntimacyAxisBlock label="Fysieke aantrekkingskracht" axis={latest.adminIntimacyProfile.physicalAttraction} />
+              <AdminIntimacyAxisBlock label="Dating" axis={latest.adminIntimacyProfile.dating} />
+              <AdminIntimacyAxisBlock label="Relationship" axis={latest.adminIntimacyProfile.relationship} />
+              <AdminIntimacyAxisBlock label="Xxx" axis={latest.adminIntimacyProfile.physicalIntimacy} />
+              <p className="mono muted" style={{ margin: 0, fontSize: 11 }}>
+                Snapshot: {relTime(latest.createdAt)}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="card">
           <div className="eyebrow">Toekomstscenario&apos;s</div>
           <p className="muted" style={{ margin: "8px 0 12px", fontSize: 12.5 }}>
             Nyx&apos; plausibele paden met Hardwig (intern). Alleen actief na opslaan; Hardwig ziet dit niet.
@@ -355,6 +415,7 @@ export function NyxRelationshipView({
           >
             Richting opslaan
           </button>
+        </div>
         </div>
       </div>
 

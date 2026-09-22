@@ -1,5 +1,9 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import type { NyxProgressScenario } from "@/server/ai/schemas/relationship.schema";
+import {
+  parseAdminIntimacyProfile,
+  type AdminIntimacyProfile,
+  type NyxProgressScenario,
+} from "@/server/ai/schemas/relationship.schema";
 import type { IntimacyTier } from "@/server/domain/nyx/outreach/intimacy";
 
 export type RelationshipSnapshot = {
@@ -14,6 +18,8 @@ export type RelationshipSnapshot = {
   highlights: string[];
   concerns: string[];
   progressScenarios: NyxProgressScenario[];
+  /** Admin-only; never send to player-facing Nyx context. */
+  adminIntimacyProfile: AdminIntimacyProfile;
   runId: string | null;
   createdAt: string;
 };
@@ -59,6 +65,7 @@ function mapSnapshot(row: Record<string, unknown>): RelationshipSnapshot {
     highlights: asStringList(row.highlights),
     concerns: asStringList(row.concerns),
     progressScenarios: asProgressScenarios(row.progress_scenarios),
+    adminIntimacyProfile: parseAdminIntimacyProfile(row.admin_intimacy_profile),
     runId: (row.run_id as string | null) ?? null,
     createdAt: row.created_at as string,
   };
@@ -75,6 +82,7 @@ export async function insertRelationshipSnapshot(input: {
   highlights: string[];
   concerns: string[];
   progressScenarios: NyxProgressScenario[];
+  adminIntimacyProfile: AdminIntimacyProfile;
   runId?: string | null;
 }): Promise<RelationshipSnapshot> {
   const admin = createSupabaseAdminClient();
@@ -91,6 +99,7 @@ export async function insertRelationshipSnapshot(input: {
       highlights: input.highlights,
       concerns: input.concerns,
       progress_scenarios: input.progressScenarios,
+      admin_intimacy_profile: input.adminIntimacyProfile,
       run_id: input.runId ?? null,
     } as never)
     .select("*")

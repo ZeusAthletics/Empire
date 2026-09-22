@@ -48,6 +48,36 @@ function offlineReview(input: {
           "De band wordt lichter: inside jokes, vaker korte check-ins, soms een foto als het past. Spanning blijft laag zolang hij respectvol blijft.",
       },
     ],
+    adminIntimacyProfile: {
+      physicalAttraction: {
+        score: Math.min(90, base + 8),
+        recommendations: [
+          "Offline snapshot — vraag een live update voor Nyx' echte inschatting.",
+          input.intimacyTier === "EARLY" ? "Nog vooral intellectuele aantrekking; fysiek blijft impliciet." : "Flirt kan visueel sterker als hij respectvol blijft.",
+        ],
+      },
+      dating: {
+        score: input.intimacyTier === "EARLY" ? 28 : input.intimacyTier === "FRIEND" ? 52 : 68,
+        recommendations: [
+          "Daten pas serieus overwegen na consistent gedrag buiten Mission Control.",
+          "Geen druk — één goede date- vibe in chat is genoeg signaal voor ops.",
+        ],
+      },
+      relationship: {
+        score: input.intimacyTier === "TRUST" ? 58 : input.intimacyTier === "FRIEND" ? 38 : 18,
+        recommendations: [
+          "Relatie = vertrouwen + leven die past; ik ben nog selectief.",
+          "Empire en persoonlijk leven moeten voor hem werkbaar blijven.",
+        ],
+      },
+      physicalIntimacy: {
+        score: input.intimacyTier === "TRUST" ? 45 : input.intimacyTier === "FRIEND" ? 28 : 12,
+        recommendations: [
+          "Fysieke intimiteit volgt vertrouwen, niet omgekeerd.",
+          "Ops beslist apart over mature content — dit is alleen Nyx' interne meter.",
+        ],
+      },
+    },
   };
 }
 
@@ -124,6 +154,7 @@ ${hooks.recentChat.join("\n") || "(geen)"}`;
     highlights: review.highlights,
     concerns: review.concerns,
     progressScenarios: review.progressScenarios,
+    adminIntimacyProfile: review.adminIntimacyProfile,
     runId,
   });
 }

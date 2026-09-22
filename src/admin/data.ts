@@ -284,7 +284,7 @@ export async function loadNyxRelationshipPage(player: SessionPlayer): Promise<{
   } catch (error) {
     const message = error instanceof Error ? error.message : "Relatiepagina laden mislukt.";
     const hint = /nyx_relationship|nyx_media_budget|schema cache|PGRST/i.test(message)
-      ? " Controleer of migratie 20260921120000_nyx_relationship (en 20260922150000 scenario's) op Supabase is gedraaid."
+      ? " Controleer of migraties nyx_relationship / scenario's / admin_intimacy_profile op Supabase zijn gedraaid."
       : "";
     return {
       latest: null,
