@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSessionPlayer, requireAdmin } from "@/server/auth/session";
 import { resolveAdminScope } from "@/admin/scope";
+import { buildRangedMediaResponse } from "@/server/domain/media/contentType";
 import { downloadMedia, getMedia, setMediaApproved } from "@/server/domain/media/repository";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const asset = await getMedia(id);
   if (!asset) return NextResponse.json({ ok: false, error: "Niet gevonden." }, { status: 404 });
@@ -22,12 +23,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   try {
     const blob = await downloadMedia(asset);
-    return new NextResponse(blob, {
-      headers: {
-        "Content-Type": blob.type || "application/octet-stream",
-        "Cache-Control": asset.approved ? "public, max-age=3600" : "private, no-store",
-      },
-    });
+    const bytes = await blob.arrayBuffer();
+    const range = request.headers.get("range");
+    return buildRangedMediaResponse(bytes, asset.storagePath, blob.type, range);
   } catch {
     return NextResponse.json({ ok: false, error: "Bestand ontbreekt." }, { status: 404 });
   }

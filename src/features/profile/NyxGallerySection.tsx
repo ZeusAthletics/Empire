@@ -49,7 +49,13 @@ export function NyxGallerySection({ items }: { items: NyxGalleryItem[] }) {
                 onClick={() => setLightbox(item)}
               >
                 {item.isVideo ? (
-                  <video src={item.src} muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <video
+                    src={item.src}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
                 ) : (
                   <img src={item.src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 )}
@@ -77,7 +83,14 @@ export function NyxGallerySection({ items }: { items: NyxGalleryItem[] }) {
           }}
         >
           {lightbox.isVideo ? (
-            <video src={lightbox.src} controls autoPlay playsInline style={{ maxWidth: "100%", maxHeight: "85vh" }} />
+            <video
+              src={lightbox.src}
+              controls
+              playsInline
+              preload="auto"
+              style={{ maxWidth: "100%", maxHeight: "85vh" }}
+              onClick={(event) => event.stopPropagation()}
+            />
           ) : (
             <img src={lightbox.src} alt="" style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 12 }} />
           )}

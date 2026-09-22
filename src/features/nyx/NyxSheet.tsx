@@ -298,7 +298,9 @@ export function NyxSheet() {
                     src={message.mediaSrc}
                     controls
                     playsInline
+                    preload="metadata"
                     style={{ width: "100%", marginTop: 8, borderRadius: 10 }}
+                    onError={() => toast("Video kon niet laden — ververs de pagina of probeer opnieuw.")}
                   />
                 ) : message.mediaKind === "file" ? (
                   <a

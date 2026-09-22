@@ -8,6 +8,7 @@ import { NYX_GREETING } from "@/server/ai/fallback/nyxReply";
 import type { NyxChatMessage, NyxTalkState } from "@/server/domain/nyx/types";
 import { chipFromProposal } from "@/server/domain/memory/repository";
 import { companionConversationId } from "@/server/domain/nyx/companionRepository";
+import { isVideoStoragePath } from "@/server/domain/media/contentType";
 import { publicMediaUrl } from "@/server/domain/media/repository";
 import { isMemoryPayload, isSideQuestPayload } from "@/server/domain/nyx/proposalTypes";
 import {
@@ -30,7 +31,7 @@ async function mediaMetaForIds(ids: string[]): Promise<Map<string, { src: string
     const path = String(row.storage_path ?? "");
     map.set(row.id as string, {
       src: publicMediaUrl(row.id as string),
-      video: /\.mp4$/i.test(path),
+      video: isVideoStoragePath(path),
     });
   }
   return map;
@@ -65,7 +66,7 @@ async function mapMessages(
     const chatFile = asset?.kind === "CHAT_ATTACHMENT";
     let mediaKind: NyxChatMessage["mediaKind"] = null;
     if (mediaSrc) {
-      if (cover?.video) mediaKind = "video";
+      if (cover?.video || isVideoStoragePath(path)) mediaKind = "video";
       else if (chatFile && !/\.(png|jpe?g|webp|gif)$/i.test(path)) mediaKind = "file";
       else mediaKind = "image";
     }

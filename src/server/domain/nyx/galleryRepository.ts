@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isVideoStoragePath } from "@/server/domain/media/contentType";
 import { MEDIA_BUCKET, publicMediaUrl } from "@/server/domain/media/repository";
 
 export type NyxGalleryItem = {
@@ -59,7 +60,7 @@ export async function listNyxGallery(playerId: string): Promise<NyxGalleryItem[]
       src: publicMediaUrl(row.id as string),
       kind: row.kind as string,
       createdAt: row.created_at as string,
-      isVideo: /\.mp4$/i.test(path),
+      isVideo: isVideoStoragePath(path),
     };
   });
 }
