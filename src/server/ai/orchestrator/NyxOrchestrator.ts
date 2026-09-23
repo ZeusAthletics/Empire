@@ -9,6 +9,7 @@ import { NYX_CASUAL_CHAT_GUIDE } from "@/server/ai/prompts/nyx-casual";
 import { NYX_OUTREACH_GUIDE } from "@/server/ai/prompts/outreach";
 import { NYX_RELATIONSHIP_GUIDE } from "@/server/ai/prompts/nyx-relationship";
 import { NYX_CHECKIN_GUIDE } from "@/server/ai/prompts/nyx-checkin";
+import { MONTHLY_WRAP_GUIDE } from "@/server/ai/prompts/monthly-wrap";
 import { loadNyxCore } from "@/server/ai/prompts/nyx-core";
 import { routeIntelligenceTask, type ModelRoutingDecision } from "@/server/ai/routing/AIModelRouter";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
@@ -102,7 +103,9 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
                 ? `\n\n${NYX_CASUAL_CHAT_GUIDE}`
                 : task === "NYX_CHECKIN"
                   ? `\n\n${NYX_CHECKIN_GUIDE}`
-                  : "";
+                  : task === "MONTHLY_WRAP_ANALYSIS"
+                    ? `\n\n${MONTHLY_WRAP_GUIDE}`
+                    : "";
       const prompt = `${core}\n\n${version}\nTaak: ${task}\nContext: ${JSON.stringify(context)}\n\n${input.text ?? ""}${extra}`;
       const attempt = async () =>
         callOpenAIResponses({

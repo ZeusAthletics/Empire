@@ -54,6 +54,7 @@ export type MonthlyWrap = {
   nyx: string;
   generatedAt: string | null;
   entryIds: string[];
+  media: JournalMedia[];
 };
 
 export type JournalState = {

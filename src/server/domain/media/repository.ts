@@ -22,8 +22,22 @@ function mapAsset(row: Record<string, unknown>): MediaAsset {
   };
 }
 
+/** App gate URL; GET redirects to a short-lived Supabase signed URL (CDN + byte ranges for video). */
 export function publicMediaUrl(id: string) {
   return `/api/media/${id}`;
+}
+
+export const MEDIA_SIGNED_URL_TTL_SEC = 60 * 60;
+
+export async function createSignedMediaDownloadUrl(storagePath: string, expiresInSec = MEDIA_SIGNED_URL_TTL_SEC) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.storage.from(MEDIA_BUCKET).createSignedUrl(storagePath, expiresInSec, {
+    download: false,
+  });
+  if (error || !data?.signedUrl) {
+    throw error ?? new Error("Signed URL kon niet worden gemaakt.");
+  }
+  return data.signedUrl;
 }
 
 export async function listMedia(playerId: string): Promise<MediaAsset[]> {

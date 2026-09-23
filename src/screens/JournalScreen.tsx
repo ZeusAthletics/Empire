@@ -22,12 +22,7 @@ import { HeroArt } from "@/components/ui/HeroArt";
 import { Plate } from "@/components/ui/Plate";
 import { Tag } from "@/components/ui/Tag";
 import { useEmpireUI } from "@/components/empire-ui-context";
-import {
-  JOURNAL_FILTERS,
-  JOURNAL_ICONS,
-  filterEntries,
-  nextPlaceholderMedia,
-} from "@/features/journal/journalMeta";
+import { JOURNAL_FILTERS, JOURNAL_ICONS, filterEntries } from "@/features/journal/journalMeta";
 import { formatDateLabel, formatTime } from "@/server/domain/journal/dates";
 import type { JournalEntry, JournalFilter, JournalMedia, JournalState } from "@/server/domain/journal/types";
 
@@ -129,7 +124,9 @@ export function JournalScreen({
   const [dayOffset, setDayOffset] = useState(0);
   const [pendingMedia, setPendingMedia] = useState<JournalMedia[]>([]);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setEntries(initial.entries);
@@ -147,10 +144,34 @@ export function JournalScreen({
     ta.style.height = `${Math.min(ta.scrollHeight, 92)}px`;
   }
 
+  async function onPickPhoto(file: File | undefined) {
+    if (!file || uploadingPhoto || pendingMedia.length >= 4) {
+      if (pendingMedia.length >= 4) toast("Maximaal 4 foto's per notitie.");
+      return;
+    }
+    setUploadingPhoto(true);
+    const body = new FormData();
+    body.set("file", file);
+    const response = await fetch("/api/journal/media", { method: "POST", body });
+    const data = (await response.json()) as {
+      ok: boolean;
+      media?: JournalMedia;
+      error?: string;
+    };
+    setUploadingPhoto(false);
+    if (photoRef.current) photoRef.current.value = "";
+    if (!response.ok || !data.ok || !data.media) {
+      toast(data.error ?? "Foto kon niet worden geüpload.");
+      return;
+    }
+    setPendingMedia((current) => [...current, data.media!]);
+    toast("Foto klaar — voeg tekst toe of sla direct op.");
+  }
+
   async function saveNote() {
     const text = noteRef.current?.value.trim() ?? "";
-    if (!text) {
-      toast("Schrijf eerst iets — ook één zin telt.");
+    if (!text && !pendingMedia.length) {
+      toast("Schrijf iets of voeg een foto toe.");
       noteRef.current?.focus();
       return;
     }
@@ -422,16 +443,65 @@ export function JournalScreen({
         </p>
       </div>
 
+      {pendingMedia.length ? (
+        <div
+          className="composer-pending"
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 72,
+            padding: "8px 16px",
+            display: "flex",
+            gap: 8,
+            overflowX: "auto",
+            zIndex: 40,
+          }}
+        >
+          {pendingMedia.map((item, index) => (
+            <div
+              key={`${item.mediaId ?? item.src ?? index}`}
+              style={{ position: "relative", flex: "0 0 auto", width: 72, height: 72 }}
+            >
+              <Plate kind={item.kind} className="fill" label={item.label} src={item.src} approved={item.approved} />
+              <button
+                type="button"
+                aria-label="Foto verwijderen"
+                className="btn btn-icon"
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  right: 4,
+                  minHeight: 24,
+                  width: 24,
+                  background: "rgba(0,0,0,.65)",
+                  color: "var(--ivory)",
+                }}
+                onClick={() => setPendingMedia((current) => current.filter((_, i) => i !== index))}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <input
+        ref={photoRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(event) => void onPickPhoto(event.target.files?.[0])}
+      />
+
       <div className="composer">
         <button
           className="ic"
           type="button"
-          aria-label="Beeld toevoegen"
-          onClick={() => {
-            const next = nextPlaceholderMedia(pendingMedia.length);
-            setPendingMedia((current) => [...current, next]);
-            toast(`${pendingMedia.length + 1} beeld${pendingMedia.length ? "en" : ""} gekoppeld aan deze notitie`);
-          }}
+          aria-label="Foto toevoegen"
+          disabled={uploadingPhoto}
+          onClick={() => photoRef.current?.click()}
         >
           <ImageIcon size={19} strokeWidth={1.9} />
         </button>

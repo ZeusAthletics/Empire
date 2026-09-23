@@ -3,6 +3,7 @@ import { getSessionPlayer } from "@/server/auth/session";
 import { generateMonthlyWrap } from "@/server/domain/journal/repository";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function POST() {
   const player = await getSessionPlayer();

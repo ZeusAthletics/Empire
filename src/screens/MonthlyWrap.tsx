@@ -1,12 +1,14 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, Calendar, Check, ChevronLeft, Users } from "lucide-react";
+import { BarChart3, Calendar, Check, ChevronLeft, ImageIcon, Users } from "lucide-react";
 import { Bar } from "@/components/ui/Bar";
 import { HeroArt } from "@/components/ui/HeroArt";
 import { Plate } from "@/components/ui/Plate";
+import { useEmpireUI } from "@/components/empire-ui-context";
 import { formatDateLabel, formatTime } from "@/server/domain/journal/dates";
-import type { JournalEntry, MonthlyWrap as MonthlyWrapData } from "@/server/domain/journal/types";
+import type { JournalEntry, JournalMedia, MonthlyWrap as MonthlyWrapData } from "@/server/domain/journal/types";
 import { formatEuro } from "@/lib/stats";
 
 const BLOCKS: { key: keyof MonthlyWrapData; label: string }[] = [
@@ -19,13 +21,57 @@ const BLOCKS: { key: keyof MonthlyWrapData; label: string }[] = [
   { key: "whatChanged", label: "Wat er echt veranderd is" },
 ];
 
-export function MonthlyWrap({ wrap, entries }: { wrap: MonthlyWrapData; entries: JournalEntry[] }) {
-  const router = useRouter();
-  const shots = wrap.entryIds
+function entryShots(entries: JournalEntry[], entryIds: string[]): JournalMedia[] {
+  return entryIds
     .map((id) => entries.find((entry) => entry.id === id))
     .filter((entry): entry is JournalEntry => Boolean(entry))
-    .flatMap((entry) => entry.media)
-    .slice(0, 6);
+    .flatMap((entry) => entry.media);
+}
+
+function mergeShots(wrapMedia: JournalMedia[], fromEntries: JournalMedia[]): JournalMedia[] {
+  const seen = new Set<string>();
+  const out: JournalMedia[] = [];
+  for (const item of [...wrapMedia, ...fromEntries]) {
+    const key = item.mediaId ?? item.src ?? `${item.kind}-${item.label}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out.slice(0, 12);
+}
+
+export function MonthlyWrap({ wrap, entries }: { wrap: MonthlyWrapData; entries: JournalEntry[] }) {
+  const router = useRouter();
+  const { toast } = useEmpireUI();
+  const [extraMedia, setExtraMedia] = useState(wrap.media ?? []);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const shots = mergeShots(extraMedia, entryShots(entries, wrap.entryIds));
+
+  async function onPickPhoto(file: File | undefined) {
+    if (!file || uploading) return;
+    setUploading(true);
+    const body = new FormData();
+    body.set("file", file);
+    const response = await fetch(`/api/journal/wrap/${wrap.id}/media`, { method: "POST", body });
+    const data = (await response.json()) as {
+      ok: boolean;
+      wrap?: MonthlyWrapData;
+      media?: JournalMedia;
+      error?: string;
+    };
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+    if (!response.ok || !data.ok) {
+      toast(data.error ?? "Foto kon niet worden toegevoegd.");
+      return;
+    }
+    if (data.wrap?.media) setExtraMedia(data.wrap.media);
+    else if (data.media) setExtraMedia((current) => [...current, data.media!]);
+    toast("Foto toegevoegd aan uw wrap");
+    router.refresh();
+  }
 
   return (
     <>
@@ -93,20 +139,41 @@ export function MonthlyWrap({ wrap, entries }: { wrap: MonthlyWrapData; entries:
         </div>
       </div>
 
-      {shots.length ? (
-        <div className="section">
-          <div className="section-head">
-            <h2 className="display d-sm">Beeld uit de maand</h2>
-          </div>
+      <div className="section">
+        <div className="section-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h2 className="display d-sm">Beeld uit de maand</h2>
+          <button
+            className="btn btn-ghost"
+            type="button"
+            disabled={uploading}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}
+            onClick={() => fileRef.current?.click()}
+          >
+            <ImageIcon size={16} strokeWidth={2} />
+            {uploading ? "Uploaden…" : "Foto toevoegen"}
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(event) => void onPickPhoto(event.target.files?.[0])}
+        />
+        {shots.length ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
             {shots.map((item, index) => (
-              <div key={`${item.kind}-${index}`} style={{ aspectRatio: "1", position: "relative" }}>
+              <div key={`${item.mediaId ?? item.src ?? index}`} style={{ aspectRatio: "1", position: "relative" }}>
                 <Plate kind={item.kind} className="fill" label={item.label} src={item.src} approved={item.approved} />
               </div>
             ))}
           </div>
-        </div>
-      ) : null}
+        ) : (
+          <p className="body" style={{ margin: 0 }}>
+            Voeg foto&apos;s toe via het journal of met &quot;Foto toevoegen&quot; — ze verschijnen hier in uw wrap.
+          </p>
+        )}
+      </div>
 
       <div className="section">
         <div className="card">

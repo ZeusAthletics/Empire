@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionPlayer, requireAdmin } from "@/server/auth/session";
 import { resolveAdminScope } from "@/admin/scope";
-import { buildRangedMediaResponse } from "@/server/domain/media/contentType";
-import { downloadMedia, getMedia, setMediaApproved } from "@/server/domain/media/repository";
+import { createSignedMediaDownloadUrl, getMedia, setMediaApproved } from "@/server/domain/media/repository";
 
 export const runtime = "nodejs";
 
@@ -21,11 +20,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ ok: false, error: "Niet gemachtigd." }, { status: 403 });
   }
 
+  if (!asset.storagePath || asset.storagePath === "pending") {
+    return NextResponse.json({ ok: false, error: "Bestand ontbreekt." }, { status: 404 });
+  }
+
   try {
-    const blob = await downloadMedia(asset);
-    const bytes = await blob.arrayBuffer();
-    const range = request.headers.get("range");
-    return buildRangedMediaResponse(bytes, asset.storagePath, blob.type, range);
+    const signedUrl = await createSignedMediaDownloadUrl(asset.storagePath);
+    return NextResponse.redirect(signedUrl, {
+      status: 307,
+      headers: {
+        "Cache-Control": "private, no-store",
+      },
+    });
   } catch {
     return NextResponse.json({ ok: false, error: "Bestand ontbreekt." }, { status: 404 });
   }

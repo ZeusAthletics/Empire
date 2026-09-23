@@ -10,6 +10,9 @@ import type {
 } from "@/server/domain/journal/types";
 import type { RecordSource } from "@/server/domain/mission/types";
 
+const WRAP_SELECT =
+  "month_id, label, year, events, new_contacts, missions_completed, empire_delta, deltas, biggest_win, biggest_mistake, best_relationship, key_decision, best_mission, time_sink, what_changed, nyx, generated_at, entry_ids, media";
+
 const MEDIA_KINDS = new Set<JournalMediaKind>(["gym", "note", "meet", "city", "room", "book", "mission"]);
 
 function asMedia(value: unknown): JournalMedia[] {
@@ -59,6 +62,7 @@ function mapWrap(row: Record<string, unknown>): MonthlyWrap {
     nyx: row.nyx as string,
     generatedAt: (row.generated_at as string | null) ?? null,
     entryIds: asStringArray(row.entry_ids),
+    media: asMedia(row.media),
   };
 }
 
@@ -139,7 +143,7 @@ export async function getJournalState(playerId: string): Promise<JournalState> {
     admin
       .from("monthly_wraps")
       .select(
-        "month_id, label, year, events, new_contacts, missions_completed, empire_delta, deltas, biggest_win, biggest_mistake, best_relationship, key_decision, best_mission, time_sink, what_changed, nyx, generated_at, entry_ids",
+        WRAP_SELECT,
       )
       .eq("player_id", playerId)
       .is("deleted_at", null)
@@ -165,8 +169,10 @@ export async function getMonthlyWrap(playerId: string, monthId: string): Promise
 }
 
 export async function createJournalEntry(playerId: string, input: CreateJournalInput): Promise<JournalEntry> {
-  const body = input.body.trim();
-  if (!body) throw new Error("Schrijf eerst iets — ook één zin telt.");
+  const media = input.media ?? [];
+  let body = input.body.trim();
+  if (!body && !media.length) throw new Error("Schrijf iets of voeg een foto toe.");
+  if (!body && media.length) body = "Foto in journal.";
 
   const { admin, contacts, contactsById, missionTitle } = await loadLookups(playerId);
   const contactIds = matchContactIds(body, contacts);
@@ -184,7 +190,7 @@ export async function createJournalEntry(playerId: string, input: CreateJournalI
       contact_ids: contactIds,
       mission_id: input.missionId ?? null,
       location_name: input.locationName ?? null,
-      media: input.media ?? [],
+      media,
       extra_media: 0,
       extraction_status: "PENDING",
       source: "USER",
@@ -224,38 +230,33 @@ export async function deleteJournalEntry(playerId: string, entryId: string): Pro
 }
 
 export async function generateMonthlyWrap(playerId: string): Promise<MonthlyWrap> {
-  const state = await getJournalState(playerId);
-  const id = monthIdFrom(Date.now());
-  const entries = state.entries.filter((entry) => monthIdFrom(entry.at) === id);
+  const { analyzeMonthlyWrapNarrative, buildMonthlyWrapFacts } = await import(
+    "@/server/ai/services/MonthlyWrapService"
+  );
+  const facts = await buildMonthlyWrapFacts(playerId);
+  const narrative = await analyzeMonthlyWrapNarrative(playerId, facts);
   const admin = createSupabaseAdminClient();
-  const { data: done, error: missionError } = await admin
-    .from("missions")
-    .select("id")
-    .eq("player_id", playerId)
-    .eq("status", "COMPLETED")
-    .is("deleted_at", null);
-  if (missionError) throw missionError;
 
   const fields = {
     player_id: playerId,
-    month_id: id,
-    label: monthLabel(id),
-    year: new Date().getFullYear(),
-    events: entries.filter((entry) => entry.tags.includes("EVENT") || entry.tags.includes("NETWORK")).length,
-    new_contacts: 11,
-    missions_completed: (done ?? []).length,
-    empire_delta: 6900,
-    deltas: { network: 9, authority: 6, execution: 4 },
-    biggest_win: "De eerste gesprekken kwamen naar u toe in plaats van andersom.",
-    biggest_mistake: "Te lang aan het thema gesleuteld voor u Pieter belde.",
-    best_relationship: "Pieter Jan — capaciteitsprobleem dat u kunt oplossen.",
-    key_decision: "Tarief op €180/u houden, ook bij twijfel.",
-    best_mission: "The Connector",
-    time_sink: "Website en tooling.",
-    what_changed: "Netwerk is van uw zwakste naar uw sterkste beweging gegaan.",
-    nyx: "September was de maand waarin u eindelijk uit het safehouse kwam.",
+    month_id: facts.monthId,
+    label: facts.label,
+    year: facts.year,
+    events: facts.events,
+    new_contacts: facts.newContacts,
+    missions_completed: facts.missionsCompleted,
+    empire_delta: facts.empireDelta,
+    deltas: facts.deltas,
+    biggest_win: narrative.biggestWin,
+    biggest_mistake: narrative.biggestMistake,
+    best_relationship: narrative.bestRelationship,
+    key_decision: narrative.keyDecision,
+    best_mission: narrative.bestMission,
+    time_sink: narrative.timeSink,
+    what_changed: narrative.whatChanged,
+    nyx: narrative.nyx,
     generated_at: new Date().toISOString(),
-    entry_ids: entries.slice(0, 6).map((entry) => entry.id),
+    entry_ids: facts.entries.slice(0, 80).map((entry) => entry.id),
     source: "USER",
     deleted_at: null,
   };
@@ -264,18 +265,14 @@ export async function generateMonthlyWrap(playerId: string): Promise<MonthlyWrap
     .from("monthly_wraps")
     .select("id")
     .eq("player_id", playerId)
-    .eq("month_id", id)
+    .eq("month_id", facts.monthId)
     .is("deleted_at", null)
     .maybeSingle();
   if (lookupError) throw lookupError;
 
   const { data, error } = existing
-    ? await admin.from("monthly_wraps").update(fields as never).eq("id", existing.id).select(
-        "month_id, label, year, events, new_contacts, missions_completed, empire_delta, deltas, biggest_win, biggest_mistake, best_relationship, key_decision, best_mission, time_sink, what_changed, nyx, generated_at, entry_ids",
-      ).single()
-    : await admin.from("monthly_wraps").insert(fields as never).select(
-        "month_id, label, year, events, new_contacts, missions_completed, empire_delta, deltas, biggest_win, biggest_mistake, best_relationship, key_decision, best_mission, time_sink, what_changed, nyx, generated_at, entry_ids",
-      ).single();
+    ? await admin.from("monthly_wraps").update(fields as never).eq("id", existing.id).select(WRAP_SELECT).single()
+    : await admin.from("monthly_wraps").insert(fields as never).select(WRAP_SELECT).single();
   if (error || !data) throw error ?? new Error("Wrap kon niet worden gemaakt.");
   return mapWrap(data as Record<string, unknown>);
 }
@@ -283,4 +280,25 @@ export async function generateMonthlyWrap(playerId: string): Promise<MonthlyWrap
 export async function listMonthlyWraps(playerId: string): Promise<MonthlyWrap[]> {
   const state = await getJournalState(playerId);
   return state.wraps;
+}
+
+export async function appendWrapPhoto(
+  playerId: string,
+  monthId: string,
+  item: JournalMedia,
+): Promise<MonthlyWrap> {
+  const existing = await getMonthlyWrap(playerId, monthId);
+  if (!existing) throw new Error("Wrap niet gevonden. Maak eerst een wrap voor deze maand.");
+  const admin = createSupabaseAdminClient();
+  const media = [...existing.media, item].slice(0, 12);
+  const { data, error } = await admin
+    .from("monthly_wraps")
+    .update({ media } as never)
+    .eq("player_id", playerId)
+    .eq("month_id", monthId)
+    .is("deleted_at", null)
+    .select(WRAP_SELECT)
+    .single();
+  if (error || !data) throw error ?? new Error("Foto kon niet aan de wrap worden gekoppeld.");
+  return mapWrap(data as Record<string, unknown>);
 }
