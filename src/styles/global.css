@@ -518,6 +518,94 @@ a.card { text-decoration: none; color: inherit; display: block; }
 .mk.done { opacity: 0.45; }
 .mk.locked { opacity: 0.5; }
 .mk .glow { animation: pulseGlow 2.8s ease-in-out infinite; transform-origin: center; }
+
+.mk-pin {
+  position: relative;
+  width: 38px;
+  height: 44px;
+  pointer-events: none;
+}
+.mk-pin__shape {
+  display: block;
+  width: 38px;
+  height: 44px;
+  overflow: visible;
+}
+.mk-pin__blip {
+  position: absolute;
+  left: 50%;
+  top: 5px;
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.42));
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1.5px color-mix(in srgb, var(--mk-stroke, #c9a34e) 55%, transparent);
+}
+.mk-pin__blip img {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+.mk-pin.is-sel .mk-pin__blip {
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1.8px var(--mk-stroke, #c9a34e),
+    0 0 10px color-mix(in srgb, var(--mk-stroke, #c9a34e) 45%, transparent);
+}
+.mk-pin__blip--locked {
+  background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.5));
+}
+.mk-pin__lock {
+  width: 12px;
+  height: 14px;
+  border: 2px solid var(--mk-glyph, #f6ecdf);
+  border-radius: 3px;
+  position: relative;
+  opacity: 0.85;
+}
+.mk-pin__lock::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  width: 8px;
+  height: 7px;
+  margin-left: -4px;
+  border: 2px solid var(--mk-glyph, #f6ecdf);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+.mk-pin__done {
+  position: absolute;
+  right: 2px;
+  bottom: 10px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0b0907;
+  box-shadow: 0 0 0 1.4px var(--mk-stroke, #c9a34e);
+}
+.mk-pin__done::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 5px;
+  width: 5px;
+  height: 3px;
+  border-left: 1.8px solid var(--mk-stroke, #c9a34e);
+  border-bottom: 1.8px solid var(--mk-stroke, #c9a34e);
+  transform: rotate(-45deg);
+}
 @keyframes pulseGlow {
   0%, 100% { opacity: 0.25; }
   50% { opacity: 0.6; }
