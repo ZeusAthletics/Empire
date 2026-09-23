@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { IconPicker } from "@/features/map/IconPicker";
 import { PIN_META, NEW_PIN_TYPES } from "@/features/map/pinMeta";
-import { HOME_BASE, distanceKm, type HomeBase, type MapOption, type MapPinType } from "@/server/domain/map/types";
+import { HOME_BASE, distanceKm, type HomeBase, type MapIconSetSummary, type MapOption, type MapPinType } from "@/server/domain/map/types";
 
 export function PinComposer({
   ll,
@@ -11,6 +12,7 @@ export function PinComposer({
   pending,
   defaultType = "saved",
   home,
+  iconSets,
   onCancel,
   onSave,
 }: {
@@ -20,6 +22,7 @@ export function PinComposer({
   pending?: boolean;
   defaultType?: MapPinType;
   home?: HomeBase | null;
+  iconSets: MapIconSetSummary[];
   onCancel: () => void;
   onSave: (input: {
     title: string;
@@ -29,6 +32,7 @@ export function PinComposer({
     address?: string;
     contactId?: string;
     missionId?: string;
+    iconKey?: string | null;
   }) => void | Promise<void>;
 }) {
   const [title, setTitle] = useState("");
@@ -38,6 +42,7 @@ export function PinComposer({
   const [address, setAddress] = useState("");
   const [contactId, setContactId] = useState("");
   const [missionId, setMissionId] = useState("");
+  const [iconKey, setIconKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const dist = distanceKm(home ?? HOME_BASE, ll);
   const asContact = type === "contact";
@@ -137,6 +142,12 @@ export function PinComposer({
             </div>
           </div>
         )}
+        {iconSets.length ? (
+          <div className="field">
+            <label>Kaarticoon (optioneel)</label>
+            <IconPicker sets={iconSets} value={iconKey} disabled={busy || pending} onChange={setIconKey} />
+          </div>
+        ) : null}
       </div>
       <div className="sheet-foot" style={{ display: "flex", gap: 8 }}>
         <button className="btn btn-quiet" type="button" onClick={onCancel}>
@@ -158,6 +169,7 @@ export function PinComposer({
                 address: address || undefined,
                 contactId: contactId || undefined,
                 missionId: missionId || undefined,
+                iconKey,
               }),
             ).finally(() => setBusy(false));
           }}

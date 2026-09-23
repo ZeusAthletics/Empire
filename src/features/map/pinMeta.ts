@@ -46,6 +46,34 @@ export const TOWNS = [
   { n: "Westerlo", lat: 51.0897, lng: 4.9161 },
 ];
 
+export function markerHtml(pin: Pick<MapPin, "type" | "state" | "iconSrc">, selected: boolean) {
+  if (pin.iconSrc) {
+    const meta = PIN_META[pin.type] ?? PIN_META.saved;
+    const glow =
+      pin.state === "active" || selected
+        ? `<circle class="glow" cx="19" cy="16" r="17" fill="${meta.stroke}" opacity=".3"/>`
+        : "";
+    const done =
+      pin.state === "completed"
+        ? `<circle cx="30" cy="30" r="7" fill="#0B0907" stroke="${meta.stroke}" stroke-width="1.4"/><path d="M27 30l2 2 4-4.4" stroke="${meta.stroke}" stroke-width="1.8" fill="none" stroke-linecap="round"/>`
+        : "";
+    const lock =
+      pin.state === "locked"
+        ? `<g transform="translate(13,10) scale(.55)" stroke="${meta.glyph}" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="${PATHS.lock}"/></g>`
+        : "";
+    const img = pin.state === "locked"
+      ? lock
+      : `<image href="${pin.iconSrc}" x="7" y="5" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>`;
+    return `<svg viewBox="0 0 38 46" xmlns="http://www.w3.org/2000/svg">${glow}
+    <path d="M19 45C19 45 34 28.5 34 17A15 15 0 1 0 4 17C4 28.5 19 45 19 45Z"
+      fill="${meta.fill}" stroke="${meta.stroke}" stroke-width="${selected ? 2.6 : 1.8}"/>
+    ${img}
+    ${done}
+  </svg>`;
+  }
+  return markerSvg(pin, selected);
+}
+
 export function markerSvg(pin: Pick<MapPin, "type" | "state">, selected: boolean) {
   const meta = PIN_META[pin.type] ?? PIN_META.saved;
   const glow =

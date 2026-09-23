@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSessionPlayer } from "@/server/auth/session";
 import { createContact, setContactCoords } from "@/server/domain/contact/repository";
-import { contactMapPin, createMapPin } from "@/server/domain/map/repository";
+import { contactMapPin, createMapPin, updateMapMarkerIcon } from "@/server/domain/map/repository";
+import { listMapIconSets, loadPlayerMarkerIcons, resolveIconSrc } from "@/server/domain/map/iconSets";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
     address?: string;
     contactId?: string;
     missionId?: string;
+    iconKey?: string | null;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -42,18 +44,25 @@ export async function POST(request: Request) {
       if (contact.lat == null || contact.lng == null) {
         return NextResponse.json({ ok: false, error: "Contact bewaard, maar zonder pin." }, { status: 400 });
       }
+      const pinBase = contactMapPin({
+        id: contact.id,
+        name: contact.name,
+        role: contact.role,
+        note: contact.note,
+        tier: contact.tier,
+        address: contact.address,
+        lat: contact.lat,
+        lng: contact.lng,
+      });
+      if (body.iconKey) {
+        await updateMapMarkerIcon(player.id, pinBase.id, body.iconKey);
+      }
+      const [sets, icons] = await Promise.all([listMapIconSets(false), loadPlayerMarkerIcons(player.id)]);
+      const setsBySlug = new Map(sets.map((set) => [set.slug, set]));
+      const iconKey = icons.get(pinBase.id) ?? null;
       return NextResponse.json({
         ok: true,
-        pin: contactMapPin({
-          id: contact.id,
-          name: contact.name,
-          role: contact.role,
-          note: contact.note,
-          tier: contact.tier,
-          address: contact.address,
-          lat: contact.lat,
-          lng: contact.lng,
-        }),
+        pin: { ...pinBase, iconKey, iconSrc: resolveIconSrc(iconKey, setsBySlug) },
       });
     }
     const pin = await createMapPin(player.id, {
@@ -64,6 +73,7 @@ export async function POST(request: Request) {
       note: body.note,
       contactId: body.contactId,
       missionId: body.missionId,
+      iconKey: body.iconKey,
     });
     return NextResponse.json({ ok: true, pin });
   } catch (error) {

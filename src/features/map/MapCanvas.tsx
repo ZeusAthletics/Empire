@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { markerSvg } from "@/features/map/pinMeta";
+import { markerHtml } from "@/features/map/pinMeta";
 import { HOME_BASE, type MapPin } from "@/server/domain/map/types";
 
 type CartoTiles = { all: string; plain: string };
@@ -193,7 +193,7 @@ export function MapCanvas({
       const selected = pin.id === selectedId;
       const icon = L.divIcon({
         className: `mk${selected ? " sel" : ""}${pin.state === "completed" ? " done" : ""}${pin.state === "locked" ? " locked" : ""}`,
-        html: markerSvg(pin, selected),
+        html: markerHtml(pin, selected),
         iconSize: [38, 44],
         iconAnchor: [19, 44],
       });

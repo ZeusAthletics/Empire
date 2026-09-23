@@ -18,6 +18,7 @@ const NAV: { href: string; label: string; exact?: boolean; key?: string }[] = [
   { href: "/admin/nyx-gallery", label: "Nyx — galerij" },
   { href: "/admin/nyx-relationship", label: "Nyx — relatie" },
   { href: "/admin/assets", label: "Beeldmateriaal" },
+  { href: "/admin/map-icons", label: "Kaart — iconen" },
 ];
 
 function crumbFor(pathname: string) {

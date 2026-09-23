@@ -74,8 +74,14 @@ export function MapScreen({
       <MarkerSheet
         pin={pin}
         home={state.home}
+        iconSets={state.iconSets}
         onNote={(title) => void saveMapNote(title, pin)}
         onDelete={pin.custom ? () => void removePin(pin.id) : undefined}
+        onIconSaved={() => {
+          closeSheet();
+          router.refresh();
+          toast("Kaarticoon opgeslagen");
+        }}
       />,
     );
   }
@@ -121,6 +127,7 @@ export function MapScreen({
         missions={state.missionOptions}
         defaultType={type}
         home={state.home}
+        iconSets={state.iconSets}
         pending={false}
         onCancel={closeSheet}
         onSave={(input) => void savePin(ll, input)}
@@ -130,7 +137,16 @@ export function MapScreen({
 
   async function savePin(
     ll: { lat: number; lng: number },
-    input: { title: string; type: MapPinType; note: string; role?: string; address?: string; contactId?: string; missionId?: string },
+    input: {
+      title: string;
+      type: MapPinType;
+      note: string;
+      role?: string;
+      address?: string;
+      contactId?: string;
+      missionId?: string;
+      iconKey?: string | null;
+    },
   ) {
     const response = await fetch("/api/map/pins", {
       method: "POST",

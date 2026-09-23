@@ -1,6 +1,13 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { inBelgium, matchKnownPlace } from "@/server/domain/geo/geocode";
 import {
+  listMapIconSets,
+  loadPlayerMarkerIcons,
+  resolveIconSrc,
+  setPlayerMarkerIcon,
+  validateIconKey,
+} from "@/server/domain/map/iconSets";
+import {
   missionPinState,
   missionPinType,
   type HomeBase,
@@ -114,7 +121,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
   );
 
   if (home) {
-    assembled.push({
+    assembled.push(emptyIconFields({
       id: "home",
       title: "Home Base",
       type: "home",
@@ -128,12 +135,12 @@ export async function getMapState(playerId: string): Promise<MapState> {
       contactId: null,
       mission: null,
       contact: null,
-    });
+    }));
   }
 
   for (const pin of pins ?? []) {
     if (pin.pin_type === "home") continue;
-    assembled.push({
+    assembled.push(emptyIconFields({
       id: pin.id as string,
       title: pin.title as string,
       type: (pin.pin_type as MapPinType) ?? "saved",
@@ -147,7 +154,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
       contactId: (pin.contact_id as string | null) ?? null,
       mission: null,
       contact: null,
-    });
+    }));
   }
 
   for (const mission of missionRows ?? []) {
@@ -158,7 +165,7 @@ export async function getMapState(playerId: string): Promise<MapState> {
     );
     if (!resolved) continue;
     const cover = mission.media_id ? covers.get(mission.media_id as string) : undefined;
-    assembled.push({
+    assembled.push(emptyIconFields({
       id: `mp-${mission.id}`,
       title: mission.title as string,
       type: missionPinType(mission.kind as MissionKind),
@@ -185,12 +192,12 @@ export async function getMapState(playerId: string): Promise<MapState> {
         coverApproved: cover?.approved ?? false,
       },
       contact: null,
-    });
+    }));
   }
 
   for (const contact of visibleContacts) {
     if (contact.lat == null || contact.lng == null || !inBelgium(contact.lat as number, contact.lng as number)) continue;
-    assembled.push({
+    assembled.push(emptyIconFields({
       id: `cp-${contact.id}`,
       title: contact.name as string,
       type: "contact",
@@ -211,12 +218,12 @@ export async function getMapState(playerId: string): Promise<MapState> {
         tier: (contact.tier as string | null) ?? null,
         address: (contact.address as string | null) ?? null,
       },
-    });
+    }));
   }
 
   for (const company of companies ?? []) {
     if (company.lat == null || company.lng == null) continue;
-    assembled.push({
+    assembled.push(emptyIconFields({
       id: `kp-${company.id}`,
       title: company.name as string,
       type: "company",
@@ -230,17 +237,44 @@ export async function getMapState(playerId: string): Promise<MapState> {
       contactId: null,
       mission: null,
       contact: null,
-    });
+    }));
   }
 
+  const [iconSets, markerIcons] = await Promise.all([
+    listMapIconSets(false),
+    loadPlayerMarkerIcons(playerId),
+  ]);
+  const setsBySlug = new Map(iconSets.map((set) => [set.slug, set]));
+  const pinsWithIcons = assembled.map((pin) => {
+    const iconKey = markerIcons.get(pin.id) ?? null;
+    return {
+      ...pin,
+      iconKey,
+      iconSrc: resolveIconSrc(iconKey, setsBySlug),
+    };
+  });
+
   return {
-    pins: assembled,
+    pins: pinsWithIcons,
     home,
     contactOptions: visibleContacts.map((contact) => ({ id: contact.id as string, title: contact.name as string })),
     missionOptions: (missionRows ?? [])
       .filter((mission) => mission.status !== "COMPLETED" && mission.status !== "COMPLETED_UNVERIFIED")
       .map((mission) => ({ id: mission.id as string, title: mission.title as string })),
+    iconSets: iconSets
+      .filter((set) => set.active)
+      .map((set) => ({
+        slug: set.slug,
+        title: set.title,
+        gridCols: set.gridCols,
+        gridRows: set.gridRows,
+        iconCount: set.iconCount,
+      })),
   };
+}
+
+function emptyIconFields<T extends Omit<MapPin, "iconKey" | "iconSrc">>(pin: T): MapPin {
+  return { ...pin, iconKey: null, iconSrc: null };
 }
 
 export async function createMapPin(
@@ -253,6 +287,7 @@ export async function createMapPin(
     note?: string;
     contactId?: string;
     missionId?: string;
+    iconKey?: string | null;
   },
 ): Promise<MapPin> {
   if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
@@ -278,8 +313,19 @@ export async function createMapPin(
     .select("id, title, pin_type, lat, lng, note, custom, contact_id, mission_id")
     .single();
   if (error || !data) throw error ?? new Error("Pin kon niet worden bewaard.");
+  const pinId = data.id as string;
+  if (input.iconKey) {
+    if (!(await validateIconKey(input.iconKey))) throw new Error("Ongeldig kaarticoon.");
+    await setPlayerMarkerIcon(playerId, pinId, input.iconKey);
+  }
+  const [sets, iconKeyRow] = await Promise.all([
+    listMapIconSets(false),
+    loadPlayerMarkerIcons(playerId),
+  ]);
+  const setsBySlug = new Map(sets.map((set) => [set.slug, set]));
+  const iconKey = iconKeyRow.get(pinId) ?? null;
   return {
-    id: data.id as string,
+    id: pinId,
     title: data.title as string,
     type: data.pin_type as MapPinType,
     lat: data.lat as number,
@@ -292,7 +338,13 @@ export async function createMapPin(
     contactId: (data.contact_id as string | null) ?? null,
     mission: null,
     contact: null,
+    iconKey,
+    iconSrc: resolveIconSrc(iconKey, setsBySlug),
   };
+}
+
+export async function updateMapMarkerIcon(playerId: string, markerKey: string, iconKey: string | null) {
+  await setPlayerMarkerIcon(playerId, markerKey, iconKey);
 }
 
 function resolveMissionPin(lat: number | null, lng: number | null, locationName: string | null) {
@@ -322,7 +374,7 @@ export function contactMapPin(contact: {
     tier: contact.tier,
     address: contact.address,
   };
-  return {
+  return emptyIconFields({
     id: `cp-${contact.id}`,
     title: contact.name,
     type: "contact",
@@ -336,7 +388,7 @@ export function contactMapPin(contact: {
     contactId: contact.id,
     mission: null,
     contact: card,
-  };
+  });
 }
 
 export async function deleteMapPin(playerId: string, pinId: string) {

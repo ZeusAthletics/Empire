@@ -53,17 +53,29 @@ export type MapPin = {
   contactId: string | null;
   mission: MapPinMission | null;
   contact: MapPinContact | null;
+  /** e.g. part-1:42 — user-chosen map blip */
+  iconKey: string | null;
+  iconSrc: string | null;
 };
 
 export type MapOption = { id: string; title: string };
 
 export type HomeBase = { lat: number; lng: number; address: string };
 
+export type MapIconSetSummary = {
+  slug: string;
+  title: string;
+  gridCols: number;
+  gridRows: number;
+  iconCount: number;
+};
+
 export type MapState = {
   pins: MapPin[];
   home: HomeBase | null;
   contactOptions: MapOption[];
   missionOptions: MapOption[];
+  iconSets: MapIconSetSummary[];
 };
 
 export const HOME_BASE = { lat: 51.0764, lng: 4.7283 };

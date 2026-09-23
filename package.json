@@ -13,6 +13,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:verify": "tsx scripts/verify-phase4.ts",
     "db:verify:map": "tsx scripts/verify-phase5.ts",
+    "map-icons:slice": "tsx scripts/slice-map-icon-set.ts",
     "db:verify:journal": "tsx scripts/verify-phase6.ts",
     "db:verify:memory": "tsx scripts/verify-phase8.ts",
     "db:reindex:nyx-memories": "tsx scripts/reindex-nyx-memories.ts",
@@ -41,6 +42,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.4",
     "postcss": "^8.5.28",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3"

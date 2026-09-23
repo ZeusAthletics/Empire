@@ -4,20 +4,25 @@ import Link from "next/link";
 import { FileText, Navigation } from "lucide-react";
 import { Plate } from "@/components/ui/Plate";
 import { Tag } from "@/components/ui/Tag";
+import { MapMarkerIconPanel } from "@/features/map/MapMarkerIconPanel";
 import { PIN_META } from "@/features/map/pinMeta";
 import { firstSentence, missionPlate } from "@/lib/missions";
-import { HOME_BASE, distanceKm, type HomeBase, type MapPin } from "@/server/domain/map/types";
+import { HOME_BASE, distanceKm, type HomeBase, type MapIconSetSummary, type MapPin } from "@/server/domain/map/types";
 
 export function MarkerSheet({
   pin,
   home,
+  iconSets,
   onNote,
   onDelete,
+  onIconSaved,
 }: {
   pin: MapPin;
   home?: HomeBase | null;
+  iconSets: MapIconSetSummary[];
   onNote: (title: string) => void;
   onDelete?: () => void;
+  onIconSaved?: () => void;
 }) {
   const meta = PIN_META[pin.type] ?? PIN_META.saved;
   const origin = home ?? HOME_BASE;
@@ -60,6 +65,9 @@ export function MarkerSheet({
             <Tag>{`+${mission.xpReward} XP`}</Tag>
             <Tag className="alt">{distLabel}</Tag>
           </div>
+          {iconSets.length ? (
+            <MapMarkerIconPanel pin={pin} iconSets={iconSets} onSaved={() => onIconSaved?.()} />
+          ) : null}
         </div>
         <div className="sheet-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href={`/missions/${mission.id}`} className="btn btn-gold" style={{ flex: "1 1 130px" }}>
@@ -101,6 +109,9 @@ export function MarkerSheet({
             {contact.tier ? <Tag className="alt">{contact.tier}</Tag> : null}
             <Tag className="alt">{distLabel}</Tag>
           </div>
+          {iconSets.length ? (
+            <MapMarkerIconPanel pin={pin} iconSets={iconSets} onSaved={() => onIconSaved?.()} />
+          ) : null}
         </div>
         <div className="sheet-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
@@ -138,6 +149,9 @@ export function MarkerSheet({
           <Tag className="alt">{`${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}`}</Tag>
           <Tag className="alt">{distLabel}</Tag>
         </div>
+        {iconSets.length ? (
+          <MapMarkerIconPanel pin={pin} iconSets={iconSets} onSaved={() => onIconSaved?.()} />
+        ) : null}
       </div>
       <div className="sheet-foot" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-gold" style={{ flex: "1 1 120px" }} type="button" onClick={() => onNote(pin.title)}>
