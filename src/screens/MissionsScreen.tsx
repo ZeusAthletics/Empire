@@ -46,6 +46,7 @@ function isOpenMission(mission: PublicMission) {
   return (
     mission.status === "ACTIVE" ||
     mission.status === "PROPOSED" ||
+    mission.status === "PLANNED" ||
     mission.status === "BLOCKED" ||
     mission.status === "LOCKED"
   );
@@ -125,7 +126,9 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
         ? missions.filter((mission) => mission.track === "MAIN_STORY" && isOpenMission(mission))
         : missions.filter((mission) => mission.track === "SIDE_QUEST" && isOpenMission(mission));
   const featured = featuredMission(missions);
-  const suggested = missions.filter((mission) => mission.status === "PROPOSED");
+  const suggested = missions.filter(
+    (mission) => mission.status === "PROPOSED" || mission.status === "PLANNED",
+  );
   const required = featured ? requiredCount(featured) : 0;
   const done = featured ? doneCount(featured) : 0;
 
@@ -313,7 +316,10 @@ export function MissionsScreen({ missions }: { missions: PublicMission[] }) {
             ))}
           </div>
         ) : (
-          <p className="body">Alle suggesties zijn geactiveerd.</p>
+          <p className="body">
+            Geen missies klaar om te starten. In admin staan ze misschien nog op gepland — open Nyx of vraag een
+            campagne-refresh.
+          </p>
         )}
       </div>
 

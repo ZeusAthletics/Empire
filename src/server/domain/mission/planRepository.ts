@@ -31,16 +31,25 @@ function asDifficulty(value: string): MissionDifficulty {
   return "MEDIUM";
 }
 
-export async function listChapterMainMissions(playerId: string, chapterId: string): Promise<PlannedMissionRow[]> {
+export async function listChapterMainMissions(
+  playerId: string,
+  chapterId: string,
+  options?: { includeUnassignedChapter?: boolean },
+): Promise<PlannedMissionRow[]> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("missions")
     .select("id, player_id, chapter_id, track, status, narrative_order, title, strategic_reason, planned_payload")
     .eq("player_id", playerId)
-    .eq("chapter_id", chapterId)
     .eq("track", "MAIN_STORY")
     .is("deleted_at", null)
     .order("narrative_order", { ascending: true });
+  if (options?.includeUnassignedChapter) {
+    query = query.or(`chapter_id.eq.${chapterId},chapter_id.is.null`);
+  } else {
+    query = query.eq("chapter_id", chapterId);
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as PlannedMissionRow[];
 }

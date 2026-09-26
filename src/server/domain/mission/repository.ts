@@ -163,7 +163,7 @@ async function loadMissionList(playerId: string, includeHiddenPlanned: boolean):
     .order("created_at", { ascending: true });
   if (!includeHiddenPlanned) {
     query = query
-      .not("status", "in", '("PLANNED","ARCHIVED")')
+      .not("status", "in", '("ARCHIVED")')
       .not("status", "in", '("COMPLETED","COMPLETED_UNVERIFIED")');
   }
   const { data: rows, error } = await query;
@@ -209,6 +209,16 @@ async function loadMissionList(playerId: string, includeHiddenPlanned: boolean):
 }
 
 export async function listMissions(playerId: string): Promise<PublicMission[]> {
+  try {
+    const { findPublicCampaignByPlayerId } = await import("@/server/domain/campaign/repository");
+    const { refreshMissionAvailability } = await import("@/server/domain/campaign/director/CampaignDirector");
+    const campaign = await findPublicCampaignByPlayerId(playerId);
+    if (campaign?.chapter?.status === "ACTIVE") {
+      await refreshMissionAvailability(playerId, campaign.chapter.id);
+    }
+  } catch {
+    // Best-effort: player list still loads if sync fails.
+  }
   return loadMissionList(playerId, false);
 }
 
@@ -226,7 +236,10 @@ export async function activateMission(playerId: string, missionId: string): Prom
   const admin = createSupabaseAdminClient();
   const loaded = await loadMission(playerId, missionId);
   if (loaded.row.status === "LOCKED") throw new MissionLockedError();
-  if (loaded.row.status !== "PROPOSED") return loaded.mission;
+  if (loaded.row.status === "ACTIVE") return loaded.mission;
+  if (loaded.row.status !== "PROPOSED" && loaded.row.status !== "PLANNED") {
+    throw new Error("Deze missie kan nog niet worden geactiveerd.");
+  }
 
   const { data: links } = await admin.from("mission_contacts").select("contact_id").eq("mission_id", missionId);
   const ids = (links ?? []).map((link) => link.contact_id as string);

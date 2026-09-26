@@ -5,7 +5,7 @@ import {
   formatActiveMissionsForPrompt,
   isPlayableMission,
 } from "@/server/domain/mission/nyxContext";
-import type { PublicMission } from "@/server/domain/mission/types";
+import { featuredMission, type PublicMission } from "@/server/domain/mission/types";
 
 function mission(partial: Partial<PublicMission> & Pick<PublicMission, "title" | "track" | "status">): PublicMission {
   return {
@@ -35,6 +35,14 @@ function mission(partial: Partial<PublicMission> & Pick<PublicMission, "title" |
     ...partial,
   };
 }
+
+test("featuredMission prefers main story PROPOSED when nothing is ACTIVE", () => {
+  const picked = featuredMission([
+    mission({ id: "1", title: "Side open", track: "SIDE_QUEST", status: "PROPOSED" }),
+    mission({ id: "2", title: "Hoofdlijn", track: "MAIN_STORY", status: "PROPOSED" }),
+  ]);
+  assert.equal(picked?.id, "2");
+});
 
 test("isPlayableMission excludes completed missions", () => {
   assert.equal(isPlayableMission(mission({ title: "A", track: "MAIN_STORY", status: "ACTIVE" })), true);

@@ -153,7 +153,8 @@ export function HomeScreen({
               />
             </div>
             <Link href={`/missions/${featured.id}`} className="btn btn-gold btn-block">
-              Continue mission <ArrowRight size={15} strokeWidth={2.4} />
+              {featured.status === "ACTIVE" ? "Continue mission" : "Open missie"}{" "}
+              <ArrowRight size={15} strokeWidth={2.4} />
             </Link>
           </div>
         ) : (

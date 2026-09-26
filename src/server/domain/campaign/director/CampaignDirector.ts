@@ -62,8 +62,13 @@ async function buildSnapshot(playerId: string, chapter: ChapterRow) {
   };
 }
 
+/** Promote PLANNED/LOCKED mains to PROPOSED (max 3 playable) after deps unlock — safe to call on read paths. */
+export async function refreshMissionAvailability(playerId: string, chapterId: string): Promise<void> {
+  await syncPlayableAndUnlock(playerId, chapterId);
+}
+
 async function syncPlayableAndUnlock(playerId: string, chapterId: string): Promise<void> {
-  const missions = await listChapterMainMissions(playerId, chapterId);
+  const missions = await listChapterMainMissions(playerId, chapterId, { includeUnassignedChapter: true });
   const completedIds = new Set(
     missions.filter((m) => m.status === "COMPLETED" || m.status === "COMPLETED_UNVERIFIED").map((m) => m.id),
   );

@@ -6,7 +6,7 @@ import {
   type PublicMission,
 } from "@/server/domain/mission/types";
 
-const PLAYABLE_STATUSES = new Set<MissionStatus>(["ACTIVE", "PROPOSED", "BLOCKED", "LOCKED"]);
+const PLAYABLE_STATUSES = new Set<MissionStatus>(["ACTIVE", "PROPOSED", "PLANNED", "BLOCKED", "LOCKED"]);
 
 export type NyxActiveMissionBrief = {
   id: string;

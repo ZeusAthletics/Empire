@@ -64,8 +64,21 @@ export function doneCount(mission: { objectives: PublicObjective[] }) {
   return mission.objectives.filter((objective) => !objective.optional && objective.status === "COMPLETED").length;
 }
 
+const FEATURED_STATUSES = new Set<MissionStatus>(["ACTIVE", "PROPOSED", "PLANNED", "BLOCKED", "LOCKED"]);
+
 export function featuredMission(missions: PublicMission[]): PublicMission | null {
-  return missions.find((mission) => mission.status === "ACTIVE" && mission.featured)
-    ?? missions.find((mission) => mission.status === "ACTIVE")
-    ?? null;
+  const open = missions.filter((mission) => FEATURED_STATUSES.has(mission.status));
+  if (!open.length) return null;
+
+  const pick = (pred: (mission: PublicMission) => boolean) => open.find(pred);
+
+  return (
+    pick((mission) => mission.status === "ACTIVE" && mission.featured) ??
+    pick((mission) => mission.status === "ACTIVE" && mission.track === "MAIN_STORY") ??
+    pick((mission) => mission.status === "ACTIVE") ??
+    pick((mission) => mission.featured && mission.track === "MAIN_STORY") ??
+    pick((mission) => mission.track === "MAIN_STORY") ??
+    pick((mission) => mission.featured) ??
+    open[0]
+  );
 }
