@@ -250,3 +250,71 @@ export async function recentMessageTexts(conversationId: string, limit = 12): Pr
   if (error) throw error;
   return [...(data ?? [])].reverse().map((row) => `${row.role}: ${row.content}`);
 }
+
+export type IntimateSessionState = {
+  conversationId: string;
+  active: boolean;
+  startedAt: string | null;
+  lastAt: string | null;
+  nonIntimateStreak: number;
+};
+
+export async function getIntimateSessionState(conversationId: string): Promise<IntimateSessionState> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("nyx_conversations")
+    .select(
+      "id, intimate_session_active, intimate_started_at, intimate_last_at, intimate_nonintimate_streak",
+    )
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    conversationId,
+    active: Boolean(data?.intimate_session_active),
+    startedAt: (data?.intimate_started_at as string | null) ?? null,
+    lastAt: (data?.intimate_last_at as string | null) ?? null,
+    nonIntimateStreak: Number(data?.intimate_nonintimate_streak ?? 0),
+  };
+}
+
+export async function setIntimateSessionState(
+  conversationId: string,
+  patch: {
+    active: boolean;
+    startedAt?: string | null;
+    lastAt?: string | null;
+    nonIntimateStreak?: number;
+  },
+): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const row: Record<string, unknown> = {
+    intimate_session_active: patch.active,
+    updated_at: new Date().toISOString(),
+  };
+  if (patch.startedAt !== undefined) row.intimate_started_at = patch.startedAt;
+  if (patch.lastAt !== undefined) row.intimate_last_at = patch.lastAt;
+  if (patch.nonIntimateStreak !== undefined) row.intimate_nonintimate_streak = patch.nonIntimateStreak;
+  else if (patch.active) row.intimate_nonintimate_streak = 0;
+  const { error } = await admin.from("nyx_conversations").update(row as never).eq("id", conversationId);
+  if (error) throw error;
+}
+
+/** Recent USER+NYX turns since intimate_last_at window start (or last N). */
+export async function recentIntimateTurnTexts(
+  conversationId: string,
+  sinceIso: string | null,
+  limit = 24,
+): Promise<string[]> {
+  const admin = createSupabaseAdminClient();
+  let query = admin
+    .from("nyx_messages")
+    .select("role, content, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (sinceIso) query = query.gte("created_at", sinceIso);
+  const { data, error } = await query;
+  if (error) throw error;
+  return [...(data ?? [])].reverse().map((row) => `${row.role}: ${row.content}`);
+}

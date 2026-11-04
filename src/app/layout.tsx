@@ -28,6 +28,21 @@ const caveat = Caveat({
 export const metadata: Metadata = {
   title: "HARDWIG: EMPIRE MODE",
   description: "Kempen Vice — persoonlijk operating system.",
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    noarchive: true,
+    nosnippet: true,
+    noimageindex: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noarchive: true,
+      nosnippet: true,
+      noimageindex: true,
+    },
+  },
   applicationName: "EMPIRE MODE",
   appleWebApp: {
     capable: true,

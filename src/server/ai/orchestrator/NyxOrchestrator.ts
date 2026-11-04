@@ -6,6 +6,10 @@ import { CAMPAIGN_DIRECTOR_GUIDE } from "@/server/ai/prompts/campaign-director";
 import { MISSION_PLANNER } from "@/server/ai/prompts/mission-planner";
 import { INTAKE_GUIDE } from "@/server/ai/prompts/intake";
 import { NYX_CASUAL_CHAT_GUIDE } from "@/server/ai/prompts/nyx-casual";
+import {
+  NYX_INTIMATE_CLASSIFY_GUIDE,
+  NYX_INTIMATE_RECAP_GUIDE,
+} from "@/server/ai/prompts/nyx-intimate";
 import { NYX_OUTREACH_GUIDE } from "@/server/ai/prompts/outreach";
 import { NYX_RELATIONSHIP_GUIDE } from "@/server/ai/prompts/nyx-relationship";
 import { NYX_CHECKIN_GUIDE } from "@/server/ai/prompts/nyx-checkin";
@@ -48,6 +52,7 @@ function canRetry(tier: ModelRoutingDecision["modelTier"]) {
 
 const MEMORY_QUERY_TASKS = new Set<IntelligenceTask>([
   "CASUAL_CHAT",
+  "INTIMATE_CHAT",
   "NYX_EXPLANATION",
   "NYX_OUTREACH",
   "SIDE_QUEST_GENERATION",
@@ -101,6 +106,10 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
                 ? `\n\n${NYX_RELATIONSHIP_GUIDE}`
               : task === "CASUAL_CHAT"
                 ? `\n\n${NYX_CASUAL_CHAT_GUIDE}`
+                : task === "INTIMATE_CLASSIFY"
+                  ? `\n\n${NYX_INTIMATE_CLASSIFY_GUIDE}`
+                  : task === "INTIMATE_RECAP"
+                    ? `\n\n${NYX_INTIMATE_RECAP_GUIDE}`
                 : task === "NYX_CHECKIN"
                   ? `\n\n${NYX_CHECKIN_GUIDE}`
                   : task === "MONTHLY_WRAP_ANALYSIS"

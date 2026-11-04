@@ -1,8 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const NO_INDEX = "noindex, nofollow, noarchive, nosnippet, noimageindex";
+
+function applyPrivateHeaders(response: NextResponse) {
+  response.headers.set("X-Robots-Tag", NO_INDEX);
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  let supabaseResponse = applyPrivateHeaders(NextResponse.next({ request }));
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -17,7 +24,7 @@ export async function middleware(request: NextRequest) {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        supabaseResponse = NextResponse.next({ request });
+        supabaseResponse = applyPrivateHeaders(NextResponse.next({ request }));
         cookiesToSet.forEach(({ name, value, options }) => {
           supabaseResponse.cookies.set(name, value, options);
         });

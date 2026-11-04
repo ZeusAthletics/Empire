@@ -159,3 +159,10 @@ export async function applyCampaignDirectorSchema() {
     "campaign director schema",
   );
 }
+
+export async function applyNyxIntimateSessionSchema() {
+  await applySqlFile(
+    "supabase/migrations/20260924120000_nyx_intimate_session.sql",
+    "nyx intimate session flags",
+  );
+}

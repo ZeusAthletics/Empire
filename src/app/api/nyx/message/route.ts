@@ -33,16 +33,18 @@ export async function POST(request: Request) {
   }
   try {
     await syncPlayerTimeZoneFromHeader(player.id, request.headers.get("x-player-timezone")).catch(() => undefined);
-    const talk = await sendNyxMessage(player.id, { text, mediaId, linkedUrl });
+    const { talk, skipMemoryExtraction } = await sendNyxMessage(player.id, { text, mediaId, linkedUrl });
     const lastNyx = [...talk.messages].reverse().find((message) => message.role === "nyx");
-    after(() =>
-      afterNyxReply({
-        playerId: player.id,
-        userText: text,
-        nyxText: lastNyx?.text ?? "",
-        useModel: true,
-      }).catch(() => undefined),
-    );
+    if (!skipMemoryExtraction) {
+      after(() =>
+        afterNyxReply({
+          playerId: player.id,
+          userText: text,
+          nyxText: lastNyx?.text ?? "",
+          useModel: true,
+        }).catch(() => undefined),
+      );
+    }
     return NextResponse.json({ ok: true, talk });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nyx kon niet antwoorden.";

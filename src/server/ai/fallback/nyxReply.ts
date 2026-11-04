@@ -38,5 +38,6 @@ export function handleCasualUserTurn(
 export function stripModelNames(text: string): string {
   return text
     .replace(/\bgpt-5\.6-(?:luna|terra|sol)\b/gi, "Nyx")
-    .replace(/\b(?:Luna|Terra|Sol|OpenAI)\b/g, "Nyx");
+    .replace(/\bgrok(?:-\d[\w.-]*)?\b/gi, "Nyx")
+    .replace(/\b(?:Luna|Terra|Sol|OpenAI|xAI)\b/g, "Nyx");
 }
