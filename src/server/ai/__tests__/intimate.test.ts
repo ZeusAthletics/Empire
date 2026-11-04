@@ -36,9 +36,10 @@ test("INTIMATE_CLASSIFY and INTIMATE_RECAP route to Luna", () => {
 
 test("heuristic detects intimate and exit phrases", () => {
   assert.equal(heuristicIntimateIntent("wil je intiem met me zijn"), true);
+  assert.equal(heuristicIntimateIntent("jij als beloning als ik iemand warm krijg"), true);
   assert.equal(heuristicIntimateIntent("hoe staat mijn missie"), false);
   assert.equal(heuristicExitSignal("terug naar normaal even"), true);
-  assert.equal(heuristicExitSignal("wat is mijn next missie"), true);
+  assert.equal(heuristicExitSignal("wat is mijn next missie"), false);
 });
 
 test("enter only when TRUST and intimate classify", () => {

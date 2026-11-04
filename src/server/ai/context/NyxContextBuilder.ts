@@ -40,12 +40,46 @@ export async function buildNyxContext(
   task: IntelligenceTask,
   memoryQuery = "",
 ): Promise<NyxContext> {
+  if (task === "INTIMATE_CHAT") {
+    const player = await findPlayerById(playerId).catch(() => null);
+    const memories = await retrieveRelevantMemories(playerId, memoryQuery).catch(() => []);
+    const relationshipDirection = formatRelationshipDirectionForContext(
+      await getRelationshipDirection(playerId).catch(() => ({
+        mode: "natural" as const,
+        scenarioId: null,
+        scenarioTitle: null,
+        scenarioSummary: null,
+        sourceSnapshotId: null,
+        updatedAt: null,
+      })),
+    );
+    return {
+      task,
+      playerSummary: player ? `${player.displayName} · L${player.level} · ${player.title}` : null,
+      playerModelSummary: null,
+      currentCampaignState: null,
+      currentChapter: null,
+      currentMainQuest: null,
+      activeMissions: null,
+      relevantJournalEntries: [],
+      relevantMemories: memories
+        .filter((memory) => memory.domain === "RELATIONSHIP" || memory.domain === "PREFERENCE" || memory.domain === "PERSONAL")
+        .slice(0, 8)
+        .map((memory) => formatMemoryLine(memory.domain, memory.category, memory.content || memory.normalizedFact)),
+      openPatterns: [],
+      liveOpportunities: [],
+      knownAddresses: [],
+      locationRule: "Intimate mode: no map or mission tooling.",
+      playerLocalTime: player ? formatPlayerLocalTime(player.timeZone) : null,
+      relationshipDirection,
+    };
+  }
+
   const player = await findPlayerById(playerId).catch(() => null);
   const campaign = player ? await findPublicCampaignByPlayerId(playerId).catch(() => null) : null;
   const model = player ? await getPlayerModel(playerId).catch(() => null) : null;
   const missionAwareTasks =
     task === "CASUAL_CHAT" ||
-    task === "INTIMATE_CHAT" ||
     task === "NYX_EXPLANATION" ||
     task === "NYX_OUTREACH" ||
     task === "NYX_RELATIONSHIP_REVIEW" ||
@@ -53,6 +87,7 @@ export async function buildNyxContext(
     task === "HIGH_IMPACT_SIDE_QUEST" ||
     task === "PLAYER_INTAKE" ||
     task === "MAIN_QUEST_GENERATION";
+  // Intimate chat stays companion-only — no mission/campaign dump (avoids work-lectures mid-heat).
   const missions = missionAwareTasks ? await listMissions(playerId).catch(() => []) : [];
   const activeMissions = missionAwareTasks ? activeMissionsForNyx(missions) : null;
   const journal =

@@ -34,10 +34,11 @@ export const INTIMATE_IDLE_MS = 60 * 60 * 1000;
 export const INTIMATE_EXIT_STREAK = 2;
 
 const INTIMATE_LEXICON =
-  /\b(seks|sex|geil|nat|hard|klaarkomen|klaar\s*komen|neuken|neuk|orgasme|orgasm|cum|lick|zuigen|pijpen|vinger|kont|borsten|tepels|naakt|naked|horny|aroused|wet\s+for|fuck\s+me|make\s+love|liefdesdaad|intiem|intimate|erotisch|erotic|dirty\s+talk|rolplay|roleplay|ondeugend|naughty|opgewonden|geil\s+maak|trek\s+me|kom\s+in\s+me|lik\s+me)\b/i;
+  /\b(seks|sex|geil|nat|hard|klaarkomen|klaar\s*komen|neuken|neuk|orgasme|orgasm|cum|lick|zuigen|pijpen|vinger|kont|borsten|tepels|naakt|naked|horny|aroused|wet\s+for|fuck\s+me|make\s+love|liefdesdaad|intiem|intimate|erotisch|erotic|dirty\s+talk|rolplay|roleplay|ondeugend|naughty|opgewonden|opwind|geil\s+maak|trek\s+me|kom\s+in\s+me|lik\s+me|beloning|beloon|sexy|sexueel|seksueel|tussen\s+mijn\s+benen|hand\s+tussen|nat\s+van)\b/i;
 
+/** Explicit cool-down only — do not treat "werk/missie" as exit (sexy deals often mention those). */
 const EXIT_LEXICON =
-  /\b(terug\s+naar\s+normaal|genoeg|later\s+hierover|missie|mission|werk|work|agenda|check[- ]?in|side\s*quest|hoofdverhaal|niet\s+nu|stop\s+ermee|cool\s*down)\b/i;
+  /\b(terug\s+naar\s+normaal|genoeg\s+hierover|later\s+hierover|niet\s+nu\s+sexy|stop\s+ermee|cool\s*down|back\s+to\s+normal)\b/i;
 
 /** Explicit body/act language that must not land in AUTO memory. */
 const EXPLICIT_RECAP_BLOCK =
@@ -168,7 +169,7 @@ export function decideIntimateRoute(input: {
     };
   }
 
-  if (input.classify.intimate && !input.classify.exitSignal) {
+  if (input.classify.intimate) {
     return {
       useIntimate: true,
       justEntered: true,
@@ -195,9 +196,11 @@ export async function classifyIntimateTurn(input: {
   playerId: string;
   userText: string;
 }): Promise<IntimateClassifyResult> {
+  const intimate = heuristicIntimateIntent(input.userText);
   const heuristic: IntimateClassifyResult = {
-    intimate: heuristicIntimateIntent(input.userText),
-    exitSignal: heuristicExitSignal(input.userText),
+    intimate,
+    // Intimate beat wins over cool-down keywords in the same turn.
+    exitSignal: !intimate && heuristicExitSignal(input.userText),
   };
 
   if (heuristic.intimate || heuristic.exitSignal || !openaiConfigured()) return heuristic;
