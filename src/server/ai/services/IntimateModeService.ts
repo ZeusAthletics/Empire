@@ -3,11 +3,7 @@ import { callXaiChat, getXaiModel, xaiConfigured } from "@/server/ai/client/xai"
 import { buildNyxContext } from "@/server/ai/context/NyxContextBuilder";
 import { writeNyxRun } from "@/server/ai/orchestrator/nyxRuns";
 import { loadNyxCore } from "@/server/ai/prompts/nyx-core";
-import {
-  NYX_INTIMATE_CHAT_GUIDE,
-  NYX_INTIMATE_CLASSIFY_GUIDE,
-  NYX_INTIMATE_RECAP_GUIDE,
-} from "@/server/ai/prompts/nyx-intimate";
+import { NYX_INTIMATE_CHAT_GUIDE, NYX_INTIMATE_RECAP_GUIDE } from "@/server/ai/prompts/nyx-intimate";
 import { planNyxTask, runNyxTask } from "@/server/ai/orchestrator/NyxOrchestrator";
 import {
   INTIMATE_CLASSIFY_JSON_SCHEMA,

@@ -100,7 +100,6 @@ export async function buildNyxContext(
 
   const timeAwareTasks =
     task === "CASUAL_CHAT" ||
-    task === "INTIMATE_CHAT" ||
     task === "NYX_CHECKIN" ||
     task === "NYX_EXPLANATION" ||
     task === "NYX_OUTREACH" ||
@@ -111,10 +110,7 @@ export async function buildNyxContext(
     player && timeAwareTasks ? formatPlayerLocalTime(player.timeZone) : null;
 
   const directionAwareTasks =
-    task === "CASUAL_CHAT" ||
-    task === "INTIMATE_CHAT" ||
-    task === "NYX_CHECKIN" ||
-    task === "NYX_OUTREACH";
+    task === "CASUAL_CHAT" || task === "NYX_CHECKIN" || task === "NYX_OUTREACH";
   const relationshipDirection = directionAwareTasks
     ? formatRelationshipDirectionForContext(await getRelationshipDirection(playerId).catch(() => ({
         mode: "natural" as const,
