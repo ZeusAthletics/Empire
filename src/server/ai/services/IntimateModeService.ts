@@ -30,7 +30,7 @@ export const INTIMATE_IDLE_MS = 60 * 60 * 1000;
 export const INTIMATE_EXIT_STREAK = 2;
 
 const INTIMATE_LEXICON =
-  /\b(seks|sex|geil|nat|hard|klaarkomen|klaar\s*komen|neuken|neuk|orgasme|orgasm|cum|lick|zuigen|pijpen|vinger|kont|borsten|tepels|naakt|naked|horny|aroused|wet\s+for|fuck\s+me|make\s+love|liefdesdaad|intiem|intimate|erotisch|erotic|dirty\s+talk|rolplay|roleplay|ondeugend|naughty|opgewonden|opwind|geil\s+maak|trek\s+me|kom\s+in\s+me|lik\s+me|beloning|beloon|sexy|sexueel|seksueel|tussen\s+mijn\s+benen|hand\s+tussen|nat\s+van)\b/i;
+  /\b(seks|sex|geil|nat|hard|klaarkomen|klaar\s*komen|neuken|neuk|orgasme|orgasm|cum|lick|zuigen|pijpen|pijpje|blowjob|handjob|bj\b|vinger|kont|borsten|tepels|naakt|naked|horny|aroused|wet\s+for|fuck\s+me|make\s+love|liefdesdaad|intiem|intimate|erotisch|erotic|dirty\s+talk|rolplay|roleplay|ondeugend|naughty|opgewonden|opwind|geil\s+maak|trek\s+me|kom\s+in\s+me|lik\s+me|beloning|beloon|sexy|sexueel|seksueel|tussen\s+mijn\s+benen|hand\s+tussen|nat\s+van|deal\s+voorstellen|nen\s+deal|als\s+beloning)\b/i;
 
 /** Explicit cool-down only — do not treat "werk/missie" as exit (sexy deals often mention those). */
 const EXIT_LEXICON =
@@ -41,7 +41,13 @@ const EXPLICIT_RECAP_BLOCK =
   /\b(neuk|fuck|cum|klaarkom|orgasm|pijp|zuig|kontgat|kut|pik|lul|penis|vagina|sperma|sperma|dick|pussy|anal|blowjob|handjob)\b/i;
 
 export function heuristicIntimateIntent(text: string): boolean {
-  return INTIMATE_LEXICON.test(text.trim());
+  const t = text.trim();
+  return INTIMATE_LEXICON.test(t) || EXPLICIT_RECAP_BLOCK.test(t);
+}
+
+/** Sticky hint from recent transcript when DB session flags are missing. */
+export function recentChatSuggestsIntimate(recent: string[]): boolean {
+  return recent.slice(-8).some((line) => heuristicIntimateIntent(line));
 }
 
 export function heuristicExitSignal(text: string): boolean {

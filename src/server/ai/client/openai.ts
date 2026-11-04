@@ -20,7 +20,13 @@ let client: OpenAI | null = null;
 function getClient() {
   const key = process.env.OPENAI_API_KEY?.trim();
   if (!key) throw new Error("OPENAI_API_KEY ontbreekt.");
-  if (!client) client = new OpenAI({ apiKey: key });
+  if (!client) {
+    client = new OpenAI({
+      apiKey: key,
+      timeout: 45_000,
+      maxRetries: 0,
+    });
+  }
   return client;
 }
 

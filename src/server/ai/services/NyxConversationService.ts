@@ -4,11 +4,13 @@ import { handleCasualUserTurn, stripModelNames } from "@/server/ai/fallback/nyxR
 import { afterNyxReply } from "@/server/ai/services/MemoryExtractionService";
 import {
   heuristicIntimateIntent,
+  recentChatSuggestsIntimate,
   resolveIntimateTurn,
   runIntimateChat,
   softRedirectBelowTrust,
   writeIntimateRecapMemory,
 } from "@/server/ai/services/IntimateModeService";
+import { xaiConfigured } from "@/server/ai/client/xai";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
 import { recentPlayerChatTurns } from "@/server/domain/nyx/recentChat";
 import { buildChatAttachmentContext } from "@/server/ai/services/NyxChatAttachmentContext";
@@ -101,7 +103,14 @@ async function produceNyxReply(input: {
     sessionStartedAt: null as string | null,
   }));
 
-  if (intimate.useIntimate) {
+  const forceIntimate =
+    intimacyTier === "TRUST" &&
+    xaiConfigured() &&
+    (intimate.useIntimate ||
+      heuristicIntimateIntent(input.userText) ||
+      recentChatSuggestsIntimate(recent));
+
+  if (forceIntimate) {
     const live = await runIntimateChat({
       playerId: input.playerId,
       userText: input.userText,
@@ -128,13 +137,17 @@ async function produceNyxReply(input: {
     };
   }
 
+  // Never let OpenAI block forever on spicy turns that slipped past the gate.
   const live = openaiConfigured()
-    ? await runNyxTask({
-        playerId: input.playerId,
-        task: "CASUAL_CHAT",
-        text: `${input.userText}\n\n${localLine ? `${localLine}\n` : ""}Recente beurten:\n${recent.join("\n")}\n${formatActiveMissionsForPrompt(ctx.activeMissions)}${notes}`,
-        invokeModel: true,
-      }).catch(() => null)
+    ? await Promise.race([
+        runNyxTask({
+          playerId: input.playerId,
+          task: "CASUAL_CHAT",
+          text: `${input.userText}\n\n${localLine ? `${localLine}\n` : ""}Recente beurten:\n${recent.join("\n")}\n${formatActiveMissionsForPrompt(ctx.activeMissions)}${notes}`,
+          invokeModel: true,
+        }).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 40_000)),
+      ])
     : null;
 
   if (live?.text) {
