@@ -259,6 +259,30 @@ export type IntimateSessionState = {
   nonIntimateStreak: number;
 };
 
+function emptyIntimateState(conversationId: string): IntimateSessionState {
+  return {
+    conversationId,
+    active: false,
+    startedAt: null,
+    lastAt: null,
+    nonIntimateStreak: 0,
+  };
+}
+
+function isMissingIntimateColumnError(error: { message?: string; code?: string } | null): boolean {
+  const message = error?.message?.toLowerCase() ?? "";
+  return (
+    error?.code === "PGRST204" ||
+    error?.code === "42703" ||
+    message.includes("intimate_session_active") ||
+    message.includes("intimate_started_at") ||
+    message.includes("intimate_last_at") ||
+    message.includes("intimate_nonintimate_streak") ||
+    message.includes("does not exist") ||
+    message.includes("schema cache")
+  );
+}
+
 export async function getIntimateSessionState(conversationId: string): Promise<IntimateSessionState> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -268,7 +292,10 @@ export async function getIntimateSessionState(conversationId: string): Promise<I
     )
     .eq("id", conversationId)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    if (isMissingIntimateColumnError(error)) return emptyIntimateState(conversationId);
+    throw error;
+  }
   return {
     conversationId,
     active: Boolean(data?.intimate_session_active),
@@ -297,7 +324,10 @@ export async function setIntimateSessionState(
   if (patch.nonIntimateStreak !== undefined) row.intimate_nonintimate_streak = patch.nonIntimateStreak;
   else if (patch.active) row.intimate_nonintimate_streak = 0;
   const { error } = await admin.from("nyx_conversations").update(row as never).eq("id", conversationId);
-  if (error) throw error;
+  if (error) {
+    if (isMissingIntimateColumnError(error)) return;
+    throw error;
+  }
 }
 
 /** Recent USER+NYX turns since intimate_last_at window start (or last N). */

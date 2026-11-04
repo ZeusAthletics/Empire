@@ -111,7 +111,12 @@ export async function sendNyxMessage(
     conversationId: talk.conversationId,
     userText: trimmed || userContent,
     intimacyTier,
-  });
+  }).catch(() => ({
+    useIntimate: false,
+    justEntered: false,
+    justExited: false,
+    sessionStartedAt: null as string | null,
+  }));
 
   let reply: string | null = null;
   let runId: string | null = null;
