@@ -34,7 +34,7 @@ export const INTIMATE_IDLE_MS = 60 * 60 * 1000;
 export const INTIMATE_EXIT_STREAK = 2;
 
 const INTIMATE_LEXICON =
-  /\b(seks|sex|geil|nat|hard|klaarkomen|klaar\s*komen|neuken|neuk|orgasme|orgasm|cum|lick|zuigen|pijpen|vinger|kont|borsten|tepels|naakt|naked|horny|aroused|wet\s+for|fuck\s+me|make\s+love|liefdesdaad|intiem|intimate|erotisch|erotic|dirty\s+talk|rolplay|roleplay)\b/i;
+  /\b(seks|sex|geil|nat|hard|klaarkomen|klaar\s*komen|neuken|neuk|orgasme|orgasm|cum|lick|zuigen|pijpen|vinger|kont|borsten|tepels|naakt|naked|horny|aroused|wet\s+for|fuck\s+me|make\s+love|liefdesdaad|intiem|intimate|erotisch|erotic|dirty\s+talk|rolplay|roleplay|ondeugend|naughty|opgewonden|geil\s+maak|trek\s+me|kom\s+in\s+me|lik\s+me)\b/i;
 
 const EXIT_LEXICON =
   /\b(terug\s+naar\s+normaal|genoeg|later\s+hierover|missie|mission|werk|work|agenda|check[- ]?in|side\s*quest|hoofdverhaal|niet\s+nu|stop\s+ermee|cool\s*down)\b/i;
@@ -187,6 +187,10 @@ export function decideIntimateRoute(input: {
   };
 }
 
+/**
+ * Fast enter/exit labels. Heuristic-first so sexual turns never wait on OpenAI
+ * (which can stall or refuse) before Grok replies.
+ */
 export async function classifyIntimateTurn(input: {
   playerId: string;
   userText: string;
@@ -196,15 +200,19 @@ export async function classifyIntimateTurn(input: {
     exitSignal: heuristicExitSignal(input.userText),
   };
 
-  if (!openaiConfigured()) return heuristic;
+  if (heuristic.intimate || heuristic.exitSignal || !openaiConfigured()) return heuristic;
 
-  const live = await runNyxTask({
-    playerId: input.playerId,
-    task: "INTIMATE_CLASSIFY",
-    text: `${NYX_INTIMATE_CLASSIFY_GUIDE}\n\nSpelerbeurt:\n${input.userText}`,
-    invokeModel: true,
-    jsonSchema: INTIMATE_CLASSIFY_JSON_SCHEMA as unknown as Record<string, unknown>,
-  }).catch(() => null);
+  // Ambiguous only: short OpenAI label. Never block the reply path for long.
+  const live = await Promise.race([
+    runNyxTask({
+      playerId: input.playerId,
+      task: "INTIMATE_CLASSIFY",
+      text: `${NYX_INTIMATE_CLASSIFY_GUIDE}\n\nSpelerbeurt:\n${input.userText}`,
+      invokeModel: true,
+      jsonSchema: INTIMATE_CLASSIFY_JSON_SCHEMA as unknown as Record<string, unknown>,
+    }).catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+  ]);
 
   return parseIntimateClassify(live?.text) ?? heuristic;
 }

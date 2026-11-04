@@ -96,28 +96,39 @@ export function NyxSheet() {
     setPendingMedia(
       !attachMediaId && !url && /\b(foto|video|selfie|beeld|plaatje)\b|stuur.*(foto|video)/i.test(trimmed),
     );
-    const response = await fetch("/api/nyx/message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
-      body: JSON.stringify({
-        text: trimmed,
-        mediaId: attachMediaId,
-        linkedUrl: url || undefined,
-      }),
-    });
-    const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
-    setPending(false);
-    setPendingMedia(false);
-    if (!response.ok || !data.ok || !data.talk) {
-      toast(data.error ?? "Nyx kon niet antwoorden.");
-      return;
+    try {
+      const response = await fetch("/api/nyx/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
+        body: JSON.stringify({
+          text: trimmed,
+          mediaId: attachMediaId,
+          linkedUrl: url || undefined,
+        }),
+      });
+      let data: { ok: boolean; talk?: NyxTalkState; error?: string } = { ok: false };
+      try {
+        data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+      } catch {
+        toast("Nyx gaf geen geldig antwoord. Probeer opnieuw.");
+        return;
+      }
+      if (!response.ok || !data.ok || !data.talk) {
+        toast(data.error ?? "Nyx kon niet antwoorden.");
+        return;
+      }
+      setTalk(data.talk);
+      await markNyxSeen();
+      if (inputRef.current) inputRef.current.value = "";
+      clearAttachment();
+      setLinkUrl("");
+      setShowLink(false);
+    } catch {
+      toast("Verbinding met Nyx mislukt. Probeer opnieuw.");
+    } finally {
+      setPending(false);
+      setPendingMedia(false);
     }
-    setTalk(data.talk);
-    await markNyxSeen();
-    if (inputRef.current) inputRef.current.value = "";
-    clearAttachment();
-    setLinkUrl("");
-    setShowLink(false);
   }
 
   async function accept(edits?: { title?: string; xp?: number }) {

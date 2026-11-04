@@ -192,7 +192,7 @@ export async function sendNyxMessage(
   }
 
   if (intimate.justExited) {
-    await writeIntimateRecapMemory({
+    void writeIntimateRecapMemory({
       playerId,
       conversationId: talk.conversationId,
       sessionStartedAt: intimate.sessionStartedAt,

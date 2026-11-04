@@ -1,7 +1,9 @@
 import OpenAI from "openai";
 
 const XAI_BASE_URL = "https://api.x.ai/v1";
-const DEFAULT_XAI_MODEL = "grok-4-1-fast-non-reasoning";
+/** Post May-2026 retirement default; override with XAI_MODEL. */
+const DEFAULT_XAI_MODEL = "grok-4.3";
+const XAI_TIMEOUT_MS = 55_000;
 
 export type XaiChatMessage = {
   role: "system" | "user" | "assistant";
@@ -28,6 +30,8 @@ function getClient() {
     client = new OpenAI({
       apiKey: key,
       baseURL: XAI_BASE_URL,
+      timeout: XAI_TIMEOUT_MS,
+      maxRetries: 0,
     });
   }
   return client;
