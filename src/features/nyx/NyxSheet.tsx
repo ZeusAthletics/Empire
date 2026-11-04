@@ -28,7 +28,8 @@ export function NyxSheet() {
   const router = useRouter();
   const { closeSheet, toast } = useEmpireUI();
   const [talk, setTalk] = useState<NyxTalkState | null>(null);
-  const [pending, setPending] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [booting, setBooting] = useState(true);
   const [pendingMedia, setPendingMedia] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -36,6 +37,7 @@ export function NyxSheet() {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const sendAbortRef = useRef<AbortController | null>(null);
   const [attachMediaId, setAttachMediaId] = useState<string | null>(null);
   const [attachPreview, setAttachPreview] = useState<string | null>(null);
   const [attachName, setAttachName] = useState<string | null>(null);
@@ -43,8 +45,14 @@ export function NyxSheet() {
   const [showLink, setShowLink] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Composer lock only while a send is in flight — never while booting/recovering.
+  const pending = sending;
+
   useEffect(() => {
     void loadTalk();
+    return () => {
+      sendAbortRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -57,16 +65,22 @@ export function NyxSheet() {
   }
 
   async function loadTalk() {
-    setPending(true);
+    setBooting(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 70_000);
     try {
-      const response = await fetch("/api/nyx/message", { headers: playerTimeZoneHeaders() });
+      const response = await fetch("/api/nyx/message", {
+        headers: playerTimeZoneHeaders(),
+        signal: controller.signal,
+      });
       const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState };
       if (response.ok && data.talk) setTalk(data.talk);
       await markNyxSeen();
     } catch {
       toast("Nyx-gesprek kon niet laden.");
     } finally {
-      setPending(false);
+      window.clearTimeout(timeout);
+      setBooting(false);
     }
   }
 
@@ -74,8 +88,8 @@ export function NyxSheet() {
   const awaitingNyx = Boolean(lastMessage && lastMessage.role === "me");
 
   async function retryDangling() {
-    if (pending) return;
-    setPending(true);
+    if (sending) return;
+    setSending(true);
     try {
       const response = await fetch("/api/nyx/message", { headers: playerTimeZoneHeaders() });
       const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
@@ -90,7 +104,7 @@ export function NyxSheet() {
     } catch {
       toast("Verbinding met Nyx mislukt.");
     } finally {
-      setPending(false);
+      setSending(false);
     }
   }
 
@@ -102,7 +116,7 @@ export function NyxSheet() {
   }
 
   async function onPickFile(file: File | undefined) {
-    if (!file || pending || uploading) return;
+    if (!file || sending || uploading) return;
     setUploading(true);
     const body = new FormData();
     body.set("file", file);
@@ -122,12 +136,44 @@ export function NyxSheet() {
   async function ask(text: string) {
     const trimmed = text.trim();
     const url = linkUrl.trim();
-    if ((!trimmed && !attachMediaId && !url) || pending) return;
-    setPending(true);
-    setPendingMedia(
-      !attachMediaId && !url && /\b(foto|video|selfie|beeld|plaatje)\b|stuur.*(foto|video)/i.test(trimmed),
+    const mediaId = attachMediaId;
+    if ((!trimmed && !mediaId && !url) || sending) return;
+
+    // Show the user bubble immediately — don't wait for a slow/hung reply.
+    const optimisticId = `local-${Date.now()}`;
+    const optimisticText = trimmed || (mediaId ? "(bijlage)" : url);
+    setTalk((prev) =>
+      prev
+        ? {
+            ...prev,
+            messages: [
+              ...prev.messages,
+              {
+                id: optimisticId,
+                role: "me",
+                text: optimisticText,
+                mediaSrc: attachPreview,
+                mediaKind: attachPreview ? "image" : mediaId ? "file" : null,
+                linkedUrl: url || null,
+              },
+            ],
+          }
+        : prev,
     );
+    if (inputRef.current) inputRef.current.value = "";
+    const sentMediaId = mediaId;
+    const sentUrl = url;
+    clearAttachment();
+    setLinkUrl("");
+    setShowLink(false);
+
+    sendAbortRef.current?.abort();
     const controller = new AbortController();
+    sendAbortRef.current = controller;
+    setSending(true);
+    setPendingMedia(
+      !sentMediaId && !sentUrl && /\b(foto|video|selfie|beeld|plaatje)\b|stuur.*(foto|video)/i.test(trimmed),
+    );
     const timeout = window.setTimeout(() => controller.abort(), 90_000);
     try {
       const response = await fetch("/api/nyx/message", {
@@ -135,8 +181,8 @@ export function NyxSheet() {
         headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
         body: JSON.stringify({
           text: trimmed,
-          mediaId: attachMediaId,
-          linkedUrl: url || undefined,
+          mediaId: sentMediaId,
+          linkedUrl: sentUrl || undefined,
         }),
         signal: controller.signal,
       });
@@ -153,30 +199,27 @@ export function NyxSheet() {
       }
       setTalk(data.talk);
       await markNyxSeen();
-      if (inputRef.current) inputRef.current.value = "";
-      clearAttachment();
-      setLinkUrl("");
-      setShowLink(false);
     } catch (error) {
       const aborted = error instanceof DOMException && error.name === "AbortError";
       toast(aborted ? "Nyx deed er te lang over. Probeer opnieuw." : "Verbinding met Nyx mislukt. Probeer opnieuw.");
     } finally {
       window.clearTimeout(timeout);
-      setPending(false);
+      if (sendAbortRef.current === controller) sendAbortRef.current = null;
+      setSending(false);
       setPendingMedia(false);
     }
   }
 
   async function accept(edits?: { title?: string; xp?: number }) {
     if (!talk?.proposal) return;
-    setPending(true);
+    setSending(true);
     const response = await fetch(`/api/nyx/proposals/${talk.proposal.id}/accept`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(edits ?? {}),
     });
     const data = (await response.json()) as { ok: boolean; mission?: { title: string }; error?: string };
-    setPending(false);
+    setSending(false);
     if (!response.ok || !data.ok || !data.mission) {
       toast(data.error ?? "Voorstel kon niet worden aanvaard.");
       return;
@@ -189,10 +232,10 @@ export function NyxSheet() {
 
   async function ignore() {
     if (!talk?.proposal) return;
-    setPending(true);
+    setSending(true);
     const response = await fetch(`/api/nyx/proposals/${talk.proposal.id}/ignore`, { method: "POST" });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
-    setPending(false);
+    setSending(false);
     if (!response.ok || !data.ok || !data.talk) {
       toast(data.error ?? "Voorstel kon niet worden genegeerd.");
       return;
@@ -203,10 +246,10 @@ export function NyxSheet() {
   }
 
   async function remember(id: string) {
-    setPending(true);
+    setSending(true);
     const response = await fetch(`/api/nyx/memories/${id}/confirm`, { method: "POST" });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
-    setPending(false);
+    setSending(false);
     if (!response.ok || !data.ok || !data.talk) {
       toast(data.error ?? "Kon dit niet onthouden.");
       return;
@@ -216,10 +259,10 @@ export function NyxSheet() {
   }
 
   async function forget(id: string) {
-    setPending(true);
+    setSending(true);
     const response = await fetch(`/api/nyx/memories/${id}/reject`, { method: "POST" });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
-    setPending(false);
+    setSending(false);
     if (!response.ok || !data.ok || !data.talk) {
       toast(data.error ?? "Kon dit niet weigeren.");
       return;
@@ -230,10 +273,10 @@ export function NyxSheet() {
 
   async function confirmPattern() {
     if (!talk?.pattern) return;
-    setPending(true);
+    setSending(true);
     const response = await fetch(`/api/nyx/patterns/${talk.pattern.id}/confirm`, { method: "POST" });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
-    setPending(false);
+    setSending(false);
     if (!response.ok || !data.ok || !data.talk) {
       toast(data.error ?? "Patroon kon niet worden bevestigd.");
       return;
@@ -244,10 +287,10 @@ export function NyxSheet() {
 
   async function dismissPattern() {
     if (!talk?.pattern) return;
-    setPending(true);
+    setSending(true);
     const response = await fetch(`/api/nyx/patterns/${talk.pattern.id}/dismiss`, { method: "POST" });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
-    setPending(false);
+    setSending(false);
     if (!response.ok || !data.ok || !data.talk) {
       toast(data.error ?? "Patroon kon niet worden genegeerd.");
       return;
@@ -258,10 +301,10 @@ export function NyxSheet() {
 
   async function acceptReview() {
     if (!talk?.review) return;
-    setPending(true);
+    setSending(true);
     const response = await fetch(`/api/nyx/reviews/${talk.review.id}/accept`, { method: "POST" });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
-    setPending(false);
+    setSending(false);
     if (!response.ok || !data.ok || !data.talk) {
       toast(data.error ?? "Review kon niet worden aanvaard.");
       return;
@@ -272,10 +315,10 @@ export function NyxSheet() {
 
   async function ignoreReview() {
     if (!talk?.review) return;
-    setPending(true);
+    setSending(true);
     const response = await fetch(`/api/nyx/reviews/${talk.review.id}/ignore`, { method: "POST" });
     const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
-    setPending(false);
+    setSending(false);
     if (!response.ok || !data.ok || !data.talk) {
       toast(data.error ?? "Review kon niet worden genegeerd.");
       return;
@@ -518,11 +561,13 @@ export function NyxSheet() {
           </div>
         ) : (
           <p className="body">
-            {pending && pendingMedia
+            {sending && pendingMedia
               ? "Nyx zoekt een foto of video — dit kan even duren…"
-              : pending
+              : sending
                 ? "Nyx denkt na…"
-                : "Geen open voorstellen. Vraag iets en ik maak er een missie van."}
+                : booting
+                  ? "Gesprek laden…"
+                  : "Geen open voorstellen. Vraag iets en ik maak er een missie van."}
           </p>
         )}
       </div>
