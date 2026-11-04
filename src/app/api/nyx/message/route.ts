@@ -16,9 +16,12 @@ export async function GET(request: Request) {
   const player = await getSessionPlayer();
   if (!player) return NextResponse.json({ ok: false, error: "Niet aangemeld." }, { status: 401 });
   await syncPlayerTimeZoneFromHeader(player.id, request.headers.get("x-player-timezone")).catch(() => undefined);
+  // Recover unanswered USER turns BEFORE check-in, or check-in can sit on top and hide the gap.
+  const recovered = await completeDanglingNyxReply(player.id).catch((error) => {
+    console.error("[nyx/message GET dangling]", error instanceof Error ? error.message : error);
+    return null;
+  });
   await maybeSendNyxCheckIn(player.id).catch(() => undefined);
-  // Finish USER turns that were saved before a hung/failed reply.
-  const recovered = await completeDanglingNyxReply(player.id).catch(() => null);
   const talk = recovered?.talk ?? (await getNyxTalk(player.id));
   return NextResponse.json({ ok: true, talk });
 }
@@ -29,16 +32,29 @@ export async function POST(request: Request) {
   let text = "";
   let mediaId: string | null = null;
   let linkedUrl: string | null = null;
+  let recover = false;
   try {
-    const body = (await request.json()) as { text?: string; mediaId?: string; linkedUrl?: string };
+    const body = (await request.json()) as {
+      text?: string;
+      mediaId?: string;
+      linkedUrl?: string;
+      recover?: boolean;
+    };
     text = body.text ?? "";
     mediaId = body.mediaId?.trim() || null;
     linkedUrl = body.linkedUrl?.trim() || null;
+    recover = Boolean(body.recover);
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige invoer." }, { status: 400 });
   }
   try {
     await syncPlayerTimeZoneFromHeader(player.id, request.headers.get("x-player-timezone")).catch(() => undefined);
+
+    if (recover) {
+      const { talk } = await completeDanglingNyxReply(player.id);
+      return NextResponse.json({ ok: true, talk });
+    }
+
     const { talk, skipMemoryExtraction } = await sendNyxMessage(player.id, { text, mediaId, linkedUrl });
     const lastNyx = [...talk.messages].reverse().find((message) => message.role === "nyx");
     if (!skipMemoryExtraction) {

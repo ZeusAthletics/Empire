@@ -46,25 +46,32 @@ export type SendNyxMessageResult = {
   skipMemoryExtraction: boolean;
 };
 
-async function latestMessageMeta(conversationId: string): Promise<{
+function isUserRole(role: string) {
+  return role.toUpperCase() === "USER";
+}
+
+async function findDanglingUserMessage(conversationId: string): Promise<{
   id: string;
-  role: string;
   content: string;
+  createdAt: string;
 } | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("nyx_messages")
-    .select("id, role, content")
+    .select("id, role, content, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(30);
   if (error) throw error;
-  if (!data) return null;
+  const rows = data ?? [];
+  if (!rows.length) return null;
+  // Newest first: if the thread ends on USER, that turn never got a Nyx reply.
+  const newest = rows[0];
+  if (!newest || !isUserRole(String(newest.role))) return null;
   return {
-    id: data.id as string,
-    role: data.role as string,
-    content: data.content as string,
+    id: newest.id as string,
+    content: newest.content as string,
+    createdAt: newest.created_at as string,
   };
 }
 
@@ -177,8 +184,8 @@ async function produceNyxReply(input: {
 /** If the last stored turn is USER without a Nyx reply (failed/hung POST), finish it. */
 export async function completeDanglingNyxReply(playerId: string): Promise<SendNyxMessageResult> {
   const talk = await getOrCreateTalk(playerId);
-  const last = await latestMessageMeta(talk.conversationId);
-  if (!last || last.role !== "USER") {
+  const dangling = await findDanglingUserMessage(talk.conversationId);
+  if (!dangling) {
     return { talk, skipMemoryExtraction: true };
   }
 
@@ -187,7 +194,7 @@ export async function completeDanglingNyxReply(playerId: string): Promise<SendNy
     produced = await produceNyxReply({
       playerId,
       conversationId: talk.conversationId,
-      userText: last.content,
+      userText: dangling.content,
     });
   } catch (error) {
     console.error("[nyx/dangling]", error instanceof Error ? error.message : error);
@@ -200,12 +207,20 @@ export async function completeDanglingNyxReply(playerId: string): Promise<SendNy
     };
   }
 
-  if (!produced.reply?.trim()) {
-    produced = { ...produced, reply: "Ik ben er. Zeg het nog eens, dan pak ik de draad op." };
-  }
+  const reply =
+    produced.reply?.trim() ||
+    "Ik ben er. Zeg het nog eens, dan pak ik de draad op.";
 
-  const stillLast = await latestMessageMeta(talk.conversationId);
-  if (!stillLast || stillLast.id !== last.id || stillLast.role !== "USER") {
+  // Only skip if something newer than this USER turn already exists.
+  const admin = createSupabaseAdminClient();
+  const { count, error: countError } = await admin
+    .from("nyx_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", talk.conversationId)
+    .gt("created_at", dangling.createdAt);
+  if (countError) throw countError;
+  if ((count ?? 0) > 0) {
+    // Another writer finished first — return whatever is on disk now.
     return { talk: await getOrCreateTalk(playerId), skipMemoryExtraction: true };
   }
 
@@ -213,15 +228,15 @@ export async function completeDanglingNyxReply(playerId: string): Promise<SendNy
     playerId,
     conversationId: talk.conversationId,
     role: "NYX",
-    content: produced.reply,
+    content: reply,
     runId: produced.runId,
   });
 
   if (!produced.skipMemoryExtraction) {
     await afterNyxReply({
       playerId,
-      userText: last.content,
-      nyxText: produced.reply,
+      userText: dangling.content,
+      nyxText: reply,
       sourceId: saved.id as string,
       useModel: false,
     }).catch(() => undefined);

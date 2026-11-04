@@ -91,7 +91,11 @@ export function NyxSheet() {
     if (sending) return;
     setSending(true);
     try {
-      const response = await fetch("/api/nyx/message", { headers: playerTimeZoneHeaders() });
+      const response = await fetch("/api/nyx/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
+        body: JSON.stringify({ recover: true }),
+      });
       const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
       if (!response.ok || !data.ok || !data.talk) {
         toast(data.error ?? "Nyx kon de draad niet oppakken.");
@@ -100,7 +104,7 @@ export function NyxSheet() {
       setTalk(data.talk);
       await markNyxSeen();
       const stillWaiting = data.talk.messages[data.talk.messages.length - 1]?.role === "me";
-      if (stillWaiting) toast("Nog geen antwoord — probeer zo opnieuw of stuur de zin nog eens.");
+      if (stillWaiting) toast("Nog geen antwoord — check XAI_API_KEY op Vercel of stuur de zin opnieuw.");
     } catch {
       toast("Verbinding met Nyx mislukt.");
     } finally {
