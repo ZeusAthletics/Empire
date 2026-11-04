@@ -57,10 +57,17 @@ export function NyxSheet() {
   }
 
   async function loadTalk() {
-    const response = await fetch("/api/nyx/message", { headers: playerTimeZoneHeaders() });
-    const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState };
-    if (response.ok && data.talk) setTalk(data.talk);
-    await markNyxSeen();
+    setPending(true);
+    try {
+      const response = await fetch("/api/nyx/message", { headers: playerTimeZoneHeaders() });
+      const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState };
+      if (response.ok && data.talk) setTalk(data.talk);
+      await markNyxSeen();
+    } catch {
+      toast("Nyx-gesprek kon niet laden.");
+    } finally {
+      setPending(false);
+    }
   }
 
   function clearAttachment() {
@@ -96,6 +103,8 @@ export function NyxSheet() {
     setPendingMedia(
       !attachMediaId && !url && /\b(foto|video|selfie|beeld|plaatje)\b|stuur.*(foto|video)/i.test(trimmed),
     );
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 90_000);
     try {
       const response = await fetch("/api/nyx/message", {
         method: "POST",
@@ -105,6 +114,7 @@ export function NyxSheet() {
           mediaId: attachMediaId,
           linkedUrl: url || undefined,
         }),
+        signal: controller.signal,
       });
       let data: { ok: boolean; talk?: NyxTalkState; error?: string } = { ok: false };
       try {
@@ -123,9 +133,11 @@ export function NyxSheet() {
       clearAttachment();
       setLinkUrl("");
       setShowLink(false);
-    } catch {
-      toast("Verbinding met Nyx mislukt. Probeer opnieuw.");
+    } catch (error) {
+      const aborted = error instanceof DOMException && error.name === "AbortError";
+      toast(aborted ? "Nyx deed er te lang over. Probeer opnieuw." : "Verbinding met Nyx mislukt. Probeer opnieuw.");
     } finally {
+      window.clearTimeout(timeout);
       setPending(false);
       setPendingMedia(false);
     }
@@ -476,7 +488,9 @@ export function NyxSheet() {
           <p className="body">
             {pending && pendingMedia
               ? "Nyx zoekt een foto of video — dit kan even duren…"
-              : "Geen open voorstellen. Vraag iets en ik maak er een missie van."}
+              : pending
+                ? "Nyx denkt na…"
+                : "Geen open voorstellen. Vraag iets en ik maak er een missie van."}
           </p>
         )}
       </div>

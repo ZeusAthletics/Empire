@@ -20,6 +20,7 @@ import {
   featuredTalkContext,
   getOrCreateTalk,
 } from "@/server/domain/nyx/talkRepository";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { NyxTalkState } from "@/server/domain/nyx/types";
 import { findPlayerById } from "@/server/domain/player/repository";
 import { formatPlayerLocalTime, formatPlayerLocalTimeLine } from "@/server/domain/player/localTime";
@@ -43,6 +44,174 @@ export type SendNyxMessageResult = {
   /** When true, route must not run OpenAI afterNyxReply on this turn. */
   skipMemoryExtraction: boolean;
 };
+
+async function latestMessageMeta(conversationId: string): Promise<{
+  id: string;
+  role: string;
+  content: string;
+} | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("nyx_messages")
+    .select("id, role, content")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    role: data.role as string,
+    content: data.content as string,
+  };
+}
+
+async function produceNyxReply(input: {
+  playerId: string;
+  conversationId: string;
+  userText: string;
+  attachmentNote?: string;
+  mediaFailNote?: string;
+}): Promise<{
+  reply: string;
+  runId: string | null;
+  skipMemoryExtraction: boolean;
+  justExited: boolean;
+  sessionStartedAt: string | null;
+}> {
+  const [ctx, recent, player, intimacyTier] = await Promise.all([
+    featuredTalkContext(input.playerId),
+    recentPlayerChatTurns(input.playerId),
+    findPlayerById(input.playerId),
+    resolvePlayerIntimacyTier(input.playerId).catch(() => "EARLY" as const),
+  ]);
+  const localLine = player ? formatPlayerLocalTimeLine(formatPlayerLocalTime(player.timeZone)) : "";
+  const notes = `${input.attachmentNote ?? ""}${input.mediaFailNote ?? ""}`;
+
+  const intimate = await resolveIntimateTurn({
+    playerId: input.playerId,
+    conversationId: input.conversationId,
+    userText: input.userText,
+    intimacyTier,
+  }).catch(() => ({
+    useIntimate: false,
+    justEntered: false,
+    justExited: false,
+    sessionStartedAt: null as string | null,
+  }));
+
+  if (intimate.useIntimate) {
+    const live = await runIntimateChat({
+      playerId: input.playerId,
+      userText: input.userText,
+      recentChat: recent,
+      localLine,
+      attachmentNote: notes,
+    });
+    return {
+      reply: live.text,
+      runId: live.runId,
+      skipMemoryExtraction: true,
+      justExited: intimate.justExited,
+      sessionStartedAt: intimate.sessionStartedAt,
+    };
+  }
+
+  if (intimacyTier !== "TRUST" && heuristicIntimateIntent(input.userText)) {
+    return {
+      reply: softRedirectBelowTrust(),
+      runId: null,
+      skipMemoryExtraction: true,
+      justExited: intimate.justExited,
+      sessionStartedAt: intimate.sessionStartedAt,
+    };
+  }
+
+  const live = openaiConfigured()
+    ? await runNyxTask({
+        playerId: input.playerId,
+        task: "CASUAL_CHAT",
+        text: `${input.userText}\n\n${localLine ? `${localLine}\n` : ""}Recente beurten:\n${recent.join("\n")}\n${formatActiveMissionsForPrompt(ctx.activeMissions)}${notes}`,
+        invokeModel: true,
+      }).catch(() => null)
+    : null;
+
+  if (live?.text) {
+    return {
+      reply: stripModelNames(live.text),
+      runId: live.runId,
+      skipMemoryExtraction: false,
+      justExited: intimate.justExited,
+      sessionStartedAt: intimate.sessionStartedAt,
+    };
+  }
+
+  const offline = handleCasualUserTurn(input.userText, {
+    featuredTitle: ctx.featuredTitle,
+    network: ctx.network,
+    economicCurrent: ctx.economicCurrent,
+  });
+  return {
+    reply: offline.reply,
+    runId: null,
+    skipMemoryExtraction: false,
+    justExited: intimate.justExited,
+    sessionStartedAt: intimate.sessionStartedAt,
+  };
+}
+
+/** If the last stored turn is USER without a Nyx reply (failed/hung POST), finish it. */
+export async function completeDanglingNyxReply(playerId: string): Promise<SendNyxMessageResult> {
+  const talk = await getOrCreateTalk(playerId);
+  const last = await latestMessageMeta(talk.conversationId);
+  if (!last || last.role !== "USER") {
+    return { talk, skipMemoryExtraction: true };
+  }
+
+  const produced = await produceNyxReply({
+    playerId,
+    conversationId: talk.conversationId,
+    userText: last.content,
+  });
+
+  const stillLast = await latestMessageMeta(talk.conversationId);
+  if (!stillLast || stillLast.id !== last.id || stillLast.role !== "USER") {
+    return { talk: await getOrCreateTalk(playerId), skipMemoryExtraction: true };
+  }
+
+  const saved = await appendMessage({
+    playerId,
+    conversationId: talk.conversationId,
+    role: "NYX",
+    content: produced.reply,
+    runId: produced.runId,
+  });
+
+  if (!produced.skipMemoryExtraction) {
+    await afterNyxReply({
+      playerId,
+      userText: last.content,
+      nyxText: produced.reply,
+      sourceId: saved.id as string,
+      useModel: false,
+    }).catch(() => undefined);
+  }
+
+  if (produced.justExited) {
+    void writeIntimateRecapMemory({
+      playerId,
+      conversationId: talk.conversationId,
+      sessionStartedAt: produced.sessionStartedAt,
+      sourceId: saved.id as string,
+    }).catch(() => undefined);
+  }
+
+  return {
+    talk: await getOrCreateTalk(playerId),
+    skipMemoryExtraction: produced.skipMemoryExtraction,
+  };
+}
 
 export async function sendNyxMessage(
   playerId: string,
@@ -82,13 +251,10 @@ export async function sendNyxMessage(
     attachmentContext: attachmentContext || null,
   });
 
-  const [ctx, recent, player, intimacyTier] = await Promise.all([
+  const [ctx, recent] = await Promise.all([
     featuredTalkContext(playerId),
     recentPlayerChatTurns(playerId),
-    findPlayerById(playerId),
-    resolvePlayerIntimacyTier(playerId).catch(() => "EARLY" as const),
   ]);
-  const localLine = player ? formatPlayerLocalTimeLine(formatPlayerLocalTime(player.timeZone)) : "";
 
   const hasUserAttachment = Boolean(mediaId || linkedUrl);
   const mediaAttempt =
@@ -106,23 +272,6 @@ export async function sendNyxMessage(
     return { talk: await getOrCreateTalk(playerId), skipMemoryExtraction: false };
   }
 
-  const intimate = await resolveIntimateTurn({
-    playerId,
-    conversationId: talk.conversationId,
-    userText: trimmed || userContent,
-    intimacyTier,
-  }).catch(() => ({
-    useIntimate: false,
-    justEntered: false,
-    justExited: false,
-    sessionStartedAt: null as string | null,
-  }));
-
-  let reply: string | null = null;
-  let runId: string | null = null;
-  let fallbackUsed = false;
-  let skipMemoryExtraction = false;
-
   const mediaFailNote =
     mediaAttempt.handled && mediaAttempt.action === "FAILED"
       ? `\n\n[Systeem: Hardwig vroeg om beeld maar leveren mislukte (${mediaAttempt.reason}). Antwoord alleen in tekst — geen fictieve foto tussen haken, geen "hier is een foto".]`
@@ -132,76 +281,43 @@ export async function sendNyxMessage(
     ? `\n\n${attachmentContext}\n\nGeef concrete feedback op wat Hardwig deelde (document, screenshot of website). Verwijs naar specifieke details uit de extractie.`
     : "";
 
-  if (intimate.useIntimate) {
-    skipMemoryExtraction = true;
-    const live = await runIntimateChat({
-      playerId,
-      userText: userContent,
-      recentChat: recent,
-      localLine,
-      attachmentNote: `${attachmentNote}${mediaFailNote}`,
-    });
-    reply = live.text;
-    runId = live.runId;
-    fallbackUsed = live.fallbackUsed;
-  } else if (intimacyTier !== "TRUST" && heuristicIntimateIntent(trimmed)) {
-    reply = softRedirectBelowTrust();
-    skipMemoryExtraction = true;
-  } else {
-    const live = openaiConfigured()
-      ? await runNyxTask({
-          playerId,
-          task: "CASUAL_CHAT",
-          text: `${userContent}\n\n${localLine ? `${localLine}\n` : ""}Recente beurten:\n${recent.join("\n")}\n${formatActiveMissionsForPrompt(ctx.activeMissions)}${attachmentNote}${mediaFailNote}`,
-          invokeModel: true,
-        }).catch(() => null)
-      : null;
-
-    if (live?.text) {
-      reply = stripModelNames(live.text);
-      runId = live.runId;
-      fallbackUsed = live.fallbackUsed;
-    } else {
-      const offline = handleCasualUserTurn(trimmed, {
-        featuredTitle: ctx.featuredTitle,
-        network: ctx.network,
-        economicCurrent: ctx.economicCurrent,
-      });
-      reply = offline.reply;
-      fallbackUsed = true;
-    }
-  }
+  const produced = await produceNyxReply({
+    playerId,
+    conversationId: talk.conversationId,
+    userText: userContent,
+    attachmentNote,
+    mediaFailNote,
+  });
 
   const saved = await appendMessage({
     playerId,
     conversationId: talk.conversationId,
     role: "NYX",
-    content: reply,
-    runId,
+    content: produced.reply,
+    runId: produced.runId,
   });
 
-  void fallbackUsed;
-  if (!skipMemoryExtraction) {
+  if (!produced.skipMemoryExtraction) {
     await afterNyxReply({
       playerId,
       userText: trimmed,
-      nyxText: reply,
+      nyxText: produced.reply,
       sourceId: saved.id as string,
       useModel: false,
     }).catch(() => undefined);
   }
 
-  if (intimate.justExited) {
+  if (produced.justExited) {
     void writeIntimateRecapMemory({
       playerId,
       conversationId: talk.conversationId,
-      sessionStartedAt: intimate.sessionStartedAt,
+      sessionStartedAt: produced.sessionStartedAt,
       sourceId: saved.id as string,
     }).catch(() => undefined);
   }
 
   return {
     talk: await getOrCreateTalk(playerId),
-    skipMemoryExtraction,
+    skipMemoryExtraction: produced.skipMemoryExtraction,
   };
 }

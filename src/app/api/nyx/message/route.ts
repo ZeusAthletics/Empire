@@ -2,7 +2,11 @@ import { after, NextResponse } from "next/server";
 import { getSessionPlayer } from "@/server/auth/session";
 import { afterNyxReply } from "@/server/ai/services/MemoryExtractionService";
 import { maybeSendNyxCheckIn } from "@/server/ai/services/NyxCheckInService";
-import { getNyxTalk, sendNyxMessage } from "@/server/ai/services/NyxConversationService";
+import {
+  completeDanglingNyxReply,
+  getNyxTalk,
+  sendNyxMessage,
+} from "@/server/ai/services/NyxConversationService";
 import { syncPlayerTimeZoneFromHeader } from "@/server/domain/player/syncTimeZone";
 
 export const runtime = "nodejs";
@@ -13,7 +17,9 @@ export async function GET(request: Request) {
   if (!player) return NextResponse.json({ ok: false, error: "Niet aangemeld." }, { status: 401 });
   await syncPlayerTimeZoneFromHeader(player.id, request.headers.get("x-player-timezone")).catch(() => undefined);
   await maybeSendNyxCheckIn(player.id).catch(() => undefined);
-  const talk = await getNyxTalk(player.id);
+  // Finish USER turns that were saved before a hung/failed reply.
+  const recovered = await completeDanglingNyxReply(player.id).catch(() => null);
+  const talk = recovered?.talk ?? (await getNyxTalk(player.id));
   return NextResponse.json({ ok: true, talk });
 }
 
