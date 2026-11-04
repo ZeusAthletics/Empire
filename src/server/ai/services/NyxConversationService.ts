@@ -10,7 +10,6 @@ import {
   softRedirectBelowTrust,
   writeIntimateRecapMemory,
 } from "@/server/ai/services/IntimateModeService";
-import { xaiConfigured } from "@/server/ai/client/xai";
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
 import { recentPlayerChatTurns } from "@/server/domain/nyx/recentChat";
 import { buildChatAttachmentContext } from "@/server/ai/services/NyxChatAttachmentContext";
@@ -103,14 +102,13 @@ async function produceNyxReply(input: {
     sessionStartedAt: null as string | null,
   }));
 
-  const forceIntimate =
-    intimacyTier === "TRUST" &&
-    xaiConfigured() &&
-    (intimate.useIntimate ||
-      heuristicIntimateIntent(input.userText) ||
-      recentChatSuggestsIntimate(recent));
+  // Spicy turns must never hit OpenAI (hangs/refuses). Grok if TRUST, else soft redirect.
+  const spicy =
+    heuristicIntimateIntent(input.userText) || recentChatSuggestsIntimate(recent);
+  const useIntimate =
+    intimacyTier === "TRUST" && (intimate.useIntimate || spicy);
 
-  if (forceIntimate) {
+  if (useIntimate) {
     const live = await runIntimateChat({
       playerId: input.playerId,
       userText: input.userText,
@@ -118,8 +116,11 @@ async function produceNyxReply(input: {
       localLine,
       attachmentNote: notes,
     });
+    const reply =
+      live.text?.trim() ||
+      "Ik hoor je — even kort vast. Zeg het nog eens, ik blijf hier.";
     return {
-      reply: live.text,
+      reply,
       runId: live.runId,
       skipMemoryExtraction: true,
       justExited: intimate.justExited,
@@ -127,7 +128,7 @@ async function produceNyxReply(input: {
     };
   }
 
-  if (intimacyTier !== "TRUST" && heuristicIntimateIntent(input.userText)) {
+  if (spicy) {
     return {
       reply: softRedirectBelowTrust(),
       runId: null,
@@ -137,7 +138,6 @@ async function produceNyxReply(input: {
     };
   }
 
-  // Never let OpenAI block forever on spicy turns that slipped past the gate.
   const live = openaiConfigured()
     ? await Promise.race([
         runNyxTask({
@@ -182,11 +182,27 @@ export async function completeDanglingNyxReply(playerId: string): Promise<SendNy
     return { talk, skipMemoryExtraction: true };
   }
 
-  const produced = await produceNyxReply({
-    playerId,
-    conversationId: talk.conversationId,
-    userText: last.content,
-  });
+  let produced: Awaited<ReturnType<typeof produceNyxReply>>;
+  try {
+    produced = await produceNyxReply({
+      playerId,
+      conversationId: talk.conversationId,
+      userText: last.content,
+    });
+  } catch (error) {
+    console.error("[nyx/dangling]", error instanceof Error ? error.message : error);
+    produced = {
+      reply: "Even vastgelopen — ik ben er nog. Stuur je laatste zin nog eens.",
+      runId: null,
+      skipMemoryExtraction: true,
+      justExited: false,
+      sessionStartedAt: null,
+    };
+  }
+
+  if (!produced.reply?.trim()) {
+    produced = { ...produced, reply: "Ik ben er. Zeg het nog eens, dan pak ik de draad op." };
+  }
 
   const stillLast = await latestMessageMeta(talk.conversationId);
   if (!stillLast || stillLast.id !== last.id || stillLast.role !== "USER") {

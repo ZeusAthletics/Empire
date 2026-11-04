@@ -70,6 +70,30 @@ export function NyxSheet() {
     }
   }
 
+  const lastMessage = talk?.messages[talk.messages.length - 1] ?? null;
+  const awaitingNyx = Boolean(lastMessage && lastMessage.role === "me");
+
+  async function retryDangling() {
+    if (pending) return;
+    setPending(true);
+    try {
+      const response = await fetch("/api/nyx/message", { headers: playerTimeZoneHeaders() });
+      const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+      if (!response.ok || !data.ok || !data.talk) {
+        toast(data.error ?? "Nyx kon de draad niet oppakken.");
+        return;
+      }
+      setTalk(data.talk);
+      await markNyxSeen();
+      const stillWaiting = data.talk.messages[data.talk.messages.length - 1]?.role === "me";
+      if (stillWaiting) toast("Nog geen antwoord — probeer zo opnieuw of stuur de zin nog eens.");
+    } catch {
+      toast("Verbinding met Nyx mislukt.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   function clearAttachment() {
     setAttachMediaId(null);
     setAttachPreview(null);
@@ -347,6 +371,14 @@ export function NyxSheet() {
             </div>
           ))}
         </div>
+
+        {awaitingNyx ? (
+          <div className="chiprow" style={{ padding: "0 0 12px" }}>
+            <button className="chip is-on" type="button" disabled={pending} onClick={() => void retryDangling()}>
+              {pending ? "Nyx denkt na…" : "Nyx antwoordt niet? Opnieuw proberen"}
+            </button>
+          </div>
+        ) : null}
 
         <div className="chiprow" style={{ padding: "0 0 12px" }}>
           {SHORTCUTS.map((item) => (
