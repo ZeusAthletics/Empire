@@ -19,6 +19,11 @@ import { routeIntelligenceTask, type ModelRoutingDecision } from "@/server/ai/ro
 import type { IntelligenceRiskProfile } from "@/server/ai/routing/IntelligenceRiskProfile";
 import type { IntelligenceTask } from "@/server/ai/routing/IntelligenceTask";
 import { classifyIntelligenceTask } from "@/server/ai/routing/TaskClassifier";
+import {
+  sanitizeNyxContextForOpenAI,
+  sanitizeOpenAITaskText,
+  sanitizePersonaCoreForOpenAI,
+} from "@/server/ai/safety/openaiPromptSanitizer";
 
 export class StrategicPendingError extends Error {
   constructor(message = "Strategische taak staat in wacht. Sol wordt niet vervangen door Luna.") {
@@ -115,7 +120,10 @@ export async function runNyxTask(input: OrchestratorInput): Promise<Orchestrator
                   : task === "MONTHLY_WRAP_ANALYSIS"
                     ? `\n\n${MONTHLY_WRAP_GUIDE}`
                     : "";
-      const prompt = `${core}\n\n${version}\nTaak: ${task}\nContext: ${JSON.stringify(context)}\n\n${input.text ?? ""}${extra}`;
+      const safeCore = sanitizePersonaCoreForOpenAI(core);
+      const safeContext = sanitizeNyxContextForOpenAI(context);
+      const safeText = sanitizeOpenAITaskText(task, input.text ?? "");
+      const prompt = `${safeCore}\n\n${version}\nTaak: ${task}\nContext: ${JSON.stringify(safeContext)}\n\n${safeText}${extra}`;
       const attempt = async () =>
         callOpenAIResponses({
           model: decision.model,

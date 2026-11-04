@@ -207,7 +207,7 @@ export async function classifyIntimateTurn(input: {
     runNyxTask({
       playerId: input.playerId,
       task: "INTIMATE_CLASSIFY",
-      text: `${NYX_INTIMATE_CLASSIFY_GUIDE}\n\nSpelerbeurt:\n${input.userText}`,
+      text: `Spelerbeurt:\n${input.userText}`,
       invokeModel: true,
       jsonSchema: INTIMATE_CLASSIFY_JSON_SCHEMA as unknown as Record<string, unknown>,
     }).catch(() => null),
