@@ -60,9 +60,23 @@ export async function POST(request: Request) {
       let recovered = forceUserMessageId
         ? await forceReplyToUserMessage(player.id, forceUserMessageId)
         : await completeDanglingNyxReply(player.id);
-      if (!recovered.debug.appended && !forceUserMessageId) {
+      // Always retarget if the sheet still ends on USER (stale dangling id / false already-answered).
+      if (!recovered.debug.appended) {
         const last = recovered.talk.messages[recovered.talk.messages.length - 1];
-        if (last?.role === "me" && last.id && !last.id.startsWith("local-")) {
+        if (
+          last?.role === "me" &&
+          last.id &&
+          !last.id.startsWith("local-") &&
+          last.id !== recovered.debug.danglingId
+        ) {
+          recovered = await forceReplyToUserMessage(player.id, last.id);
+        } else if (
+          last?.role === "me" &&
+          last.id &&
+          !last.id.startsWith("local-") &&
+          recovered.debug.reason === "already-answered-in-view"
+        ) {
+          // Same id but talk still shows unanswered — force again (orphan Nyx row).
           recovered = await forceReplyToUserMessage(player.id, last.id);
         }
       }

@@ -124,10 +124,34 @@ export async function forceReplyToUserMessage(
 ): Promise<DanglingRecoverResult> {
   const admin = createSupabaseAdminClient();
   const talk = await getOrCreateTalk(playerId);
+
+  // Trust the sheet timeline: if it already ends on Nyx, nothing to recover.
+  const lastVisible = talk.messages[talk.messages.length - 1];
+  if (lastVisible?.role === "nyx") {
+    return {
+      talk,
+      skipMemoryExtraction: true,
+      debug: {
+        danglingFound: false,
+        danglingId: null,
+        appended: false,
+        replyChars: 0,
+        reason: "already-answered-in-view",
+        newestRole: "NYX",
+      },
+    };
+  }
+
+  // Prefer the newest visible USER bubble over a stale client id (duplicates / older dangling).
+  const targetId =
+    lastVisible?.role === "me" && lastVisible.id && !lastVisible.id.startsWith("local-")
+      ? lastVisible.id
+      : userMessageId;
+
   const { data: row, error } = await admin
     .from("nyx_messages")
     .select("id, role, content, created_at, conversation_id, player_id")
-    .eq("id", userMessageId)
+    .eq("id", targetId)
     .eq("player_id", playerId)
     .maybeSingle();
   if (error) throw error;
@@ -147,6 +171,52 @@ export async function forceReplyToUserMessage(
   }
 
   const conversationId = row.conversation_id as string;
+
+  // Skip only when *this exact* turn already has an immediate Nyx reply and there is no
+  // later unanswered USER in the same conversation (duplicate resends must still get a reply).
+  const { data: afterRows } = await admin
+    .from("nyx_messages")
+    .select("id, role, content, created_at, conversation_id")
+    .eq("conversation_id", conversationId)
+    .gt("created_at", row.created_at as string)
+    .order("created_at", { ascending: true })
+    .limit(20);
+  const later = afterRows ?? [];
+  let unanswered = row;
+  let sawNyxAfterTarget = false;
+  for (const item of later) {
+    const role = String(item.role).toUpperCase();
+    if (role === "NYX") {
+      sawNyxAfterTarget = true;
+      continue;
+    }
+    if (isUserRole(role)) {
+      // Later user turn — reply to the newest one (reset Nyx-seen for this chain).
+      unanswered = item as typeof row;
+      sawNyxAfterTarget = false;
+    }
+  }
+  if (sawNyxAfterTarget && unanswered.id === row.id) {
+    // Re-check merged talk; a same-thread Nyx after this id should appear last.
+    const refreshed = await getOrCreateTalk(playerId);
+    const tip = refreshed.messages[refreshed.messages.length - 1];
+    if (tip?.role === "nyx") {
+      return {
+        talk: refreshed,
+        skipMemoryExtraction: true,
+        debug: {
+          danglingFound: true,
+          danglingId: row.id as string,
+          appended: false,
+          replyChars: 0,
+          reason: "already-answered-in-view",
+          newestRole: "NYX",
+        },
+      };
+    }
+    // Talk still ends on USER — ignore the phantom/orphan Nyx row and append.
+  }
+
   const fallback = {
     reply: DANGLING_FALLBACK,
     runId: null as string | null,
@@ -160,8 +230,8 @@ export async function forceReplyToUserMessage(
     const timed = await Promise.race([
       produceNyxReply({
         playerId,
-        conversationId,
-        userText: row.content as string,
+        conversationId: unanswered.conversation_id as string,
+        userText: unanswered.content as string,
       }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 25_000)),
     ]);
@@ -173,33 +243,9 @@ export async function forceReplyToUserMessage(
 
   const reply = produced.reply?.trim() || DANGLING_FALLBACK;
 
-  // Only treat as answered if Nyx already replied in *this* conversation after the USER turn.
-  // A later check-in on another thread must not block the visible unanswered bubble.
-  const { data: afterRows } = await admin
-    .from("nyx_messages")
-    .select("id, role")
-    .eq("conversation_id", conversationId)
-    .gt("created_at", row.created_at as string)
-    .order("created_at", { ascending: true })
-    .limit(5);
-  if ((afterRows ?? []).some((item) => String(item.role).toUpperCase() === "NYX")) {
-    return {
-      talk: await getOrCreateTalk(playerId),
-      skipMemoryExtraction: true,
-      debug: {
-        danglingFound: true,
-        danglingId: row.id as string,
-        appended: false,
-        replyChars: 0,
-        reason: "already-answered-in-view",
-        newestRole: "NYX",
-      },
-    };
-  }
-
   await appendMessage({
     playerId,
-    conversationId,
+    conversationId: unanswered.conversation_id as string,
     role: "NYX",
     content: reply,
     runId: produced.runId,
@@ -210,10 +256,10 @@ export async function forceReplyToUserMessage(
     skipMemoryExtraction: true,
     debug: {
       danglingFound: true,
-      danglingId: row.id as string,
+      danglingId: unanswered.id as string,
       appended: true,
       replyChars: reply.length,
-      reason: "force-appended",
+      reason: targetId !== userMessageId ? "force-retarget-appended" : "force-appended",
       newestRole: "USER",
     },
   };
