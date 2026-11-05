@@ -50,28 +50,41 @@ function isUserRole(role: string) {
   return role.toUpperCase() === "USER";
 }
 
-async function findDanglingUserMessage(conversationId: string): Promise<{
+async function findDanglingUserMessage(playerId: string): Promise<{
   id: string;
   content: string;
   createdAt: string;
+  conversationId: string;
+  newestRole: string | null;
 } | null> {
   const admin = createSupabaseAdminClient();
+  // Search ALL of the player's threads (mission control + companion). The UI merges them.
   const { data, error } = await admin
     .from("nyx_messages")
-    .select("id, role, content, created_at")
-    .eq("conversation_id", conversationId)
+    .select("id, role, content, created_at, conversation_id")
+    .eq("player_id", playerId)
     .order("created_at", { ascending: false })
-    .limit(30);
+    .limit(40);
   if (error) throw error;
   const rows = data ?? [];
   if (!rows.length) return null;
-  // Newest first: if the thread ends on USER, that turn never got a Nyx reply.
   const newest = rows[0];
-  if (!newest || !isUserRole(String(newest.role))) return null;
+  const newestRole = newest ? String(newest.role) : null;
+  if (!newest || !isUserRole(newestRole ?? "")) {
+    return {
+      id: "",
+      content: "",
+      createdAt: "",
+      conversationId: "",
+      newestRole,
+    };
+  }
   return {
     id: newest.id as string,
     content: newest.content as string,
     createdAt: newest.created_at as string,
+    conversationId: newest.conversation_id as string,
+    newestRole,
   };
 }
 
@@ -188,6 +201,7 @@ export type DanglingRecoverResult = SendNyxMessageResult & {
     appended: boolean;
     replyChars: number;
     reason: string;
+    newestRole?: string | null;
   };
 };
 
@@ -197,8 +211,8 @@ const DANGLING_FALLBACK =
 /** If the last stored turn is USER without a Nyx reply (failed/hung POST), finish it. */
 export async function completeDanglingNyxReply(playerId: string): Promise<DanglingRecoverResult> {
   const talk = await getOrCreateTalk(playerId);
-  const dangling = await findDanglingUserMessage(talk.conversationId);
-  if (!dangling) {
+  const dangling = await findDanglingUserMessage(playerId);
+  if (!dangling?.id) {
     return {
       talk,
       skipMemoryExtraction: true,
@@ -208,9 +222,12 @@ export async function completeDanglingNyxReply(playerId: string): Promise<Dangli
         appended: false,
         replyChars: 0,
         reason: "no-dangling-user",
+        newestRole: dangling?.newestRole ?? null,
       },
     };
   }
+
+  const replyConversationId = dangling.conversationId || talk.conversationId;
 
   const fallbackProduced = {
     reply: DANGLING_FALLBACK,
@@ -225,7 +242,7 @@ export async function completeDanglingNyxReply(playerId: string): Promise<Dangli
     const timed = await Promise.race([
       produceNyxReply({
         playerId,
-        conversationId: talk.conversationId,
+        conversationId: replyConversationId,
         userText: dangling.content,
       }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 25_000)),
@@ -238,12 +255,12 @@ export async function completeDanglingNyxReply(playerId: string): Promise<Dangli
 
   const reply = produced.reply?.trim() || DANGLING_FALLBACK;
 
-  // Only skip if something newer than this USER turn already exists.
+  // Only skip if something newer than this USER turn already exists (any thread).
   const admin = createSupabaseAdminClient();
   const { count, error: countError } = await admin
     .from("nyx_messages")
     .select("id", { count: "exact", head: true })
-    .eq("conversation_id", talk.conversationId)
+    .eq("player_id", playerId)
     .gt("created_at", dangling.createdAt);
   if (countError) throw countError;
   if ((count ?? 0) > 0) {
@@ -256,13 +273,14 @@ export async function completeDanglingNyxReply(playerId: string): Promise<Dangli
         appended: false,
         replyChars: 0,
         reason: "newer-message-exists",
+        newestRole: dangling.newestRole,
       },
     };
   }
 
   const saved = await appendMessage({
     playerId,
-    conversationId: talk.conversationId,
+    conversationId: replyConversationId,
     role: "NYX",
     content: reply,
     runId: produced.runId,
@@ -281,7 +299,7 @@ export async function completeDanglingNyxReply(playerId: string): Promise<Dangli
   if (produced.justExited) {
     void writeIntimateRecapMemory({
       playerId,
-      conversationId: talk.conversationId,
+      conversationId: replyConversationId,
       sessionStartedAt: produced.sessionStartedAt,
       sourceId: saved.id as string,
     }).catch(() => undefined);
@@ -296,6 +314,7 @@ export async function completeDanglingNyxReply(playerId: string): Promise<Dangli
       appended: true,
       replyChars: reply.length,
       reason: "appended",
+      newestRole: dangling.newestRole,
     },
   };
 }

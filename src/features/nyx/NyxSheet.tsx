@@ -111,7 +111,12 @@ export function NyxSheet() {
         ok: boolean;
         talk?: NyxTalkState;
         error?: string;
-        debug?: { danglingFound?: boolean; appended?: boolean; reason?: string };
+        debug?: {
+          danglingFound?: boolean;
+          appended?: boolean;
+          reason?: string;
+          newestRole?: string | null;
+        };
       };
       if (!response.ok || !data.ok || !data.talk) {
         toast(data.error ?? "Nyx kon de draad niet oppakken.");
@@ -119,13 +124,21 @@ export function NyxSheet() {
       }
       setTalk(data.talk);
       await markNyxSeen();
-      const stillWaiting = data.talk.messages[data.talk.messages.length - 1]?.role === "me";
+      const last = data.talk.messages[data.talk.messages.length - 1];
+      const stillWaiting = last?.role === "me";
       if (stillWaiting) {
         console.warn("[nyx recover]", data.debug);
+        // Server sees no unanswered USER (UI/server mismatch) — force a real resend.
+        if (data.debug?.reason === "no-dangling-user" && last.text.trim()) {
+          toast("Geen open beurt op de server — ik stuur je laatste zin opnieuw.");
+          setSending(false);
+          await ask(last.text);
+          return;
+        }
         toast(
           data.debug?.reason
-            ? `Geen reply (${data.debug.reason}). Zet XAI_API_KEY op Vercel.`
-            : "Nog geen antwoord — zet XAI_API_KEY op Vercel of stuur opnieuw.",
+            ? `Geen reply (${data.debug.reason}${data.debug.newestRole ? ` · last=${data.debug.newestRole}` : ""}).`
+            : "Nog geen antwoord — stuur je bericht opnieuw.",
         );
       }
     } catch {
