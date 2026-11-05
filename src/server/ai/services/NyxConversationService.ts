@@ -80,26 +80,39 @@ async function findDanglingUserMessage(playerId: string): Promise<{
     .select("id, role, content, created_at, conversation_id")
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false })
-    .limit(40);
+    .limit(80);
   if (error) throw error;
   const rows = data ?? [];
   if (!rows.length) return null;
   const newest = rows[0];
   const newestRole = newest ? String(newest.role) : null;
-  if (!newest || !isUserRole(newestRole ?? "")) {
-    return {
-      id: "",
-      content: "",
-      createdAt: "",
-      conversationId: "",
-      newestRole,
-    };
+
+  // Prefer the newest USER that has no later NYX in the *same* conversation
+  // (a check-in on another thread should not hide an unanswered bubble).
+  const answeredInConvo = new Set<string>();
+  for (const row of rows) {
+    const role = String(row.role).toUpperCase();
+    const convo = row.conversation_id as string;
+    if (role === "NYX") {
+      answeredInConvo.add(convo);
+      continue;
+    }
+    if (isUserRole(role) && !answeredInConvo.has(convo)) {
+      return {
+        id: row.id as string,
+        content: row.content as string,
+        createdAt: row.created_at as string,
+        conversationId: convo,
+        newestRole,
+      };
+    }
   }
+
   return {
-    id: newest.id as string,
-    content: newest.content as string,
-    createdAt: newest.created_at as string,
-    conversationId: newest.conversation_id as string,
+    id: "",
+    content: "",
+    createdAt: "",
+    conversationId: "",
     newestRole,
   };
 }
@@ -160,12 +173,12 @@ export async function forceReplyToUserMessage(
 
   const reply = produced.reply?.trim() || DANGLING_FALLBACK;
 
-  // If a Nyx reply already exists after this USER in the same displayed timeline, don't duplicate.
-  const { conversationIds } = await listDisplayedNyxConversationIds(playerId);
+  // Only treat as answered if Nyx already replied in *this* conversation after the USER turn.
+  // A later check-in on another thread must not block the visible unanswered bubble.
   const { data: afterRows } = await admin
     .from("nyx_messages")
     .select("id, role")
-    .in("conversation_id", conversationIds)
+    .eq("conversation_id", conversationId)
     .gt("created_at", row.created_at as string)
     .order("created_at", { ascending: true })
     .limit(5);

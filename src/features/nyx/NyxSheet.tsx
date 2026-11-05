@@ -79,8 +79,11 @@ export function NyxSheet() {
         setTalk(data.talk);
         const last = data.talk.messages[data.talk.messages.length - 1];
         if (last?.role === "me") {
-          // Auto-recover unanswered USER turns once the sheet opens.
-          window.setTimeout(() => void retryDangling(true), 300);
+          // Pass ids explicitly — don't rely on React state that may still be stale.
+          window.setTimeout(
+            () => void retryDangling(true, { messageId: last.id, text: last.text }),
+            300,
+          );
         }
       }
       await markNyxSeen();
@@ -95,18 +98,23 @@ export function NyxSheet() {
   const lastMessage = talk?.messages[talk.messages.length - 1] ?? null;
   const awaitingNyx = Boolean(lastMessage && lastMessage.role === "me");
 
-  async function retryDangling(silent = false) {
+  async function retryDangling(
+    silent = false,
+    target?: { messageId?: string; text?: string },
+  ) {
     // Never no-op: abort any in-flight send and force a recover POST.
     sendAbortRef.current?.abort();
     setSending(true);
     setPendingMedia(false);
     toast(silent ? "Nyx pakt je laatste bericht op…" : "Nyx opnieuw proberen…");
     try {
-      const lastBefore = talk?.messages[talk.messages.length - 1];
       const forceId =
-        lastBefore?.role === "me" && lastBefore.id && !lastBefore.id.startsWith("local-")
-          ? lastBefore.id
-          : undefined;
+        target?.messageId && !target.messageId.startsWith("local-")
+          ? target.messageId
+          : lastMessage?.role === "me" && lastMessage.id && !lastMessage.id.startsWith("local-")
+            ? lastMessage.id
+            : undefined;
+      const resendText = (target?.text ?? lastMessage?.text ?? "").trim();
       const response = await fetch("/api/nyx/message", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
@@ -133,10 +141,10 @@ export function NyxSheet() {
       const stillWaiting = last?.role === "me";
       if (stillWaiting) {
         console.warn("[nyx recover]", data.debug);
-        if (last.text.trim()) {
+        if (resendText || last.text.trim()) {
           toast("Ik stuur je laatste zin opnieuw…");
           setSending(false);
-          await ask(last.text);
+          await ask(resendText || last.text);
           return;
         }
         toast(
@@ -462,7 +470,16 @@ export function NyxSheet() {
 
         {awaitingNyx ? (
           <div className="chiprow" style={{ padding: "0 0 12px" }}>
-            <button className="chip is-on" type="button" onClick={() => void retryDangling(false)}>
+            <button
+              className="chip is-on"
+              type="button"
+              onClick={() =>
+                void retryDangling(false, {
+                  messageId: lastMessage?.id,
+                  text: lastMessage?.text,
+                })
+              }
+            >
               {sending ? "Nyx denkt na… (tik om te forceren)" : "Nyx antwoordt niet? Opnieuw proberen"}
             </button>
           </div>

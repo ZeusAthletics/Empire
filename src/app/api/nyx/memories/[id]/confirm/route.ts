@@ -15,6 +15,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ ok: true, talk });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Herinnering kon niet worden bewaard.";
+    console.error("[nyx/memories/confirm]", message);
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }

@@ -55,9 +55,16 @@ export async function POST(request: Request) {
     await syncPlayerTimeZoneFromHeader(player.id, request.headers.get("x-player-timezone")).catch(() => undefined);
 
     if (recover) {
-      let recovered = await completeDanglingNyxReply(player.id);
-      if (!recovered.debug.appended && forceUserMessageId) {
-        recovered = await forceReplyToUserMessage(player.id, forceUserMessageId);
+      // Prefer the visible bubble id when the client sends one — dangling scan can disagree
+      // with the merged talk timeline (multi-thread / check-in).
+      let recovered = forceUserMessageId
+        ? await forceReplyToUserMessage(player.id, forceUserMessageId)
+        : await completeDanglingNyxReply(player.id);
+      if (!recovered.debug.appended && !forceUserMessageId) {
+        const last = recovered.talk.messages[recovered.talk.messages.length - 1];
+        if (last?.role === "me" && last.id && !last.id.startsWith("local-")) {
+          recovered = await forceReplyToUserMessage(player.id, last.id);
+        }
       }
       return NextResponse.json({ ok: true, talk: recovered.talk, debug: recovered.debug });
     }

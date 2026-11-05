@@ -1,7 +1,12 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { CampaignReviewPayload } from "@/server/ai/schemas/campaign-review.schema";
 import type { MemoryProposalPayload } from "@/server/domain/memory/types";
-import { insertMemory, supersedeMemory } from "@/server/domain/memory/repository";
+import {
+  bumpObservation,
+  insertMemory,
+  mapMemory,
+  supersedeMemory,
+} from "@/server/domain/memory/repository";
 import { applyCampaignReview } from "@/server/domain/campaign/review";
 import { confirmPattern, dismissPattern } from "@/server/domain/pattern/repository";
 import type { PatternProposalPayload } from "@/server/domain/pattern/types";
@@ -191,8 +196,41 @@ export async function approveProposal(
   return mission;
 }
 
+function postgrestCode(error: unknown): string {
+  if (typeof error === "object" && error && "code" in error) {
+    return String((error as { code?: string }).code ?? "");
+  }
+  return "";
+}
+
+function postgrestMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error && "message" in error) {
+    return String((error as { message?: string }).message ?? "");
+  }
+  return String(error);
+}
+
 export async function approveMemoryProposal(playerId: string, proposalId: string) {
   const proposal = await getProposal(playerId, proposalId);
+  if (proposal.status === "APPROVED") {
+    // Idempotent: chip tap after success (or race) should not 400.
+    const adminLookup = createSupabaseAdminClient();
+    const fact = isMemoryPayload(proposal.payload) ? proposal.payload.normalizedFact : null;
+    if (fact) {
+      const { data: existing } = await adminLookup
+        .from("memories")
+        .select("*")
+        .eq("player_id", playerId)
+        .eq("normalized_fact", fact)
+        .eq("status", "ACTIVE")
+        .maybeSingle();
+      if (existing) {
+        return mapMemory(existing as Record<string, unknown>);
+      }
+    }
+    return null;
+  }
   if (proposal.status !== "PENDING") throw new Error("Dit voorstel is al afgehandeld.");
   if (!isMemoryPayload(proposal.payload)) throw new Error("Dit is geen geheugenvoorstel.");
 
@@ -209,9 +247,38 @@ export async function approveMemoryProposal(playerId: string, proposalId: string
     supersedesMemoryId: proposal.payload.supersedesMemoryId ?? null,
   };
 
-  const memory = proposal.payload.supersedesMemoryId
-    ? await supersedeMemory(playerId, proposal.payload.supersedesMemoryId, draft)
-    : await insertMemory(playerId, draft, "USER", "Onthouden.");
+  let memory;
+  try {
+    memory = proposal.payload.supersedesMemoryId
+      ? await supersedeMemory(playerId, proposal.payload.supersedesMemoryId, draft)
+      : await insertMemory(playerId, draft, "USER", "Onthouden.");
+  } catch (error) {
+    // Already stored (unique active fact) — confirm the existing row instead of 400.
+    const message = postgrestMessage(error);
+    const code = postgrestCode(error);
+    if (code === "23505" || /duplicate|unique|memories_player_active_fact/i.test(message)) {
+      const adminLookup = createSupabaseAdminClient();
+      const { data: existing } = await adminLookup
+        .from("memories")
+        .select("id")
+        .eq("player_id", playerId)
+        .eq("normalized_fact", draft.normalizedFact)
+        .eq("status", "ACTIVE")
+        .maybeSingle();
+      if (existing?.id) {
+        memory = await bumpObservation(playerId, existing.id as string);
+        await adminLookup
+          .from("memories")
+          .update({ user_confirmed: true } as never)
+          .eq("id", existing.id)
+          .eq("player_id", playerId);
+      } else {
+        throw new Error(message || "Herinnering kon niet worden bewaard.");
+      }
+    } else {
+      throw new Error(message || "Herinnering kon niet worden bewaard.");
+    }
+  }
 
   const admin = createSupabaseAdminClient();
   const { error } = await admin
