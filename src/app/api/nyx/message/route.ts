@@ -4,6 +4,7 @@ import { afterNyxReply } from "@/server/ai/services/MemoryExtractionService";
 import { maybeSendNyxCheckIn } from "@/server/ai/services/NyxCheckInService";
 import {
   completeDanglingNyxReply,
+  forceReplyToUserMessage,
   getNyxTalk,
   sendNyxMessage,
 } from "@/server/ai/services/NyxConversationService";
@@ -33,17 +34,20 @@ export async function POST(request: Request) {
   let mediaId: string | null = null;
   let linkedUrl: string | null = null;
   let recover = false;
+  let forceUserMessageId: string | null = null;
   try {
     const body = (await request.json()) as {
       text?: string;
       mediaId?: string;
       linkedUrl?: string;
       recover?: boolean;
+      forceUserMessageId?: string;
     };
     text = body.text ?? "";
     mediaId = body.mediaId?.trim() || null;
     linkedUrl = body.linkedUrl?.trim() || null;
     recover = Boolean(body.recover);
+    forceUserMessageId = body.forceUserMessageId?.trim() || null;
   } catch {
     return NextResponse.json({ ok: false, error: "Ongeldige invoer." }, { status: 400 });
   }
@@ -51,7 +55,10 @@ export async function POST(request: Request) {
     await syncPlayerTimeZoneFromHeader(player.id, request.headers.get("x-player-timezone")).catch(() => undefined);
 
     if (recover) {
-      const recovered = await completeDanglingNyxReply(player.id);
+      let recovered = await completeDanglingNyxReply(player.id);
+      if (!recovered.debug.appended && forceUserMessageId) {
+        recovered = await forceReplyToUserMessage(player.id, forceUserMessageId);
+      }
       return NextResponse.json({ ok: true, talk: recovered.talk, debug: recovered.debug });
     }
 

@@ -20,6 +20,7 @@ import {
   appendMessage,
   featuredTalkContext,
   getOrCreateTalk,
+  listDisplayedNyxConversationIds,
 } from "@/server/domain/nyx/talkRepository";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { NyxTalkState } from "@/server/domain/nyx/types";
@@ -50,6 +51,20 @@ function isUserRole(role: string) {
   return role.toUpperCase() === "USER";
 }
 
+const DANGLING_FALLBACK =
+  "Ik hoorde je — even kort vastgelopen. Ik ben er nog. Zeg het me nog eens, of tik Opnieuw proberen.";
+
+export type DanglingRecoverResult = SendNyxMessageResult & {
+  debug: {
+    danglingFound: boolean;
+    danglingId: string | null;
+    appended: boolean;
+    replyChars: number;
+    reason: string;
+    newestRole?: string | null;
+  };
+};
+
 async function findDanglingUserMessage(playerId: string): Promise<{
   id: string;
   content: string;
@@ -58,11 +73,12 @@ async function findDanglingUserMessage(playerId: string): Promise<{
   newestRole: string | null;
 } | null> {
   const admin = createSupabaseAdminClient();
-  // Search ALL of the player's threads (mission control + companion). The UI merges them.
+  // Only the threads the Nyx sheet actually shows — ignore orphan threads that hide dangling USER turns.
+  const { conversationIds } = await listDisplayedNyxConversationIds(playerId);
   const { data, error } = await admin
     .from("nyx_messages")
     .select("id, role, content, created_at, conversation_id")
-    .eq("player_id", playerId)
+    .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false })
     .limit(40);
   if (error) throw error;
@@ -85,6 +101,108 @@ async function findDanglingUserMessage(playerId: string): Promise<{
     createdAt: newest.created_at as string,
     conversationId: newest.conversation_id as string,
     newestRole,
+  };
+}
+
+/** Force a reply after a specific USER message id (client recover when threads drifted). */
+export async function forceReplyToUserMessage(
+  playerId: string,
+  userMessageId: string,
+): Promise<DanglingRecoverResult> {
+  const admin = createSupabaseAdminClient();
+  const talk = await getOrCreateTalk(playerId);
+  const { data: row, error } = await admin
+    .from("nyx_messages")
+    .select("id, role, content, created_at, conversation_id, player_id")
+    .eq("id", userMessageId)
+    .eq("player_id", playerId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!row || !isUserRole(String(row.role))) {
+    return {
+      talk,
+      skipMemoryExtraction: true,
+      debug: {
+        danglingFound: false,
+        danglingId: null,
+        appended: false,
+        replyChars: 0,
+        reason: "force-target-missing",
+        newestRole: row ? String(row.role) : null,
+      },
+    };
+  }
+
+  const conversationId = row.conversation_id as string;
+  const fallback = {
+    reply: DANGLING_FALLBACK,
+    runId: null as string | null,
+    skipMemoryExtraction: true,
+    justExited: false,
+    sessionStartedAt: null as string | null,
+  };
+
+  let produced = fallback;
+  try {
+    const timed = await Promise.race([
+      produceNyxReply({
+        playerId,
+        conversationId,
+        userText: row.content as string,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 25_000)),
+    ]);
+    produced = timed ?? fallback;
+  } catch (err) {
+    console.error("[nyx/forceReply]", err instanceof Error ? err.message : err);
+    produced = fallback;
+  }
+
+  const reply = produced.reply?.trim() || DANGLING_FALLBACK;
+
+  // If a Nyx reply already exists after this USER in the same displayed timeline, don't duplicate.
+  const { conversationIds } = await listDisplayedNyxConversationIds(playerId);
+  const { data: afterRows } = await admin
+    .from("nyx_messages")
+    .select("id, role")
+    .in("conversation_id", conversationIds)
+    .gt("created_at", row.created_at as string)
+    .order("created_at", { ascending: true })
+    .limit(5);
+  if ((afterRows ?? []).some((item) => String(item.role).toUpperCase() === "NYX")) {
+    return {
+      talk: await getOrCreateTalk(playerId),
+      skipMemoryExtraction: true,
+      debug: {
+        danglingFound: true,
+        danglingId: row.id as string,
+        appended: false,
+        replyChars: 0,
+        reason: "already-answered-in-view",
+        newestRole: "NYX",
+      },
+    };
+  }
+
+  await appendMessage({
+    playerId,
+    conversationId,
+    role: "NYX",
+    content: reply,
+    runId: produced.runId,
+  });
+
+  return {
+    talk: await getOrCreateTalk(playerId),
+    skipMemoryExtraction: true,
+    debug: {
+      danglingFound: true,
+      danglingId: row.id as string,
+      appended: true,
+      replyChars: reply.length,
+      reason: "force-appended",
+      newestRole: "USER",
+    },
   };
 }
 
@@ -194,20 +312,6 @@ async function produceNyxReply(input: {
   };
 }
 
-export type DanglingRecoverResult = SendNyxMessageResult & {
-  debug: {
-    danglingFound: boolean;
-    danglingId: string | null;
-    appended: boolean;
-    replyChars: number;
-    reason: string;
-    newestRole?: string | null;
-  };
-};
-
-const DANGLING_FALLBACK =
-  "Ik hoorde je — even kort vastgelopen. Ik ben er nog. Zeg het me nog eens, of tik Opnieuw proberen.";
-
 /** If the last stored turn is USER without a Nyx reply (failed/hung POST), finish it. */
 export async function completeDanglingNyxReply(playerId: string): Promise<DanglingRecoverResult> {
   const talk = await getOrCreateTalk(playerId);
@@ -255,12 +359,13 @@ export async function completeDanglingNyxReply(playerId: string): Promise<Dangli
 
   const reply = produced.reply?.trim() || DANGLING_FALLBACK;
 
-  // Only skip if something newer than this USER turn already exists (any thread).
+  // Only skip if something newer exists in the *displayed* threads.
   const admin = createSupabaseAdminClient();
+  const { conversationIds } = await listDisplayedNyxConversationIds(playerId);
   const { count, error: countError } = await admin
     .from("nyx_messages")
     .select("id", { count: "exact", head: true })
-    .eq("player_id", playerId)
+    .in("conversation_id", conversationIds)
     .gt("created_at", dangling.createdAt);
   if (countError) throw countError;
   if ((count ?? 0) > 0) {

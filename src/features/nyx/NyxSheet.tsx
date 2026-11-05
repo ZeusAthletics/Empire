@@ -102,10 +102,15 @@ export function NyxSheet() {
     setPendingMedia(false);
     toast(silent ? "Nyx pakt je laatste bericht op…" : "Nyx opnieuw proberen…");
     try {
+      const lastBefore = talk?.messages[talk.messages.length - 1];
+      const forceId =
+        lastBefore?.role === "me" && lastBefore.id && !lastBefore.id.startsWith("local-")
+          ? lastBefore.id
+          : undefined;
       const response = await fetch("/api/nyx/message", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
-        body: JSON.stringify({ recover: true }),
+        body: JSON.stringify({ recover: true, forceUserMessageId: forceId }),
       });
       const data = (await response.json()) as {
         ok: boolean;
@@ -128,9 +133,8 @@ export function NyxSheet() {
       const stillWaiting = last?.role === "me";
       if (stillWaiting) {
         console.warn("[nyx recover]", data.debug);
-        // Server sees no unanswered USER (UI/server mismatch) — force a real resend.
-        if (data.debug?.reason === "no-dangling-user" && last.text.trim()) {
-          toast("Geen open beurt op de server — ik stuur je laatste zin opnieuw.");
+        if (last.text.trim()) {
+          toast("Ik stuur je laatste zin opnieuw…");
           setSending(false);
           await ask(last.text);
           return;
