@@ -38,6 +38,7 @@ export function NyxSheet() {
   const fileRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const sendAbortRef = useRef<AbortController | null>(null);
+  const recoverInFlightRef = useRef(false);
   const [attachMediaId, setAttachMediaId] = useState<string | null>(null);
   const [attachPreview, setAttachPreview] = useState<string | null>(null);
   const [attachName, setAttachName] = useState<string | null>(null);
@@ -102,6 +103,8 @@ export function NyxSheet() {
     silent = false,
     target?: { messageId?: string; text?: string },
   ) {
+    if (recoverInFlightRef.current) return;
+    recoverInFlightRef.current = true;
     // Never no-op: abort any in-flight send and force a recover POST.
     sendAbortRef.current?.abort();
     setSending(true);
@@ -114,7 +117,6 @@ export function NyxSheet() {
           : lastMessage?.role === "me" && lastMessage.id && !lastMessage.id.startsWith("local-")
             ? lastMessage.id
             : undefined;
-      const resendText = (target?.text ?? lastMessage?.text ?? "").trim();
       const response = await fetch("/api/nyx/message", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
@@ -137,16 +139,24 @@ export function NyxSheet() {
       }
       setTalk(data.talk);
       await markNyxSeen();
-      const last = data.talk.messages[data.talk.messages.length - 1];
-      const stillWaiting = last?.role === "me";
+      let last = data.talk.messages[data.talk.messages.length - 1];
+      let stillWaiting = last?.role === "me";
+      // If server appended but the payload still ends on USER, refresh once (stale window).
+      if (stillWaiting && data.debug?.appended) {
+        console.warn("[nyx recover]", data.debug);
+        const refresh = await fetch("/api/nyx/message", {
+          headers: playerTimeZoneHeaders(),
+          cache: "no-store",
+        });
+        const refreshed = (await refresh.json()) as { ok?: boolean; talk?: NyxTalkState };
+        if (refresh.ok && refreshed.talk) {
+          setTalk(refreshed.talk);
+          last = refreshed.talk.messages[refreshed.talk.messages.length - 1];
+          stillWaiting = last?.role === "me";
+        }
+      }
       if (stillWaiting) {
         console.warn("[nyx recover]", data.debug);
-        if (resendText || last.text.trim()) {
-          toast("Ik stuur je laatste zin opnieuw…");
-          setSending(false);
-          await ask(resendText || last.text);
-          return;
-        }
         toast(
           data.debug?.reason
             ? `Geen reply (${data.debug.reason}${data.debug.newestRole ? ` · last=${data.debug.newestRole}` : ""}).`
@@ -156,6 +166,7 @@ export function NyxSheet() {
     } catch {
       toast("Verbinding met Nyx mislukt.");
     } finally {
+      recoverInFlightRef.current = false;
       setSending(false);
     }
   }

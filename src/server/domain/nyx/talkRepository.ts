@@ -148,16 +148,21 @@ export async function listDisplayedNyxConversationIds(playerId: string): Promise
   return { primaryId, conversationIds };
 }
 
+/** Newest-first window — PostgREST caps rows; ascending unlimited load hid fresh replies. */
+const TALK_MESSAGE_WINDOW = 250;
+
 export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
   const admin = createSupabaseAdminClient();
   const { primaryId: conversationId, conversationIds } = await listDisplayedNyxConversationIds(playerId);
 
-  const { data: rows, error: msgError } = await admin
+  const { data: newestFirst, error: msgError } = await admin
     .from("nyx_messages")
     .select("id, role, content, media_id, linked_url, created_at")
     .in("conversation_id", conversationIds)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(TALK_MESSAGE_WINDOW);
   if (msgError) throw msgError;
+  const rows = [...(newestFirst ?? [])].reverse();
 
   const [pending, memoryProposals, patternProposal, reviewProposal] = await Promise.all([
     listPendingSideQuest(playerId),

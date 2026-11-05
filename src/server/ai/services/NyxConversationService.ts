@@ -251,16 +251,67 @@ export async function forceReplyToUserMessage(
     runId: produced.runId,
   });
 
+  let finalTalk = await getOrCreateTalk(playerId);
+  let tip = finalTalk.messages[finalTalk.messages.length - 1];
+  // If another USER landed during generation (or reply landed off-primary), answer the tip too.
+  if (tip?.role === "me" && tip.id && !tip.id.startsWith("local-") && tip.id !== unanswered.id) {
+    const { data: tipRow } = await admin
+      .from("nyx_messages")
+      .select("id, role, content, created_at, conversation_id")
+      .eq("id", tip.id)
+      .eq("player_id", playerId)
+      .maybeSingle();
+    if (tipRow && isUserRole(String(tipRow.role))) {
+      let tipProduced = fallback;
+      try {
+        const timed = await Promise.race([
+          produceNyxReply({
+            playerId,
+            conversationId: tipRow.conversation_id as string,
+            userText: tipRow.content as string,
+          }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 25_000)),
+        ]);
+        tipProduced = timed ?? fallback;
+      } catch {
+        tipProduced = fallback;
+      }
+      const tipReply = tipProduced.reply?.trim() || DANGLING_FALLBACK;
+      await appendMessage({
+        playerId,
+        conversationId: tipRow.conversation_id as string,
+        role: "NYX",
+        content: tipReply,
+        runId: tipProduced.runId,
+      });
+      finalTalk = await getOrCreateTalk(playerId);
+      tip = finalTalk.messages[finalTalk.messages.length - 1];
+    }
+  }
+
+  // Last resort: sheet still ends on USER — pin fallback onto the primary thread.
+  if (tip?.role === "me") {
+    await appendMessage({
+      playerId,
+      conversationId: finalTalk.conversationId,
+      role: "NYX",
+      content: reply,
+      runId: produced.runId,
+    });
+    finalTalk = await getOrCreateTalk(playerId);
+    tip = finalTalk.messages[finalTalk.messages.length - 1];
+  }
+
   return {
-    talk: await getOrCreateTalk(playerId),
+    talk: finalTalk,
     skipMemoryExtraction: true,
     debug: {
       danglingFound: true,
       danglingId: unanswered.id as string,
       appended: true,
       replyChars: reply.length,
-      reason: targetId !== userMessageId ? "force-retarget-appended" : "force-appended",
-      newestRole: "USER",
+      reason: tip?.role === "nyx" ? (targetId !== userMessageId ? "force-retarget-appended" : "force-appended") : "force-appended-tip-still-user",
+      newestRole: tip?.role === "me" ? "USER" : "NYX",
     },
   };
 }
@@ -551,19 +602,36 @@ export async function sendNyxMessage(
     ? `\n\n${attachmentContext}\n\nGeef concrete feedback op wat Hardwig deelde (document, screenshot of website). Verwijs naar specifieke details uit de extractie.`
     : "";
 
-  const produced = await produceNyxReply({
-    playerId,
-    conversationId: talk.conversationId,
-    userText: userContent,
-    attachmentNote,
-    mediaFailNote,
-  });
+  const fallbackSend = {
+    reply: DANGLING_FALLBACK,
+    runId: null as string | null,
+    skipMemoryExtraction: true,
+    justExited: false,
+    sessionStartedAt: null as string | null,
+  };
+  let produced = fallbackSend;
+  try {
+    const timed = await Promise.race([
+      produceNyxReply({
+        playerId,
+        conversationId: talk.conversationId,
+        userText: userContent,
+        attachmentNote,
+        mediaFailNote,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 55_000)),
+    ]);
+    produced = timed ?? fallbackSend;
+  } catch (error) {
+    console.error("[nyx/send]", error instanceof Error ? error.message : error);
+    produced = fallbackSend;
+  }
 
   const saved = await appendMessage({
     playerId,
     conversationId: talk.conversationId,
     role: "NYX",
-    content: produced.reply,
+    content: produced.reply?.trim() || DANGLING_FALLBACK,
     runId: produced.runId,
   });
 
