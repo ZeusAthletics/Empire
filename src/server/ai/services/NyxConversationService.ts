@@ -181,35 +181,62 @@ async function produceNyxReply(input: {
   };
 }
 
+export type DanglingRecoverResult = SendNyxMessageResult & {
+  debug: {
+    danglingFound: boolean;
+    danglingId: string | null;
+    appended: boolean;
+    replyChars: number;
+    reason: string;
+  };
+};
+
+const DANGLING_FALLBACK =
+  "Ik hoorde je — even kort vastgelopen. Ik ben er nog. Zeg het me nog eens, of tik Opnieuw proberen.";
+
 /** If the last stored turn is USER without a Nyx reply (failed/hung POST), finish it. */
-export async function completeDanglingNyxReply(playerId: string): Promise<SendNyxMessageResult> {
+export async function completeDanglingNyxReply(playerId: string): Promise<DanglingRecoverResult> {
   const talk = await getOrCreateTalk(playerId);
   const dangling = await findDanglingUserMessage(talk.conversationId);
   if (!dangling) {
-    return { talk, skipMemoryExtraction: true };
-  }
-
-  let produced: Awaited<ReturnType<typeof produceNyxReply>>;
-  try {
-    produced = await produceNyxReply({
-      playerId,
-      conversationId: talk.conversationId,
-      userText: dangling.content,
-    });
-  } catch (error) {
-    console.error("[nyx/dangling]", error instanceof Error ? error.message : error);
-    produced = {
-      reply: "Even vastgelopen — ik ben er nog. Stuur je laatste zin nog eens.",
-      runId: null,
+    return {
+      talk,
       skipMemoryExtraction: true,
-      justExited: false,
-      sessionStartedAt: null,
+      debug: {
+        danglingFound: false,
+        danglingId: null,
+        appended: false,
+        replyChars: 0,
+        reason: "no-dangling-user",
+      },
     };
   }
 
-  const reply =
-    produced.reply?.trim() ||
-    "Ik ben er. Zeg het nog eens, dan pak ik de draad op.";
+  const fallbackProduced = {
+    reply: DANGLING_FALLBACK,
+    runId: null as string | null,
+    skipMemoryExtraction: true,
+    justExited: false,
+    sessionStartedAt: null as string | null,
+  };
+
+  let produced: Awaited<ReturnType<typeof produceNyxReply>> = fallbackProduced;
+  try {
+    const timed = await Promise.race([
+      produceNyxReply({
+        playerId,
+        conversationId: talk.conversationId,
+        userText: dangling.content,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 25_000)),
+    ]);
+    produced = timed ?? fallbackProduced;
+  } catch (error) {
+    console.error("[nyx/dangling]", error instanceof Error ? error.message : error);
+    produced = fallbackProduced;
+  }
+
+  const reply = produced.reply?.trim() || DANGLING_FALLBACK;
 
   // Only skip if something newer than this USER turn already exists.
   const admin = createSupabaseAdminClient();
@@ -220,8 +247,17 @@ export async function completeDanglingNyxReply(playerId: string): Promise<SendNy
     .gt("created_at", dangling.createdAt);
   if (countError) throw countError;
   if ((count ?? 0) > 0) {
-    // Another writer finished first — return whatever is on disk now.
-    return { talk: await getOrCreateTalk(playerId), skipMemoryExtraction: true };
+    return {
+      talk: await getOrCreateTalk(playerId),
+      skipMemoryExtraction: true,
+      debug: {
+        danglingFound: true,
+        danglingId: dangling.id,
+        appended: false,
+        replyChars: 0,
+        reason: "newer-message-exists",
+      },
+    };
   }
 
   const saved = await appendMessage({
@@ -254,6 +290,13 @@ export async function completeDanglingNyxReply(playerId: string): Promise<SendNy
   return {
     talk: await getOrCreateTalk(playerId),
     skipMemoryExtraction: produced.skipMemoryExtraction,
+    debug: {
+      danglingFound: true,
+      danglingId: dangling.id,
+      appended: true,
+      replyChars: reply.length,
+      reason: "appended",
+    },
   };
 }
 

@@ -66,6 +66,7 @@ export function NyxSheet() {
 
   async function loadTalk() {
     setBooting(true);
+    setSending(false);
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 70_000);
     try {
@@ -74,7 +75,14 @@ export function NyxSheet() {
         signal: controller.signal,
       });
       const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState };
-      if (response.ok && data.talk) setTalk(data.talk);
+      if (response.ok && data.talk) {
+        setTalk(data.talk);
+        const last = data.talk.messages[data.talk.messages.length - 1];
+        if (last?.role === "me") {
+          // Auto-recover unanswered USER turns once the sheet opens.
+          window.setTimeout(() => void retryDangling(true), 300);
+        }
+      }
       await markNyxSeen();
     } catch {
       toast("Nyx-gesprek kon niet laden.");
@@ -87,16 +95,24 @@ export function NyxSheet() {
   const lastMessage = talk?.messages[talk.messages.length - 1] ?? null;
   const awaitingNyx = Boolean(lastMessage && lastMessage.role === "me");
 
-  async function retryDangling() {
-    if (sending) return;
+  async function retryDangling(silent = false) {
+    // Never no-op: abort any in-flight send and force a recover POST.
+    sendAbortRef.current?.abort();
     setSending(true);
+    setPendingMedia(false);
+    toast(silent ? "Nyx pakt je laatste bericht op…" : "Nyx opnieuw proberen…");
     try {
       const response = await fetch("/api/nyx/message", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...playerTimeZoneHeaders() },
         body: JSON.stringify({ recover: true }),
       });
-      const data = (await response.json()) as { ok: boolean; talk?: NyxTalkState; error?: string };
+      const data = (await response.json()) as {
+        ok: boolean;
+        talk?: NyxTalkState;
+        error?: string;
+        debug?: { danglingFound?: boolean; appended?: boolean; reason?: string };
+      };
       if (!response.ok || !data.ok || !data.talk) {
         toast(data.error ?? "Nyx kon de draad niet oppakken.");
         return;
@@ -104,7 +120,14 @@ export function NyxSheet() {
       setTalk(data.talk);
       await markNyxSeen();
       const stillWaiting = data.talk.messages[data.talk.messages.length - 1]?.role === "me";
-      if (stillWaiting) toast("Nog geen antwoord — check XAI_API_KEY op Vercel of stuur de zin opnieuw.");
+      if (stillWaiting) {
+        console.warn("[nyx recover]", data.debug);
+        toast(
+          data.debug?.reason
+            ? `Geen reply (${data.debug.reason}). Zet XAI_API_KEY op Vercel.`
+            : "Nog geen antwoord — zet XAI_API_KEY op Vercel of stuur opnieuw.",
+        );
+      }
     } catch {
       toast("Verbinding met Nyx mislukt.");
     } finally {
@@ -141,29 +164,30 @@ export function NyxSheet() {
     const trimmed = text.trim();
     const url = linkUrl.trim();
     const mediaId = attachMediaId;
-    if ((!trimmed && !mediaId && !url) || sending) return;
+    if (!trimmed && !mediaId && !url) return;
 
     // Show the user bubble immediately — don't wait for a slow/hung reply.
     const optimisticId = `local-${Date.now()}`;
     const optimisticText = trimmed || (mediaId ? "(bijlage)" : url);
-    setTalk((prev) =>
-      prev
-        ? {
-            ...prev,
-            messages: [
-              ...prev.messages,
-              {
-                id: optimisticId,
-                role: "me",
-                text: optimisticText,
-                mediaSrc: attachPreview,
-                mediaKind: attachPreview ? "image" : mediaId ? "file" : null,
-                linkedUrl: url || null,
-              },
-            ],
-          }
-        : prev,
-    );
+    const optimisticMsg = {
+      id: optimisticId,
+      role: "me" as const,
+      text: optimisticText,
+      mediaSrc: attachPreview,
+      mediaKind: (attachPreview ? "image" : mediaId ? "file" : null) as "image" | "video" | "file" | null,
+      linkedUrl: url || null,
+    };
+    setTalk((prev) => {
+      const base = prev ?? {
+        conversationId: "",
+        messages: [],
+        proposal: null,
+        memoryChips: [],
+        pattern: null,
+        review: null,
+      };
+      return { ...base, messages: [...base.messages, optimisticMsg] };
+    });
     if (inputRef.current) inputRef.current.value = "";
     const sentMediaId = mediaId;
     const sentUrl = url;
@@ -421,8 +445,8 @@ export function NyxSheet() {
 
         {awaitingNyx ? (
           <div className="chiprow" style={{ padding: "0 0 12px" }}>
-            <button className="chip is-on" type="button" disabled={pending} onClick={() => void retryDangling()}>
-              {pending ? "Nyx denkt na…" : "Nyx antwoordt niet? Opnieuw proberen"}
+            <button className="chip is-on" type="button" onClick={() => void retryDangling(false)}>
+              {sending ? "Nyx denkt na… (tik om te forceren)" : "Nyx antwoordt niet? Opnieuw proberen"}
             </button>
           </div>
         ) : null}

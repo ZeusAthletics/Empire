@@ -51,8 +51,8 @@ export async function POST(request: Request) {
     await syncPlayerTimeZoneFromHeader(player.id, request.headers.get("x-player-timezone")).catch(() => undefined);
 
     if (recover) {
-      const { talk } = await completeDanglingNyxReply(player.id);
-      return NextResponse.json({ ok: true, talk });
+      const recovered = await completeDanglingNyxReply(player.id);
+      return NextResponse.json({ ok: true, talk: recovered.talk, debug: recovered.debug });
     }
 
     const { talk, skipMemoryExtraction } = await sendNyxMessage(player.id, { text, mediaId, linkedUrl });
