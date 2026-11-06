@@ -453,7 +453,7 @@ export function NyxSheet() {
                     src={message.mediaSrc}
                     controls
                     playsInline
-                    preload="metadata"
+                    preload="none"
                     style={{ width: "100%", marginTop: 8, borderRadius: 10 }}
                     onError={() => toast("Video kon niet laden — ververs de pagina of probeer opnieuw.")}
                   />
@@ -471,6 +471,8 @@ export function NyxSheet() {
                   <img
                     src={message.mediaSrc}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     style={{ width: "100%", marginTop: 8, borderRadius: 10, display: "block" }}
                     onError={() => toast("Foto kon niet laden — probeer opnieuw in te loggen of ververs de pagina.")}
                   />

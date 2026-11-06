@@ -35,7 +35,7 @@ export function Plate({
     <div className={`plate ${className}`.trim()}>
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" />
+        <img src={src} alt="" loading="lazy" decoding="async" />
       ) : (
         <svg viewBox="0 0 48 48" preserveAspectRatio="none" aria-hidden="true">
           <defs>

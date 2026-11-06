@@ -49,15 +49,28 @@ export function NyxGallerySection({ items }: { items: NyxGalleryItem[] }) {
                 onClick={() => setLightbox(item)}
               >
                 {item.isVideo ? (
-                  <video
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "grid",
+                      placeItems: "center",
+                      background: "rgba(20,16,12,.85)",
+                      color: "var(--gold-soft)",
+                      fontSize: 28,
+                    }}
+                  >
+                    ▶
+                  </div>
+                ) : (
+                  <img
                     src={item.src}
-                    muted
-                    playsInline
-                    preload="metadata"
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
-                ) : (
-                  <img src={item.src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 )}
               </button>
             ))
@@ -87,12 +100,17 @@ export function NyxGallerySection({ items }: { items: NyxGalleryItem[] }) {
               src={lightbox.src}
               controls
               playsInline
-              preload="auto"
+              preload="metadata"
+              autoPlay
               style={{ maxWidth: "100%", maxHeight: "85vh" }}
               onClick={(event) => event.stopPropagation()}
             />
           ) : (
-            <img src={lightbox.src} alt="" style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 12 }} />
+            <img
+              src={lightbox.src}
+              alt=""
+              style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 12 }}
+            />
           )}
         </div>
       ) : null}

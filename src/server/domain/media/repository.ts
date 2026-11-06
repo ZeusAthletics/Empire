@@ -27,15 +27,37 @@ export function publicMediaUrl(id: string) {
   return `/api/media/${id}`;
 }
 
-export const MEDIA_SIGNED_URL_TTL_SEC = 60 * 60;
+/** Long enough for browser reuse; keep redirect max-age below this. */
+export const MEDIA_SIGNED_URL_TTL_SEC = 60 * 60 * 2;
+/** Browser may cache the redirect target for this long (must be < TTL). */
+export const MEDIA_REDIRECT_CACHE_SEC = 60 * 50;
+
+type CachedSignedUrl = { url: string; expiresAt: number };
+const signedUrlCache = new Map<string, CachedSignedUrl>();
 
 export async function createSignedMediaDownloadUrl(storagePath: string, expiresInSec = MEDIA_SIGNED_URL_TTL_SEC) {
+  const cached = signedUrlCache.get(storagePath);
+  const now = Date.now();
+  // Reuse the same signed URL so browsers can HTTP-cache the asset bytes.
+  if (cached && cached.expiresAt > now + 60_000) {
+    return cached.url;
+  }
+
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.storage.from(MEDIA_BUCKET).createSignedUrl(storagePath, expiresInSec, {
     download: false,
   });
   if (error || !data?.signedUrl) {
     throw error ?? new Error("Signed URL kon niet worden gemaakt.");
+  }
+  signedUrlCache.set(storagePath, {
+    url: data.signedUrl,
+    expiresAt: now + expiresInSec * 1000,
+  });
+  // Bound memory on long-lived serverless isolates.
+  if (signedUrlCache.size > 500) {
+    const first = signedUrlCache.keys().next().value;
+    if (first) signedUrlCache.delete(first);
   }
   return data.signedUrl;
 }

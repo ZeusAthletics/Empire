@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSessionPlayer, requireAdmin } from "@/server/auth/session";
 import { resolveAdminScope } from "@/admin/scope";
-import { createSignedMediaDownloadUrl, getMedia, setMediaApproved } from "@/server/domain/media/repository";
+import {
+  createSignedMediaDownloadUrl,
+  getMedia,
+  MEDIA_REDIRECT_CACHE_SEC,
+  setMediaApproved,
+} from "@/server/domain/media/repository";
 
 export const runtime = "nodejs";
 
@@ -26,10 +31,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     const signedUrl = await createSignedMediaDownloadUrl(asset.storagePath);
+    // Private browser cache of the redirect → same signed URL → fewer Storage re-downloads.
     return NextResponse.redirect(signedUrl, {
       status: 307,
       headers: {
-        "Cache-Control": "private, no-store",
+        "Cache-Control": `private, max-age=${MEDIA_REDIRECT_CACHE_SEC}, stale-while-revalidate=300`,
+        Vary: "Cookie",
       },
     });
   } catch {

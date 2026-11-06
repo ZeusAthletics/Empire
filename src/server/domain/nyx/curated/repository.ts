@@ -37,7 +37,11 @@ function detectMediaType(contentType: string, filename: string): NyxCuratedMedia
 
 export async function listAllCuratedMedia(): Promise<NyxCuratedItem[]> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.from("nyx_curated_media").select("*").order("created_at", { ascending: false });
+  const { data, error } = await admin
+    .from("nyx_curated_media")
+    .select("id, storage_path, content_type, media_type, description, min_intimacy_tier, label, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (error) throw error;
   return (data ?? []).map((row) => mapCurated(row as Record<string, unknown>));
 }
