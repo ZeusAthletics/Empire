@@ -221,6 +221,7 @@ export function NyxSheet() {
         memoryChips: [],
         pattern: null,
         review: null,
+        intimateActive: false,
       };
       return { ...base, messages: [...base.messages, optimisticMsg] };
     });
@@ -411,9 +412,14 @@ export function NyxSheet() {
               boxShadow: "0 0 0 2px var(--gold)",
             }}
           />
-          <div>
-            <h2 className="display d-md" style={{ margin: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 className="display d-md" style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
               Nyx
+              {talk?.intimateActive ? (
+                <span aria-label="Spicy mode" title="Spicy mode" style={{ fontSize: 18, lineHeight: 1 }}>
+                  🔥
+                </span>
+              ) : null}
             </h2>
             <span className="eyebrow muted">Mission control · altijd aan je zijde</span>
           </div>

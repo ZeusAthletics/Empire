@@ -44,4 +44,6 @@ export type NyxTalkState = {
   memoryChips: NyxMemoryChip[];
   pattern: NyxPatternCard | null;
   review: NyxReviewCard | null;
+  /** Sticky spicy/intimate session on the primary mission-control thread. */
+  intimateActive: boolean;
 };

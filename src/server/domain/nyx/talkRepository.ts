@@ -164,11 +164,12 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
   if (msgError) throw msgError;
   const rows = [...(newestFirst ?? [])].reverse();
 
-  const [pending, memoryProposals, patternProposal, reviewProposal] = await Promise.all([
+  const [pending, memoryProposals, patternProposal, reviewProposal, intimate] = await Promise.all([
     listPendingSideQuest(playerId),
     listPendingMemoryProposals(playerId),
     listPendingByKind(playerId, "PATTERN"),
     listPendingByKind(playerId, "CAMPAIGN_REVIEW"),
+    getIntimateSessionState(conversationId).catch(() => emptyIntimateState(conversationId)),
   ]);
   return {
     conversationId,
@@ -194,6 +195,7 @@ export async function getOrCreateTalk(playerId: string): Promise<NyxTalkState> {
             whatStays: reviewProposal.payload.whatStays,
           }
         : null,
+    intimateActive: intimate.active,
   };
 }
 
