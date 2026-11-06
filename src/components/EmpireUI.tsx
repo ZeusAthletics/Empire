@@ -92,7 +92,13 @@ export function EmpireUIProvider({ children }: { children: ReactNode }) {
                   <X size={18} strokeWidth={2.2} />
                 </button>
               </div>
-              {nyxOpen ? <NyxSheet /> : custom?.content}
+              {nyxOpen ? (
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+                  <NyxSheet />
+                </div>
+              ) : (
+                custom?.content
+              )}
             </motion.div>
           </>
         ) : null}

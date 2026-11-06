@@ -4,9 +4,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Paperclip, X } from "lucide-react";
+import { Link2, Paperclip, Phone, X } from "lucide-react";
 import { Tag } from "@/components/ui/Tag";
 import { useEmpireUI } from "@/components/empire-ui-context";
+import { NyxPhoneCall } from "@/features/nyx/NyxPhoneCall";
 import type { NyxTalkState } from "@/server/domain/nyx/types";
 
 const SHORTCUTS = [
@@ -45,9 +46,10 @@ export function NyxSheet() {
   const [linkUrl, setLinkUrl] = useState("");
   const [showLink, setShowLink] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
 
   // Composer lock only while a send is in flight — never while booting/recovering.
-  const pending = sending;
+  const pending = sending || phoneOpen;
 
   useEffect(() => {
     void loadTalk();
@@ -398,7 +400,14 @@ export function NyxSheet() {
   const review = talk?.review ?? null;
 
   return (
-    <>
+    <div className="nyx-sheet-root">
+      {phoneOpen ? (
+        <NyxPhoneCall
+          intimateActive={Boolean(talk?.intimateActive)}
+          toast={toast}
+          onClose={() => setPhoneOpen(false)}
+        />
+      ) : null}
       <div className="nyx-sheet-top">
         <img src="/nyx.jpg" alt="" className="nyx-sheet-avatar" />
         <h2 className="display d-md nyx-sheet-name">
@@ -693,6 +702,15 @@ export function NyxSheet() {
           >
             <Link2 size={18} strokeWidth={2.2} />
           </button>
+          <button
+            className="btn btn-quiet btn-icon"
+            type="button"
+            aria-label="Bel Nyx"
+            disabled={pending || uploading || booting}
+            onClick={() => setPhoneOpen(true)}
+          >
+            <Phone size={18} strokeWidth={2.2} />
+          </button>
           <input
             ref={inputRef}
             className="input"
@@ -721,6 +739,6 @@ export function NyxSheet() {
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

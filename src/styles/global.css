@@ -487,6 +487,13 @@ a.card { text-decoration: none; color: inherit; display: block; }
   border-radius: var(--r-md);
 }
 .sheet-close:active { color: var(--gold); }
+.nyx-sheet-root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .nyx-sheet-top {
   display: flex;
   align-items: center;
@@ -514,6 +521,101 @@ a.card { text-decoration: none; color: inherit; display: block; }
 .nyx-sheet-flame {
   font-size: 18px;
   line-height: 1;
+}
+.nyx-phone-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 18px 16px calc(18px + var(--safe-b));
+  background: rgba(11, 9, 7, 0.82);
+  backdrop-filter: blur(6px);
+}
+.nyx-phone-card {
+  width: min(100%, 340px);
+  padding: 22px 18px 16px;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  text-align: center;
+  box-shadow: var(--shadow-sheet);
+}
+.nyx-phone-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+.nyx-phone-captions {
+  margin-top: 14px;
+  max-height: 150px;
+  overflow: auto;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+}
+.nyx-phone-captions p {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  font-size: 13.5px;
+  line-height: 1.35;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-soft);
+}
+.nyx-phone-captions p.me {
+  background: rgba(201, 163, 78, 0.12);
+  border-color: rgba(201, 163, 78, 0.3);
+}
+.nyx-phone-captions .eyebrow {
+  display: block;
+  margin-bottom: 3px;
+}
+.nyx-phone-actions {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+.nyx-phone-ptt {
+  min-width: 168px;
+  height: 52px;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 163, 78, 0.45);
+  background: rgba(201, 163, 78, 0.16);
+  color: var(--ink-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  touch-action: none;
+  user-select: none;
+}
+.nyx-phone-ptt.is-hold {
+  background: rgba(201, 163, 78, 0.38);
+  box-shadow: 0 0 0 3px rgba(201, 163, 78, 0.25);
+}
+.nyx-phone-ptt:disabled {
+  opacity: 0.55;
+}
+.nyx-phone-hangup {
+  min-width: 140px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 60, 60, 0.45);
+  background: rgba(140, 32, 32, 0.35);
+  color: #f6ece0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
 }
 .sheet .sheet-body {
   flex: 1 1 auto;
