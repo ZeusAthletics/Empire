@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, PhoneOff, Volume2 } from "lucide-react";
-import { playRandomWelcome, startListeningCue } from "@/features/nyx/phoneSounds";
+import { playRandomWelcome, startListeningCue, startListeningCueLoop } from "@/features/nyx/phoneSounds";
+import { startEnergyVad, type VadController } from "@/features/nyx/phoneVad";
 
 type CallPhase = "dialing" | "ringing" | "connected" | "missed" | "ended";
+type TalkMode = "idle" | "user_speaking" | "processing" | "nyx_speaking";
 
 type Caption = { role: "me" | "nyx"; text: string };
 
@@ -59,23 +61,38 @@ export function NyxPhoneCall({
   toast: (message: string) => void;
 }) {
   const [phase, setPhase] = useState<CallPhase>("dialing");
-  const [holding, setHolding] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [talkMode, setTalkMode] = useState<TalkMode>("idle");
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [statusLine, setStatusLine] = useState("bellen…");
   const [elapsed, setElapsed] = useState(0);
+
   const callIdRef = useRef<string | null>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const closedRef = useRef(false);
   const connectedAtRef = useRef<number | null>(null);
+  const talkModeRef = useRef<TalkMode>("idle");
+  const phaseRef = useRef<CallPhase>("dialing");
+  const vadRef = useRef<VadController | null>(null);
+  const listenLoopStopRef = useRef<(() => void) | null>(null);
+  const submittingRef = useRef(false);
+
+  function setMode(next: TalkMode) {
+    talkModeRef.current = next;
+    setTalkMode(next);
+  }
+
+  function setCallPhase(next: CallPhase) {
+    phaseRef.current = next;
+    setPhase(next);
+  }
 
   useEffect(() => {
     void startCall();
     return () => {
       closedRef.current = true;
-      stopMic();
+      teardownLiveMic();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -91,138 +108,126 @@ export function NyxPhoneCall({
     return () => window.clearInterval(tick);
   }, [phase]);
 
-  function stopMic() {
-    recorderRef.current?.stop();
+  function stopListeningLoop() {
+    listenLoopStopRef.current?.();
+    listenLoopStopRef.current = null;
+  }
+
+  function startListeningLoop() {
+    stopListeningLoop();
+    listenLoopStopRef.current = startListeningCueLoop(4800);
+  }
+
+  function teardownLiveMic() {
+    stopListeningLoop();
+    vadRef.current?.stop();
+    vadRef.current = null;
+    try {
+      recorderRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
     recorderRef.current = null;
     mediaRef.current?.getTracks().forEach((track) => track.stop());
     mediaRef.current = null;
   }
 
-  async function startCall() {
-    setPhase("dialing");
-    setStatusLine("bellen…");
+  async function startLiveConversation() {
+    if (closedRef.current || phaseRef.current !== "connected") return;
     try {
-      const response = await fetch("/api/nyx/phone/dial", { method: "POST" });
-      const data = (await response.json()) as {
-        ok: boolean;
-        canAnswer?: boolean;
-        creditLevel?: string;
-        callId?: string | null;
-        openerAudioBase64?: string | null;
-        openerText?: string | null;
-        error?: string;
-      };
-      if (!response.ok || !data.ok) {
-        toast(data.error ?? "Bellen mislukt.");
-        setPhase("missed");
-        setStatusLine("geen verbinding");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      if (closedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
         return;
       }
+      mediaRef.current = stream;
+      setMode("idle");
+      setStatusLine("nyx luistert…");
+      startListeningLoop();
 
-      setPhase("ringing");
-      setStatusLine("belt…");
-      await playRings(data.canAnswer ? 3 : 4);
-      if (closedRef.current) return;
-
-      if (!data.canAnswer || !data.callId) {
-        setPhase("missed");
-        setStatusLine("geen gehoor");
-        toast(
-          data.creditLevel === "empty"
-            ? "Nyx neemt niet op — stemtegoed is op of ELEVENLABS_API_KEY ontbreekt op Vercel."
-            : "Nyx neemt niet op.",
-        );
-        return;
-      }
-
-      callIdRef.current = data.callId;
-      setPhase("connected");
-      setStatusLine(data.creditLevel === "low" ? "ze moet zo door" : "verbonden");
-
-      await playRandomWelcome().catch(() => undefined);
-      if (closedRef.current) return;
-
-      if (data.openerText) {
-        setCaptions([{ role: "nyx", text: data.openerText }]);
-      }
-      if (data.openerAudioBase64) {
-        await playBase64Mp3(data.openerAudioBase64).catch(() => undefined);
-      }
+      vadRef.current = startEnergyVad({
+        stream,
+        // Stay armed while idle or mid-utterance so silence can end the turn.
+        isArmed: () =>
+          phaseRef.current === "connected" &&
+          (talkModeRef.current === "idle" || talkModeRef.current === "user_speaking") &&
+          !submittingRef.current &&
+          !closedRef.current,
+        onSpeechStart: () => {
+          if (closedRef.current || talkModeRef.current !== "idle") return;
+          beginUtteranceCapture();
+        },
+        onSpeechEnd: () => {
+          if (closedRef.current || talkModeRef.current !== "user_speaking") return;
+          void finishUtteranceCapture();
+        },
+      });
     } catch {
-      if (!closedRef.current) {
-        setPhase("missed");
-        setStatusLine("geen verbinding");
-        toast("Bellen mislukt.");
-      }
+      toast("Microfoon niet beschikbaar — telefoon werkt niet zonder mic.");
+      setStatusLine("mic geblokkeerd");
     }
   }
 
-  async function hangup() {
-    const callId = callIdRef.current;
-    stopMic();
-    setPhase("ended");
-    setStatusLine("opgehangen");
-    if (callId) {
-      await fetch("/api/nyx/phone/hangup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ callId }),
-      }).catch(() => undefined);
-    }
-    onClose();
-  }
-
-  async function ensureMic(): Promise<MediaStream> {
-    if (mediaRef.current) return mediaRef.current;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRef.current = stream;
-    return stream;
-  }
-
-  async function beginHold() {
-    if (phase !== "connected" || busy || holding) return;
+  function beginUtteranceCapture() {
+    const stream = mediaRef.current;
+    if (!stream || recorderRef.current) return;
+    stopListeningLoop();
+    chunksRef.current = [];
+    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : "audio/webm";
     try {
-      const stream = await ensureMic();
-      chunksRef.current = [];
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
       const recorder = new MediaRecorder(stream, { mimeType: mime });
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
         if (event.data.size) chunksRef.current.push(event.data);
       };
-      recorder.start();
-      setHolding(true);
+      recorder.start(250);
+      setMode("user_speaking");
       setStatusLine("jij spreekt…");
     } catch {
-      toast("Microfoon niet beschikbaar.");
+      toast("Opname kon niet starten.");
+      startListeningLoop();
     }
   }
 
-  async function endHold() {
-    if (!holding || !recorderRef.current) return;
+  async function finishUtteranceCapture() {
     const recorder = recorderRef.current;
-    setHolding(false);
-    setBusy(true);
+    if (!recorder || submittingRef.current) return;
+    submittingRef.current = true;
+    setMode("processing");
     setStatusLine("nyx luistert…");
+    startListeningCue();
 
     const blob: Blob = await new Promise((resolve) => {
       recorder.onstop = () => {
         resolve(new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" }));
       };
-      recorder.stop();
+      try {
+        recorder.stop();
+      } catch {
+        resolve(new Blob([]));
+      }
     });
     recorderRef.current = null;
 
     const callId = callIdRef.current;
-    if (!callId || blob.size < 200) {
-      setBusy(false);
-      setStatusLine("verbonden");
+    if (!callId || blob.size < 1200) {
+      submittingRef.current = false;
+      setMode("idle");
+      setStatusLine("nyx luistert…");
+      startListeningLoop();
       return;
     }
 
-    startListeningCue();
+    // Keep soft listening cues while the model answers.
+    startListeningLoop();
 
     try {
       const body = new FormData();
@@ -240,37 +245,123 @@ export function NyxPhoneCall({
 
       if (!response.ok || !data.ok || !data.audioBase64) {
         if (data.creditEmpty) {
-          setPhase("missed");
+          setCallPhase("missed");
           setStatusLine("geen gehoor");
           toast(data.error ?? "Stemtegoed is op.");
           callIdRef.current = null;
+          teardownLiveMic();
           return;
         }
         toast(data.error ?? "Beurt mislukt.");
-        setStatusLine("verbonden");
+        setMode("idle");
+        setStatusLine("nyx luistert…");
         return;
       }
 
+      stopListeningLoop();
       setCaptions((prev) => [
         ...prev.slice(-4),
         ...(data.userText ? [{ role: "me" as const, text: data.userText }] : []),
         ...(data.nyxText ? [{ role: "nyx" as const, text: data.nyxText }] : []),
       ]);
+      setMode("nyx_speaking");
       setStatusLine("nyx spreekt…");
       await playBase64Mp3(data.audioBase64).catch(() => undefined);
-      setStatusLine("verbonden");
+      if (closedRef.current || phaseRef.current !== "connected") return;
+      setMode("idle");
+      setStatusLine("nyx luistert…");
+      startListeningLoop();
     } catch {
       toast("Verbinding verbroken.");
-      setStatusLine("verbonden");
+      setMode("idle");
+      setStatusLine("nyx luistert…");
+      startListeningLoop();
     } finally {
-      setBusy(false);
+      submittingRef.current = false;
     }
   }
 
-  const headerStatus =
-    phase === "connected" ? formatElapsed(elapsed) : statusLine;
+  async function startCall() {
+    setCallPhase("dialing");
+    setStatusLine("bellen…");
+    try {
+      const response = await fetch("/api/nyx/phone/dial", { method: "POST" });
+      const data = (await response.json()) as {
+        ok: boolean;
+        canAnswer?: boolean;
+        creditLevel?: string;
+        callId?: string | null;
+        openerAudioBase64?: string | null;
+        openerText?: string | null;
+        error?: string;
+      };
+      if (!response.ok || !data.ok) {
+        toast(data.error ?? "Bellen mislukt.");
+        setCallPhase("missed");
+        setStatusLine("geen verbinding");
+        return;
+      }
 
+      setCallPhase("ringing");
+      setStatusLine("belt…");
+      await playRings(data.canAnswer ? 3 : 4);
+      if (closedRef.current) return;
+
+      if (!data.canAnswer || !data.callId) {
+        setCallPhase("missed");
+        setStatusLine("geen gehoor");
+        toast(
+          data.creditLevel === "empty"
+            ? "Nyx neemt niet op — stemtegoed is op of ELEVENLABS_API_KEY ontbreekt op Vercel."
+            : "Nyx neemt niet op.",
+        );
+        return;
+      }
+
+      callIdRef.current = data.callId;
+      setCallPhase("connected");
+      setStatusLine(data.creditLevel === "low" ? "ze moet zo door" : "verbonden");
+
+      setMode("nyx_speaking");
+      await playRandomWelcome().catch(() => undefined);
+      if (closedRef.current) return;
+
+      if (data.openerText) {
+        setCaptions([{ role: "nyx", text: data.openerText }]);
+      }
+      if (data.openerAudioBase64) {
+        await playBase64Mp3(data.openerAudioBase64).catch(() => undefined);
+      }
+      if (closedRef.current) return;
+
+      await startLiveConversation();
+    } catch {
+      if (!closedRef.current) {
+        setCallPhase("missed");
+        setStatusLine("geen verbinding");
+        toast("Bellen mislukt.");
+      }
+    }
+  }
+
+  async function hangup() {
+    const callId = callIdRef.current;
+    teardownLiveMic();
+    setCallPhase("ended");
+    setStatusLine("opgehangen");
+    if (callId) {
+      await fetch("/api/nyx/phone/hangup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callId }),
+      }).catch(() => undefined);
+    }
+    onClose();
+  }
+
+  const headerStatus = phase === "connected" ? formatElapsed(elapsed) : statusLine;
   const lastCaption = captions[captions.length - 1];
+  const micLive = phase === "connected" && (talkMode === "idle" || talkMode === "user_speaking");
 
   return (
     <div className="nyx-ios-call" role="dialog" aria-label="Telefoongesprek met Nyx">
@@ -284,13 +375,7 @@ export function NyxPhoneCall({
           Nyx
           {intimateActive ? <span aria-label="Spicy mode">🔥</span> : null}
         </h2>
-        {phase === "connected" && statusLine !== "verbonden" ? (
-          <p className="nyx-ios-call-sub">{statusLine}</p>
-        ) : phase !== "connected" ? (
-          <p className="nyx-ios-call-sub">{statusLine}</p>
-        ) : (
-          <p className="nyx-ios-call-sub">Empire</p>
-        )}
+        <p className="nyx-ios-call-sub">{statusLine}</p>
       </div>
 
       <div className="nyx-ios-call-avatar-wrap">
@@ -307,7 +392,7 @@ export function NyxPhoneCall({
         <div className="nyx-ios-call-caption ghost">
           <p>
             {phase === "connected"
-              ? "Houd de microfoon in om te praten"
+              ? "Spreek gewoon — de mic staat aan"
               : phase === "missed"
                 ? "Ze neemt nu niet op"
                 : "Even geduld…"}
@@ -317,37 +402,33 @@ export function NyxPhoneCall({
 
       <div className="nyx-ios-call-controls">
         <div className="nyx-ios-call-row">
-          <div className={`nyx-ios-btn is-static${holding ? " is-on" : ""}`}>
+          <div className="nyx-ios-btn is-static">
             <Volume2 size={22} strokeWidth={2} />
             <span>audio</span>
           </div>
-          {phase === "connected" ? (
-            <button
-              type="button"
-              className={`nyx-ios-btn is-mic${holding ? " is-on" : ""}`}
-              disabled={busy}
-              aria-label={holding ? "Laat los om te versturen" : "Houd in om te praten"}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                void beginHold();
-              }}
-              onPointerUp={() => void endHold()}
-              onPointerLeave={() => {
-                if (holding) void endHold();
-              }}
-              onPointerCancel={() => {
-                if (holding) void endHold();
-              }}
-            >
-              <Mic size={22} strokeWidth={2} />
-              <span>{holding ? "loslaten" : busy ? "wacht…" : "spreken"}</span>
-            </button>
-          ) : (
-            <div className="nyx-ios-btn is-static">
-              <Mic size={22} strokeWidth={2} />
-              <span>spreken</span>
-            </div>
-          )}
+          <div
+            className={`nyx-ios-btn is-mic${micLive ? " is-on" : ""}${talkMode === "user_speaking" ? " is-speaking" : ""}`}
+            aria-label={
+              talkMode === "user_speaking"
+                ? "Jij spreekt"
+                : talkMode === "processing" || talkMode === "idle"
+                  ? "Nyx luistert"
+                  : "Mic"
+            }
+          >
+            <Mic size={22} strokeWidth={2} />
+            <span>
+              {talkMode === "user_speaking"
+                ? "jij"
+                : talkMode === "nyx_speaking"
+                  ? "nyx"
+                  : talkMode === "processing"
+                    ? "wacht"
+                    : phase === "connected"
+                      ? "live"
+                      : "mic"}
+            </span>
+          </div>
         </div>
 
         <button

@@ -60,3 +60,32 @@ export async function playRandomListeningCue(): Promise<void> {
 export function startListeningCue(): void {
   void playRandomListeningCue();
 }
+
+/** Play listening cues on an interval while Nyx is "on the line" listening. */
+export function startListeningCueLoop(everyMs = 4500): () => void {
+  let active = true;
+  let timer: number | null = null;
+
+  const schedule = () => {
+    if (!active) return;
+    const jitter = Math.floor(Math.random() * 1200);
+    timer = window.setTimeout(() => {
+      if (!active) return;
+      void playRandomListeningCue().finally(() => {
+        schedule();
+      });
+    }, everyMs + jitter);
+  };
+
+  // First cue shortly after arming listen mode.
+  timer = window.setTimeout(() => {
+    if (!active) return;
+    void playRandomListeningCue().finally(() => schedule());
+  }, 700);
+
+  return () => {
+    active = false;
+    if (timer != null) window.clearTimeout(timer);
+    timer = null;
+  };
+}
