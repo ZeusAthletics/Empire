@@ -540,15 +540,13 @@ a.card { text-decoration: none; color: inherit; display: block; }
   height: 100%;
   object-fit: cover;
   object-position: 50% 18%;
-  transform: scale(1.08);
-  filter: blur(18px) saturate(1.05);
   pointer-events: none;
 }
 .nyx-ios-call-veil {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(8, 6, 5, 0.35) 0%, rgba(8, 6, 5, 0.2) 35%, rgba(8, 6, 5, 0.72) 70%, rgba(8, 6, 5, 0.92) 100%);
+    linear-gradient(180deg, rgba(8, 6, 5, 0.22) 0%, rgba(8, 6, 5, 0.08) 40%, rgba(8, 6, 5, 0.45) 72%, rgba(8, 6, 5, 0.78) 100%);
   pointer-events: none;
 }
 .nyx-ios-call-top {
