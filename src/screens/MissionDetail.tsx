@@ -121,22 +121,30 @@ export function MissionDetail({ mission }: { mission: PublicMission }) {
       </header>
 
       <div className="section" style={{ marginTop: 0 }}>
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ height: 104, position: "relative" }}>
+        <button
+          type="button"
+          className="mission-nyx-banner"
+          onClick={openNyx}
+          aria-label="Open chat met Nyx"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/nyx-mission-header.jpg" alt="Nyx" />
+          <span className="mission-nyx-banner-fade" aria-hidden="true" />
+          <span className="mission-nyx-banner-label">
+            <span className="eyebrow">Nyx</span>
+          </span>
+        </button>
+
+        <div className="card" style={{ padding: 0, overflow: "hidden", marginTop: 10 }}>
+          <div className="mission-cover">
             <Plate
               kind={missionPlate(mission.kind)}
               className="fill"
               src={mission.coverSrc ?? undefined}
               approved={mission.coverApproved}
             />
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: "linear-gradient(180deg,transparent,rgba(11,9,7,.9))",
-              }}
-            />
-            <div style={{ position: "absolute", left: 13, bottom: 10, right: 13 }}>
+            <div className="mission-cover-fade" aria-hidden="true" />
+            <div className="mission-cover-copy">
               <span className="eyebrow">
                 {KIND_LABEL[mission.kind]} · {TRACK_LABEL[mission.track]}
               </span>
