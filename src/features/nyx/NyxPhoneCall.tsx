@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Mic, PhoneOff } from "lucide-react";
+import { Mic, PhoneOff, Volume2 } from "lucide-react";
 import { playRandomWelcome, startListeningCue } from "@/features/nyx/phoneSounds";
 
 type CallPhase = "dialing" | "ringing" | "connected" | "missed" | "ended";
@@ -43,6 +43,12 @@ function playBase64Mp3(base64: string): Promise<void> {
   });
 }
 
+function formatElapsed(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export function NyxPhoneCall({
   intimateActive,
   onClose,
@@ -56,12 +62,14 @@ export function NyxPhoneCall({
   const [holding, setHolding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [captions, setCaptions] = useState<Caption[]>([]);
-  const [statusLine, setStatusLine] = useState("Verbinden…");
+  const [statusLine, setStatusLine] = useState("bellen…");
+  const [elapsed, setElapsed] = useState(0);
   const callIdRef = useRef<string | null>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const closedRef = useRef(false);
+  const connectedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     void startCall();
@@ -72,6 +80,17 @@ export function NyxPhoneCall({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (phase !== "connected") return;
+    connectedAtRef.current = Date.now();
+    const tick = window.setInterval(() => {
+      const start = connectedAtRef.current;
+      if (!start) return;
+      setElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+    return () => window.clearInterval(tick);
+  }, [phase]);
+
   function stopMic() {
     recorderRef.current?.stop();
     recorderRef.current = null;
@@ -81,7 +100,7 @@ export function NyxPhoneCall({
 
   async function startCall() {
     setPhase("dialing");
-    setStatusLine("Bellen…");
+    setStatusLine("bellen…");
     try {
       const response = await fetch("/api/nyx/phone/dial", { method: "POST" });
       const data = (await response.json()) as {
@@ -96,18 +115,18 @@ export function NyxPhoneCall({
       if (!response.ok || !data.ok) {
         toast(data.error ?? "Bellen mislukt.");
         setPhase("missed");
-        setStatusLine("Geen verbinding");
+        setStatusLine("geen verbinding");
         return;
       }
 
       setPhase("ringing");
-      setStatusLine("Belt…");
+      setStatusLine("belt…");
       await playRings(data.canAnswer ? 3 : 4);
       if (closedRef.current) return;
 
       if (!data.canAnswer || !data.callId) {
         setPhase("missed");
-        setStatusLine("Geen gehoor");
+        setStatusLine("geen gehoor");
         toast(
           data.creditLevel === "empty"
             ? "Nyx neemt niet op — stemtegoed is op of ELEVENLABS_API_KEY ontbreekt op Vercel."
@@ -118,9 +137,8 @@ export function NyxPhoneCall({
 
       callIdRef.current = data.callId;
       setPhase("connected");
-      setStatusLine(data.creditLevel === "low" ? "In gesprek · ze moet zo door" : "In gesprek");
+      setStatusLine(data.creditLevel === "low" ? "ze moet zo door" : "verbonden");
 
-      // Always start with a local welcomeN.mp3, then optional low-credit TTS wrap-up.
       await playRandomWelcome().catch(() => undefined);
       if (closedRef.current) return;
 
@@ -133,7 +151,7 @@ export function NyxPhoneCall({
     } catch {
       if (!closedRef.current) {
         setPhase("missed");
-        setStatusLine("Geen verbinding");
+        setStatusLine("geen verbinding");
         toast("Bellen mislukt.");
       }
     }
@@ -143,7 +161,7 @@ export function NyxPhoneCall({
     const callId = callIdRef.current;
     stopMic();
     setPhase("ended");
-    setStatusLine("Opgehangen");
+    setStatusLine("opgehangen");
     if (callId) {
       await fetch("/api/nyx/phone/hangup", {
         method: "POST",
@@ -176,7 +194,7 @@ export function NyxPhoneCall({
       };
       recorder.start();
       setHolding(true);
-      setStatusLine("Luisteren…");
+      setStatusLine("jij spreekt…");
     } catch {
       toast("Microfoon niet beschikbaar.");
     }
@@ -187,7 +205,7 @@ export function NyxPhoneCall({
     const recorder = recorderRef.current;
     setHolding(false);
     setBusy(true);
-    setStatusLine("Nyx denkt na…");
+    setStatusLine("nyx luistert…");
 
     const blob: Blob = await new Promise((resolve) => {
       recorder.onstop = () => {
@@ -200,11 +218,10 @@ export function NyxPhoneCall({
     const callId = callIdRef.current;
     if (!callId || blob.size < 200) {
       setBusy(false);
-      setStatusLine("In gesprek");
+      setStatusLine("verbonden");
       return;
     }
 
-    // Local listeningN.mp3 while STT + reply + TTS run.
     startListeningCue();
 
     try {
@@ -224,72 +241,90 @@ export function NyxPhoneCall({
       if (!response.ok || !data.ok || !data.audioBase64) {
         if (data.creditEmpty) {
           setPhase("missed");
-          setStatusLine("Geen gehoor");
+          setStatusLine("geen gehoor");
           toast(data.error ?? "Stemtegoed is op.");
           callIdRef.current = null;
           return;
         }
         toast(data.error ?? "Beurt mislukt.");
-        setStatusLine("In gesprek");
+        setStatusLine("verbonden");
         return;
       }
 
       setCaptions((prev) => [
-        ...prev.slice(-6),
+        ...prev.slice(-4),
         ...(data.userText ? [{ role: "me" as const, text: data.userText }] : []),
         ...(data.nyxText ? [{ role: "nyx" as const, text: data.nyxText }] : []),
       ]);
-      setStatusLine("Nyx spreekt…");
+      setStatusLine("nyx spreekt…");
       await playBase64Mp3(data.audioBase64).catch(() => undefined);
-      setStatusLine("In gesprek");
+      setStatusLine("verbonden");
     } catch {
       toast("Verbinding verbroken.");
-      setStatusLine("In gesprek");
+      setStatusLine("verbonden");
     } finally {
       setBusy(false);
     }
   }
 
+  const headerStatus =
+    phase === "connected" ? formatElapsed(elapsed) : statusLine;
+
+  const lastCaption = captions[captions.length - 1];
+
   return (
-    <div className="nyx-phone-overlay" role="dialog" aria-label="Telefoongesprek met Nyx">
-      <div className="nyx-phone-card">
-        <img src="/nyx.jpg" alt="" className="nyx-phone-avatar" />
-        <h3 className="display d-md" style={{ margin: "10px 0 4px", display: "flex", alignItems: "center", gap: 8 }}>
+    <div className="nyx-ios-call" role="dialog" aria-label="Telefoongesprek met Nyx">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/nyx-phone-bg.jpg" alt="" className="nyx-ios-call-bg" />
+      <div className="nyx-ios-call-veil" aria-hidden="true" />
+
+      <div className="nyx-ios-call-top">
+        <p className="nyx-ios-call-status">{headerStatus}</p>
+        <h2 className="nyx-ios-call-name">
           Nyx
-          {intimateActive ? (
-            <span aria-label="Spicy mode" title="Spicy mode">
-              🔥
-            </span>
-          ) : null}
-        </h3>
-        <p className="eyebrow muted" style={{ margin: 0 }}>
-          {statusLine}
-        </p>
-
-        {captions.length ? (
-          <div className="nyx-phone-captions">
-            {captions.slice(-4).map((line, index) => (
-              <p key={`${line.role}-${index}`} className={line.role === "me" ? "me" : "nyx"}>
-                <span className="eyebrow">{line.role === "me" ? "U" : "Nyx"}</span>
-                {line.text}
-              </p>
-            ))}
-          </div>
+          {intimateActive ? <span aria-label="Spicy mode">🔥</span> : null}
+        </h2>
+        {phase === "connected" && statusLine !== "verbonden" ? (
+          <p className="nyx-ios-call-sub">{statusLine}</p>
+        ) : phase !== "connected" ? (
+          <p className="nyx-ios-call-sub">{statusLine}</p>
         ) : (
-          <p className="body muted" style={{ marginTop: 16, textAlign: "center" }}>
-            {phase === "ringing" || phase === "dialing"
-              ? "Even geduld…"
-              : phase === "missed"
-                ? "Ze neemt nu niet op."
-                : "Houd de microfoon in om te praten."}
-          </p>
+          <p className="nyx-ios-call-sub">Empire</p>
         )}
+      </div>
 
-        <div className="nyx-phone-actions">
+      <div className="nyx-ios-call-avatar-wrap">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/nyx.jpg" alt="Nyx" className="nyx-ios-call-avatar" />
+      </div>
+
+      {lastCaption ? (
+        <div className={`nyx-ios-call-caption ${lastCaption.role}`}>
+          <span>{lastCaption.role === "me" ? "Jij" : "Nyx"}</span>
+          <p>{lastCaption.text}</p>
+        </div>
+      ) : (
+        <div className="nyx-ios-call-caption ghost">
+          <p>
+            {phase === "connected"
+              ? "Houd de microfoon in om te praten"
+              : phase === "missed"
+                ? "Ze neemt nu niet op"
+                : "Even geduld…"}
+          </p>
+        </div>
+      )}
+
+      <div className="nyx-ios-call-controls">
+        <div className="nyx-ios-call-row">
+          <div className={`nyx-ios-btn is-static${holding ? " is-on" : ""}`}>
+            <Volume2 size={22} strokeWidth={2} />
+            <span>audio</span>
+          </div>
           {phase === "connected" ? (
             <button
               type="button"
-              className={`nyx-phone-ptt${holding ? " is-hold" : ""}`}
+              className={`nyx-ios-btn is-mic${holding ? " is-on" : ""}`}
               disabled={busy}
               aria-label={holding ? "Laat los om te versturen" : "Houd in om te praten"}
               onPointerDown={(event) => {
@@ -304,15 +339,28 @@ export function NyxPhoneCall({
                 if (holding) void endHold();
               }}
             >
-              <Mic size={22} strokeWidth={2.2} />
-              {holding ? "Loslaten" : busy ? "Wachten…" : "Inhouden"}
+              <Mic size={22} strokeWidth={2} />
+              <span>{holding ? "loslaten" : busy ? "wacht…" : "spreken"}</span>
             </button>
-          ) : null}
-          <button type="button" className="nyx-phone-hangup" onClick={() => void hangup()} aria-label="Ophangen">
-            <PhoneOff size={18} strokeWidth={2.2} />
-            {phase === "missed" || phase === "ended" ? "Sluiten" : "Ophangen"}
-          </button>
+          ) : (
+            <div className="nyx-ios-btn is-static">
+              <Mic size={22} strokeWidth={2} />
+              <span>spreken</span>
+            </div>
+          )}
         </div>
+
+        <button
+          type="button"
+          className="nyx-ios-hangup"
+          onClick={() => void hangup()}
+          aria-label={phase === "missed" || phase === "ended" ? "Sluiten" : "Ophangen"}
+        >
+          <PhoneOff size={28} strokeWidth={2.2} />
+        </button>
+        <span className="nyx-ios-hangup-label">
+          {phase === "missed" || phase === "ended" ? "sluiten" : "ophangen"}
+        </span>
       </div>
     </div>
   );
