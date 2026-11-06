@@ -440,6 +440,34 @@ a.card { text-decoration: none; color: inherit; display: block; }
   border-radius: var(--r-md);
 }
 .sheet-close:active { color: var(--gold); }
+.nyx-sheet-top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 0 0 auto;
+  padding: 2px 52px 10px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-raised);
+}
+.nyx-sheet-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px var(--gold);
+  flex: 0 0 auto;
+}
+.nyx-sheet-name {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.nyx-sheet-flame {
+  font-size: 18px;
+  line-height: 1;
+}
 .sheet .sheet-body {
   flex: 1 1 auto;
   min-height: 0;

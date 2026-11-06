@@ -399,32 +399,18 @@ export function NyxSheet() {
 
   return (
     <>
+      <div className="nyx-sheet-top">
+        <img src="/nyx.jpg" alt="" className="nyx-sheet-avatar" />
+        <h2 className="display d-md nyx-sheet-name">
+          Nyx
+          {talk?.intimateActive ? (
+            <span className="nyx-sheet-flame" aria-label="Spicy mode" title="Spicy mode">
+              🔥
+            </span>
+          ) : null}
+        </h2>
+      </div>
       <div className="sheet-body">
-        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 12, paddingRight: 36 }}>
-          <img
-            src="/nyx.jpg"
-            alt=""
-            style={{
-              width: 46,
-              height: 46,
-              borderRadius: "50%",
-              objectFit: "cover",
-              boxShadow: "0 0 0 2px var(--gold)",
-            }}
-          />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 className="display d-md" style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-              Nyx
-              {talk?.intimateActive ? (
-                <span aria-label="Spicy mode" title="Spicy mode" style={{ fontSize: 18, lineHeight: 1 }}>
-                  🔥
-                </span>
-              ) : null}
-            </h2>
-            <span className="eyebrow muted">Mission control · altijd aan je zijde</span>
-          </div>
-        </div>
-
         <div ref={logRef} className="stack" style={{ gap: 8, marginBottom: 12 }}>
           {(talk?.messages ?? []).map((message) => (
             <div
