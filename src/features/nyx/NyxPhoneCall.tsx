@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, PhoneOff, Volume2 } from "lucide-react";
+import { playPhoneBase64Mp3, stopPhoneAudio } from "@/features/nyx/phoneAudio";
 import { playRandomWelcome, startListeningCue, startListeningCueLoop } from "@/features/nyx/phoneSounds";
 import { startEnergyVad, type VadController } from "@/features/nyx/phoneVad";
 
@@ -34,15 +35,6 @@ async function playRings(times = 3): Promise<void> {
   }
   await new Promise((resolve) => window.setTimeout(resolve, times * 1600 + 200));
   await ctx.close().catch(() => undefined);
-}
-
-function playBase64Mp3(base64: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const audio = new Audio(`data:audio/mpeg;base64,${base64}`);
-    audio.onended = () => resolve();
-    audio.onerror = () => reject(new Error("Audio afspelen mislukt."));
-    void audio.play().catch(reject);
-  });
 }
 
 function formatElapsed(seconds: number) {
@@ -111,6 +103,7 @@ export function NyxPhoneCall({
   function stopListeningLoop() {
     listenLoopStopRef.current?.();
     listenLoopStopRef.current = null;
+    stopPhoneAudio();
   }
 
   function startListeningLoop() {
@@ -226,8 +219,8 @@ export function NyxPhoneCall({
       return;
     }
 
-    // Keep soft listening cues while the model answers.
-    startListeningLoop();
+    // One soft cue while waiting — not a loop (loop was drowning / racing Nyx TTS).
+    startListeningCue();
 
     try {
       const body = new FormData();
@@ -255,6 +248,7 @@ export function NyxPhoneCall({
         toast(data.error ?? "Beurt mislukt.");
         setMode("idle");
         setStatusLine("nyx luistert…");
+        startListeningLoop();
         return;
       }
 
@@ -266,7 +260,11 @@ export function NyxPhoneCall({
       ]);
       setMode("nyx_speaking");
       setStatusLine("nyx spreekt…");
-      await playBase64Mp3(data.audioBase64).catch(() => undefined);
+      try {
+        await playPhoneBase64Mp3(data.audioBase64);
+      } catch {
+        toast("Nyx’ stem kon niet afspelen — check geluid / browser-autoplay.");
+      }
       if (closedRef.current || phaseRef.current !== "connected") return;
       setMode("idle");
       setStatusLine("nyx luistert…");
@@ -330,7 +328,7 @@ export function NyxPhoneCall({
         setCaptions([{ role: "nyx", text: data.openerText }]);
       }
       if (data.openerAudioBase64) {
-        await playBase64Mp3(data.openerAudioBase64).catch(() => undefined);
+        await playPhoneBase64Mp3(data.openerAudioBase64).catch(() => undefined);
       }
       if (closedRef.current) return;
 

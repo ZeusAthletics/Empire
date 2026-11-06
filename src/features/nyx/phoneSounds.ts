@@ -1,3 +1,5 @@
+import { playPhoneUrl, stopPhoneAudio } from "@/features/nyx/phoneAudio";
+
 type PhoneSoundCatalog = {
   welcome: string[];
   listening: string[];
@@ -31,21 +33,12 @@ function pickRandom(urls: string[]): string | null {
   return urls[Math.floor(Math.random() * urls.length)] ?? null;
 }
 
-export function playSoundUrl(url: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const audio = new Audio(url);
-    audio.onended = () => resolve();
-    audio.onerror = () => reject(new Error("Audio afspelen mislukt."));
-    void audio.play().catch(reject);
-  });
-}
-
 /** Random welcomeN.mp3 after pickup. */
 export async function playRandomWelcome(): Promise<void> {
   const catalog = await getCatalog();
   const url = pickRandom(catalog.welcome);
   if (!url) return;
-  await playSoundUrl(url);
+  await playPhoneUrl(url);
 }
 
 /** Random listeningN.mp3 while the turn is processing. */
@@ -53,7 +46,7 @@ export async function playRandomListeningCue(): Promise<void> {
   const catalog = await getCatalog();
   const url = pickRandom(catalog.listening);
   if (!url) return;
-  await playSoundUrl(url).catch(() => undefined);
+  await playPhoneUrl(url).catch(() => undefined);
 }
 
 /** Fire-and-forget listening cue (does not block the API turn). */
@@ -62,13 +55,13 @@ export function startListeningCue(): void {
 }
 
 /** Play listening cues on an interval while Nyx is "on the line" listening. */
-export function startListeningCueLoop(everyMs = 4500): () => void {
+export function startListeningCueLoop(everyMs = 5200): () => void {
   let active = true;
   let timer: number | null = null;
 
   const schedule = () => {
     if (!active) return;
-    const jitter = Math.floor(Math.random() * 1200);
+    const jitter = Math.floor(Math.random() * 1400);
     timer = window.setTimeout(() => {
       if (!active) return;
       void playRandomListeningCue().finally(() => {
@@ -81,11 +74,12 @@ export function startListeningCueLoop(everyMs = 4500): () => void {
   timer = window.setTimeout(() => {
     if (!active) return;
     void playRandomListeningCue().finally(() => schedule());
-  }, 700);
+  }, 900);
 
   return () => {
     active = false;
     if (timer != null) window.clearTimeout(timer);
     timer = null;
+    stopPhoneAudio();
   };
 }

@@ -112,6 +112,7 @@ export async function synthesizeElevenLabsSpeech(text: string): Promise<Uint8Arr
 
   const voiceId = getElevenLabsVoiceId();
   const modelId = getElevenLabsModel();
+  // Flash models are picky — keep settings minimal for reliable audio.
   const response = await fetch(`${ELEVEN_BASE}/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
     method: "POST",
     headers: {
@@ -123,10 +124,8 @@ export async function synthesizeElevenLabsSpeech(text: string): Promise<Uint8Arr
       text: trimmed,
       model_id: modelId,
       voice_settings: {
-        stability: 0.45,
+        stability: 0.4,
         similarity_boost: 0.75,
-        style: 0.35,
-        use_speaker_boost: true,
       },
     }),
   });
