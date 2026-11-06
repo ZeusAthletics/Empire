@@ -3,6 +3,27 @@ import type { ElevenCreditLevel } from "@/server/ai/client/elevenlabs";
 
 export type PhoneCallStatus = "ACTIVE" | "ENDED" | "MISSED" | "QUOTA";
 
+function phoneDbError(error: unknown, fallback: string): Error {
+  const code =
+    typeof error === "object" && error && "code" in error ? String((error as { code?: string }).code ?? "") : "";
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error && "message" in error
+        ? String((error as { message?: string }).message ?? "")
+        : String(error ?? "");
+  if (
+    code === "42P01" ||
+    code === "PGRST205" ||
+    /nyx_phone_calls|nyx_phone_turns|does not exist|schema cache/i.test(message)
+  ) {
+    return new Error(
+      "Telefoon-tabellen ontbreken in de database. Voer migratie 20260926120000_nyx_phone_calls.sql uit in Supabase.",
+    );
+  }
+  return new Error(message || fallback);
+}
+
 export type PhoneCall = {
   id: string;
   playerId: string;
@@ -38,7 +59,7 @@ export async function createPhoneCall(input: {
     } as never)
     .select("id, player_id, conversation_id, status, credit_level, started_at, ended_at")
     .single();
-  if (error || !data) throw error ?? new Error("Telefoongesprek kon niet starten.");
+  if (error || !data) throw phoneDbError(error, "Telefoongesprek kon niet starten.");
   return mapCall(data as Record<string, unknown>);
 }
 
@@ -50,7 +71,7 @@ export async function getPhoneCall(playerId: string, callId: string): Promise<Ph
     .eq("id", callId)
     .eq("player_id", playerId)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw phoneDbError(error, "Gesprek kon niet worden geladen.");
   return data ? mapCall(data as Record<string, unknown>) : null;
 }
 
@@ -68,7 +89,7 @@ export async function endPhoneCall(
     } as never)
     .eq("id", callId)
     .eq("player_id", playerId);
-  if (error) throw error;
+  if (error) throw phoneDbError(error, "Gesprek kon niet worden afgesloten.");
 }
 
 export async function appendPhoneTurn(input: {
@@ -88,7 +109,7 @@ export async function appendPhoneTurn(input: {
     } as never)
     .select("id, call_id, role, content, created_at")
     .single();
-  if (error || !data) throw error ?? new Error("Call-beurt kon niet worden bewaard.");
+  if (error || !data) throw phoneDbError(error, "Call-beurt kon niet worden bewaard.");
   return mapTurn(data as Record<string, unknown>);
 }
 
@@ -99,7 +120,7 @@ export async function listPhoneTurns(callId: string): Promise<PhoneTurn[]> {
     .select("id, call_id, role, content, created_at")
     .eq("call_id", callId)
     .order("created_at", { ascending: true });
-  if (error) throw error;
+  if (error) throw phoneDbError(error, "Call-beurten konden niet worden geladen.");
   return (data ?? []).map((row) => mapTurn(row as Record<string, unknown>));
 }
 

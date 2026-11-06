@@ -108,7 +108,11 @@ export function NyxPhoneCall({
       if (!data.canAnswer || !data.callId) {
         setPhase("missed");
         setStatusLine("Geen gehoor");
-        toast("Nyx neemt niet op — stemtegoed is op.");
+        toast(
+          data.creditLevel === "empty"
+            ? "Nyx neemt niet op — stemtegoed is op of ELEVENLABS_API_KEY ontbreekt op Vercel."
+            : "Nyx neemt niet op.",
+        );
         return;
       }
 

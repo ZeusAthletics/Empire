@@ -78,9 +78,17 @@ export async function getElevenLabsCreditStatus(force = false): Promise<ElevenCr
   const data = (await response.json()) as {
     character_count?: number;
     character_limit?: number;
+    characterCount?: number;
+    characterLimit?: number;
   };
-  const used = Number(data.character_count ?? 0);
-  const limit = Number(data.character_limit ?? 0);
+  const used = Number(data.character_count ?? data.characterCount ?? 0);
+  const limit = Number(data.character_limit ?? data.characterLimit ?? 0);
+  // If ElevenLabs returns an unexpected payload, fail closed (no pickup).
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) {
+    const status = mapCredits(1, 1);
+    creditCache = { at: Date.now(), status };
+    return status;
+  }
   const status = mapCredits(used, limit);
   creditCache = { at: Date.now(), status };
   return status;
