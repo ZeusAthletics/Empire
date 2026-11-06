@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, PhoneOff } from "lucide-react";
+import { playRandomWelcome, startListeningCue } from "@/features/nyx/phoneSounds";
 
 type CallPhase = "dialing" | "ringing" | "connected" | "missed" | "ended";
 
@@ -115,6 +116,10 @@ export function NyxPhoneCall({
       setPhase("connected");
       setStatusLine(data.creditLevel === "low" ? "In gesprek · ze moet zo door" : "In gesprek");
 
+      // Always start with a local welcomeN.mp3, then optional low-credit TTS wrap-up.
+      await playRandomWelcome().catch(() => undefined);
+      if (closedRef.current) return;
+
       if (data.openerText) {
         setCaptions([{ role: "nyx", text: data.openerText }]);
       }
@@ -194,6 +199,9 @@ export function NyxPhoneCall({
       setStatusLine("In gesprek");
       return;
     }
+
+    // Local listeningN.mp3 while STT + reply + TTS run.
+    startListeningCue();
 
     try {
       const body = new FormData();
