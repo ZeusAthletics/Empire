@@ -1,4 +1,4 @@
-import { playPhoneUrl, stopPhoneAudio } from "@/features/nyx/phoneAudio";
+import { playPhoneUrl } from "@/features/nyx/phoneAudio";
 
 type PhoneSoundCatalog = {
   welcome: string[];
@@ -54,32 +54,19 @@ export function startListeningCue(): void {
   void playRandomListeningCue();
 }
 
-/** Play listening cues on an interval while Nyx is "on the line" listening. */
-export function startListeningCueLoop(everyMs = 5200): () => void {
-  let active = true;
-  let timer: number | null = null;
-
-  const schedule = () => {
-    if (!active) return;
-    const jitter = Math.floor(Math.random() * 1400);
-    timer = window.setTimeout(() => {
-      if (!active) return;
-      void playRandomListeningCue().finally(() => {
-        schedule();
-      });
-    }, everyMs + jitter);
-  };
-
-  // First cue shortly after arming listen mode.
-  timer = window.setTimeout(() => {
-    if (!active) return;
-    void playRandomListeningCue().finally(() => schedule());
-  }, 900);
+/**
+ * One soft "mm" after Hardwig has been talking for a bit — not on short lines.
+ * Returns a cancel fn (call on speech end / hangup).
+ */
+export function armLongSpeechListeningCue(afterMs = 3000): () => void {
+  let cancelled = false;
+  const timer = window.setTimeout(() => {
+    if (cancelled) return;
+    void playRandomListeningCue();
+  }, afterMs);
 
   return () => {
-    active = false;
-    if (timer != null) window.clearTimeout(timer);
-    timer = null;
-    stopPhoneAudio();
+    cancelled = true;
+    window.clearTimeout(timer);
   };
 }

@@ -67,3 +67,25 @@ export async function callOpenAIResponses(input: OpenAICallInput): Promise<OpenA
     structuredOutputValid: input.jsonSchema ? Boolean(text) : null,
   };
 }
+
+/** Stream output text deltas (phone sentence-flush). No JSON schema. */
+export async function* streamOpenAIResponsesText(input: {
+  model: string;
+  input: string;
+  reasoningEffort?: ReasoningEffort;
+}): AsyncGenerator<string> {
+  const stream = await getClient().responses.create({
+    model: input.model,
+    input: input.input,
+    stream: true,
+    ...(input.reasoningEffort && input.reasoningEffort !== "none"
+      ? { reasoning: { effort: input.reasoningEffort } }
+      : {}),
+  });
+
+  for await (const event of stream) {
+    if (event.type === "response.output_text.delta" && "delta" in event && typeof event.delta === "string") {
+      yield event.delta;
+    }
+  }
+}

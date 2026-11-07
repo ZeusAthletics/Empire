@@ -58,3 +58,16 @@ export async function callXaiChat(input: XaiCallInput): Promise<XaiCallResult> {
     outputTokens: response.usage?.completion_tokens ?? 0,
   };
 }
+
+/** Token stream for phone TTS sentence-flush. */
+export async function* streamXaiChat(input: XaiCallInput): AsyncGenerator<string> {
+  const stream = await getClient().chat.completions.create({
+    model: input.model ?? getXaiModel(),
+    messages: input.messages,
+    stream: true,
+  });
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}

@@ -105,15 +105,18 @@ export class ElevenLabsQuotaError extends Error {
   }
 }
 
-/** Returns mp3 bytes for spoken text. */
-export async function synthesizeElevenLabsSpeech(text: string): Promise<Uint8Array> {
+async function postElevenLabsTts(text: string, streamPath: boolean): Promise<Uint8Array> {
   const trimmed = text.trim();
   if (!trimmed) throw new Error("Geen tekst om uit te spreken.");
 
   const voiceId = getElevenLabsVoiceId();
   const modelId = getElevenLabsModel();
+  const path = streamPath
+    ? `${ELEVEN_BASE}/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128`
+    : `${ELEVEN_BASE}/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+
   // Flash models are picky — keep settings minimal for reliable audio.
-  const response = await fetch(`${ELEVEN_BASE}/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+  const response = await fetch(path, {
     method: "POST",
     headers: {
       "xi-api-key": apiKey(),
@@ -140,8 +143,17 @@ export async function synthesizeElevenLabsSpeech(text: string): Promise<Uint8Arr
   }
 
   invalidateElevenLabsCreditCache();
-  const buffer = new Uint8Array(await response.arrayBuffer());
-  return buffer;
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+/** Returns mp3 bytes for spoken text. */
+export async function synthesizeElevenLabsSpeech(text: string): Promise<Uint8Array> {
+  return postElevenLabsTts(text, false);
+}
+
+/** Stream endpoint (still buffered to a full mp3) — lower TTFB on longer lines. */
+export async function synthesizeElevenLabsSpeechStream(text: string): Promise<Uint8Array> {
+  return postElevenLabsTts(text, true);
 }
 
 export function audioToBase64(bytes: Uint8Array): string {

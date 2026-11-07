@@ -8,9 +8,9 @@ export type VadController = {
 
 const SPEECH_THRESHOLD = 0.025;
 const SILENCE_THRESHOLD = 0.014;
-const SPEECH_START_MS = 160;
-const SILENCE_END_MS = 1100;
-const MIN_SPEECH_MS = 450;
+const SPEECH_START_MS = 140;
+const SILENCE_END_MS = 700;
+const MIN_SPEECH_MS = 380;
 const MAX_SPEECH_MS = 22_000;
 const POLL_MS = 50;
 

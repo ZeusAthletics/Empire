@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Link2, Paperclip, Phone, X } from "lucide-react";
 import { Tag } from "@/components/ui/Tag";
 import { useEmpireUI } from "@/components/empire-ui-context";
+import { unlockPhoneAudio } from "@/features/nyx/phoneAudio";
 import { NyxPhoneCall } from "@/features/nyx/NyxPhoneCall";
 import type { NyxTalkState } from "@/server/domain/nyx/types";
 
@@ -709,7 +710,11 @@ export function NyxSheet() {
             type="button"
             aria-label="Bel Nyx"
             disabled={pending || uploading || booting}
-            onClick={() => setPhoneOpen(true)}
+            onClick={() => {
+              // Must run in the tap gesture — unlocks iOS Safari for later TTS.
+              unlockPhoneAudio();
+              setPhoneOpen(true);
+            }}
           >
             <Phone size={18} strokeWidth={2.2} />
           </button>

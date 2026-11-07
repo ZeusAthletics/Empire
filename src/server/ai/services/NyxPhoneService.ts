@@ -5,16 +5,23 @@ import {
   elevenLabsConfigured,
   getElevenLabsCreditStatus,
   synthesizeElevenLabsSpeech,
+  synthesizeElevenLabsSpeechStream,
   type ElevenCreditLevel,
 } from "@/server/ai/client/elevenlabs";
-import { openaiConfigured } from "@/server/ai/client/openai";
-import { getXaiModel, xaiConfigured, callXaiChat } from "@/server/ai/client/xai";
+import { openaiConfigured, streamOpenAIResponsesText } from "@/server/ai/client/openai";
+import { getXaiModel, xaiConfigured, callXaiChat, streamXaiChat } from "@/server/ai/client/xai";
 import { transcribeAudioWithWhisper } from "@/server/ai/client/whisper";
 import { stripModelNames } from "@/server/ai/fallback/nyxReply";
 import { planNyxTask, runNyxTask } from "@/server/ai/orchestrator/NyxOrchestrator";
 import { buildNyxContext } from "@/server/ai/context/NyxContextBuilder";
+import { pullReadySentences } from "@/server/ai/phone/sentenceFlush";
 import { loadNyxCore } from "@/server/ai/prompts/nyx-core";
 import { writeNyxRun } from "@/server/ai/orchestrator/nyxRuns";
+import {
+  sanitizeNyxContextForOpenAI,
+  sanitizeOpenAITaskText,
+  sanitizePersonaCoreForOpenAI,
+} from "@/server/ai/safety/openaiPromptSanitizer";
 import {
   heuristicIntimateIntent,
   recentChatSuggestsIntimate,
@@ -43,6 +50,13 @@ import { recentPlayerChatTurns } from "@/server/domain/nyx/recentChat";
 import { featuredTalkContext, listDisplayedNyxConversationIds } from "@/server/domain/nyx/talkRepository";
 import { findPlayerById } from "@/server/domain/player/repository";
 import { formatPlayerLocalTime, formatPlayerLocalTimeLine } from "@/server/domain/player/localTime";
+
+export type PhoneTurnStreamEvent =
+  | { type: "user"; text: string }
+  | { type: "nyx_partial"; text: string }
+  | { type: "audio"; text: string; audioBase64: string }
+  | { type: "done"; nyxText: string; creditLevel: ElevenCreditLevel }
+  | { type: "error"; error: string; creditEmpty?: boolean };
 
 const PHONE_FALLBACK = "Ik hoor je — even kort vast. Zeg het nog eens.";
 
@@ -149,12 +163,12 @@ export async function dialNyxPhone(playerId: string): Promise<{
   };
 }
 
-async function producePhoneReply(input: {
+async function preparePhoneReply(input: {
   playerId: string;
   conversationId: string;
   userText: string;
   callTurns: string[];
-}): Promise<{ reply: string; runId: string | null }> {
+}) {
   const [ctx, recent, player, intimacyTier] = await Promise.all([
     featuredTalkContext(input.playerId),
     recentPlayerChatTurns(input.playerId),
@@ -181,6 +195,83 @@ async function producePhoneReply(input: {
   const spicy =
     heuristicIntimateIntent(input.userText) || recentChatSuggestsIntimate(recent);
   const useIntimate = intimacyTier === "TRUST" && (intimate.useIntimate || spicy);
+
+  return { ctx, recent, localLine, callBlock, intimacyTier, spicy, useIntimate };
+}
+
+async function* streamPhoneReplyText(input: {
+  playerId: string;
+  conversationId: string;
+  userText: string;
+  callTurns: string[];
+}): AsyncGenerator<string> {
+  const prepared = await preparePhoneReply(input);
+  const { ctx, recent, localLine, callBlock, intimacyTier, spicy, useIntimate } = prepared;
+
+  if (useIntimate && xaiConfigured()) {
+    const context = await buildNyxContext(input.playerId, "INTIMATE_CHAT", input.userText.trim());
+    const { core, version } = await loadNyxCore();
+    const prompt = `${core}\n\n${version}\nTaak: INTIMATE_CHAT (telefoon)\nContext: ${JSON.stringify(context)}\n\n${localLine ? `${localLine}\n` : ""}Recente chat:\n${recent.join("\n")}${callBlock}\nHardwig (telefoon): ${input.userText}\n\n${NYX_INTIMATE_CHAT_GUIDE}\n\n${NYX_PHONE_CHAT_GUIDE}`;
+    try {
+      for await (const delta of streamXaiChat({
+        model: getXaiModel(),
+        messages: [
+          { role: "system", content: prompt },
+          { role: "user", content: input.userText },
+        ],
+      })) {
+        yield delta;
+      }
+      return;
+    } catch {
+      yield PHONE_FALLBACK;
+      return;
+    }
+  }
+
+  if (spicy && intimacyTier !== "TRUST") {
+    yield softRedirectBelowTrust();
+    return;
+  }
+
+  if (openaiConfigured()) {
+    const decision = planNyxTask({ task: "CASUAL_CHAT", text: input.userText }).decision;
+    const context = await buildNyxContext(input.playerId, "CASUAL_CHAT", input.userText.trim());
+    const { core, version } = await loadNyxCore();
+    const safeCore = sanitizePersonaCoreForOpenAI(core);
+    const safeContext = sanitizeNyxContextForOpenAI(context);
+    const taskText = sanitizeOpenAITaskText(
+      "CASUAL_CHAT",
+      `${input.userText}\n\n${localLine ? `${localLine}\n` : ""}Recente chat:\n${recent.join("\n")}${callBlock}${formatActiveMissionsForPrompt(ctx.activeMissions)}\n\n${NYX_PHONE_CHAT_GUIDE}`,
+    );
+    const prompt = `${safeCore}\n\n${version}\nTaak: CASUAL_CHAT (telefoon)\nModel: ${decision.model}\nContext: ${JSON.stringify(safeContext)}\n\n${taskText}`;
+    try {
+      // Phone: no reasoning delay — first audio chunk as soon as a sentence lands.
+      for await (const delta of streamOpenAIResponsesText({
+        model: decision.model,
+        input: prompt,
+        reasoningEffort: "none",
+      })) {
+        yield delta;
+      }
+      return;
+    } catch {
+      yield PHONE_FALLBACK;
+      return;
+    }
+  }
+
+  yield PHONE_FALLBACK;
+}
+
+async function producePhoneReply(input: {
+  playerId: string;
+  conversationId: string;
+  userText: string;
+  callTurns: string[];
+}): Promise<{ reply: string; runId: string | null }> {
+  const prepared = await preparePhoneReply(input);
+  const { ctx, recent, localLine, callBlock, intimacyTier, spicy, useIntimate } = prepared;
 
   if (useIntimate && xaiConfigured()) {
     const requestId = randomUUID();
@@ -236,6 +327,11 @@ async function producePhoneReply(input: {
   }
 
   return { reply: PHONE_FALLBACK, runId: null };
+}
+
+async function speakPhoneSentence(text: string): Promise<string> {
+  const audio = await synthesizeElevenLabsSpeechStream(text).catch(() => synthesizeElevenLabsSpeech(text));
+  return audioToBase64(audio);
 }
 
 export async function handleNyxPhoneTurn(input: {
@@ -319,6 +415,136 @@ export async function handleNyxPhoneTurn(input: {
       error: error instanceof Error ? error.message : "Stem kon niet worden gemaakt.",
     };
   }
+}
+
+/** Stream STT → LLM tokens → per-sentence ElevenLabs audio (NDJSON to the client). */
+export async function* handleNyxPhoneTurnStream(input: {
+  playerId: string;
+  callId: string;
+  audioBytes: Uint8Array;
+  filename?: string;
+  mimeType?: string;
+}): AsyncGenerator<PhoneTurnStreamEvent> {
+  const call = await getPhoneCall(input.playerId, input.callId);
+  if (!call || call.status !== "ACTIVE") {
+    yield { type: "error", error: "Dit gesprek is niet actief." };
+    return;
+  }
+
+  const credits = await getElevenLabsCreditStatus().catch(() => null);
+  if (!credits?.canSpeak) {
+    await endPhoneCall(input.playerId, call.id, "QUOTA");
+    yield {
+      type: "error",
+      error: "Nyx kan je nu niet verstaan — stemtegoed is op.",
+      creditEmpty: true,
+    };
+    return;
+  }
+
+  let userText = "";
+  try {
+    userText = await transcribeAudioWithWhisper({
+      bytes: input.audioBytes,
+      filename: input.filename,
+      mimeType: input.mimeType,
+    });
+  } catch (error) {
+    yield {
+      type: "error",
+      error: error instanceof Error ? error.message : "Spraak kon niet worden verstaan.",
+    };
+    return;
+  }
+
+  yield { type: "user", text: userText };
+
+  await appendPhoneTurn({
+    callId: call.id,
+    playerId: input.playerId,
+    role: "USER",
+    content: userText,
+  });
+
+  const turns = await listPhoneTurns(call.id);
+  const conversationId = call.conversationId ?? (await listDisplayedNyxConversationIds(input.playerId)).primaryId;
+
+  let buffer = "";
+  let fullText = "";
+  let spokeAny = false;
+
+  try {
+    for await (const delta of streamPhoneReplyText({
+      playerId: input.playerId,
+      conversationId,
+      userText,
+      callTurns: formatPhoneTurnsForPrompt(turns),
+    })) {
+      buffer += delta;
+      const { sentences, rest } = pullReadySentences(buffer, { final: false });
+      buffer = rest;
+      for (const sentence of sentences) {
+        const clean = scrubPhoneSpeech(sentence);
+        if (!clean) continue;
+        fullText = fullText ? `${fullText} ${clean}` : clean;
+        yield { type: "nyx_partial", text: fullText };
+        const audioBase64 = await speakPhoneSentence(clean);
+        spokeAny = true;
+        yield { type: "audio", text: clean, audioBase64 };
+      }
+    }
+
+    const { sentences: tail } = pullReadySentences(buffer, { final: true });
+    for (const sentence of tail) {
+      const clean = scrubPhoneSpeech(sentence);
+      if (!clean) continue;
+      fullText = fullText ? `${fullText} ${clean}` : clean;
+      yield { type: "nyx_partial", text: fullText };
+      const audioBase64 = await speakPhoneSentence(clean);
+      spokeAny = true;
+      yield { type: "audio", text: clean, audioBase64 };
+    }
+  } catch (error) {
+    if (error instanceof ElevenLabsQuotaError) {
+      await endPhoneCall(input.playerId, call.id, "QUOTA");
+      yield { type: "error", error: "Stemtegoed is op — gesprek beëindigd.", creditEmpty: true };
+      return;
+    }
+    yield {
+      type: "error",
+      error: error instanceof Error ? error.message : "Stem kon niet worden gemaakt.",
+    };
+    return;
+  }
+
+  const nyxText = scrubPhoneSpeech(fullText) || PHONE_FALLBACK;
+  if (!spokeAny) {
+    try {
+      const audioBase64 = await speakPhoneSentence(nyxText);
+      yield { type: "nyx_partial", text: nyxText };
+      yield { type: "audio", text: nyxText, audioBase64 };
+    } catch (error) {
+      if (error instanceof ElevenLabsQuotaError) {
+        await endPhoneCall(input.playerId, call.id, "QUOTA");
+        yield { type: "error", error: "Stemtegoed is op — gesprek beëindigd.", creditEmpty: true };
+        return;
+      }
+      yield {
+        type: "error",
+        error: error instanceof Error ? error.message : "Stem kon niet worden gemaakt.",
+      };
+      return;
+    }
+  }
+
+  await appendPhoneTurn({
+    callId: call.id,
+    playerId: input.playerId,
+    role: "NYX",
+    content: nyxText,
+  });
+
+  yield { type: "done", nyxText, creditLevel: credits.level };
 }
 
 function parsePhoneRecap(raw: string | null | undefined): {

@@ -2,14 +2,35 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, PhoneOff, Volume2 } from "lucide-react";
-import { playPhoneBase64Mp3, stopPhoneAudio } from "@/features/nyx/phoneAudio";
-import { playRandomWelcome, startListeningCue, startListeningCueLoop } from "@/features/nyx/phoneSounds";
+import {
+  createPhoneAudioQueue,
+  getPhoneAudioContext,
+  playPhoneBase64Mp3,
+  resumePhoneAudio,
+  stopPhoneAudio,
+  unlockPhoneAudio,
+} from "@/features/nyx/phoneAudio";
+import {
+  armLongSpeechListeningCue,
+  playRandomWelcome,
+  startListeningCue,
+} from "@/features/nyx/phoneSounds";
 import { startEnergyVad, type VadController } from "@/features/nyx/phoneVad";
+
+type PhoneStreamEvent =
+  | { type: "user"; text: string }
+  | { type: "nyx_partial"; text: string }
+  | { type: "audio"; text: string; audioBase64: string }
+  | { type: "done"; nyxText: string; creditLevel?: string }
+  | { type: "error"; error: string; creditEmpty?: boolean };
 
 type CallPhase = "dialing" | "ringing" | "connected" | "missed" | "ended";
 type TalkMode = "idle" | "user_speaking" | "processing" | "nyx_speaking";
 
 type Caption = { role: "me" | "nyx"; text: string };
+
+/** Only play listening cues when Hardwig talks this long (ms). Short lines stay quiet. */
+const LONG_SPEECH_CUE_MS = 3000;
 
 function playRingBurst(ctx: AudioContext, when: number) {
   const osc = ctx.createOscillator();
@@ -27,14 +48,16 @@ function playRingBurst(ctx: AudioContext, when: number) {
 }
 
 async function playRings(times = 3): Promise<void> {
-  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  const ctx = new Ctx();
+  // Reuse the context unlocked by the phone-button tap (do not create a fresh one).
+  const ctx = getPhoneAudioContext();
+  if (ctx.state === "suspended") {
+    await ctx.resume().catch(() => undefined);
+  }
   const start = ctx.currentTime + 0.05;
   for (let i = 0; i < times; i += 1) {
     playRingBurst(ctx, start + i * 1.6);
   }
   await new Promise((resolve) => window.setTimeout(resolve, times * 1600 + 200));
-  await ctx.close().catch(() => undefined);
 }
 
 function formatElapsed(seconds: number) {
@@ -67,7 +90,8 @@ export function NyxPhoneCall({
   const talkModeRef = useRef<TalkMode>("idle");
   const phaseRef = useRef<CallPhase>("dialing");
   const vadRef = useRef<VadController | null>(null);
-  const listenLoopStopRef = useRef<(() => void) | null>(null);
+  const longSpeechCueStopRef = useRef<(() => void) | null>(null);
+  const utteranceStartedAtRef = useRef<number | null>(null);
   const submittingRef = useRef(false);
 
   function setMode(next: TalkMode) {
@@ -100,19 +124,15 @@ export function NyxPhoneCall({
     return () => window.clearInterval(tick);
   }, [phase]);
 
-  function stopListeningLoop() {
-    listenLoopStopRef.current?.();
-    listenLoopStopRef.current = null;
-    stopPhoneAudio();
-  }
-
-  function startListeningLoop() {
-    stopListeningLoop();
-    listenLoopStopRef.current = startListeningCueLoop(4800);
+  function cancelLongSpeechCue() {
+    longSpeechCueStopRef.current?.();
+    longSpeechCueStopRef.current = null;
   }
 
   function teardownLiveMic() {
-    stopListeningLoop();
+    cancelLongSpeechCue();
+    utteranceStartedAtRef.current = null;
+    stopPhoneAudio();
     vadRef.current?.stop();
     vadRef.current = null;
     try {
@@ -140,9 +160,10 @@ export function NyxPhoneCall({
         return;
       }
       mediaRef.current = stream;
+      // Mic permission UI can suspend the unlocked context on iPhone.
+      await resumePhoneAudio();
       setMode("idle");
       setStatusLine("nyx luistert…");
-      startListeningLoop();
 
       vadRef.current = startEnergyVad({
         stream,
@@ -170,8 +191,10 @@ export function NyxPhoneCall({
   function beginUtteranceCapture() {
     const stream = mediaRef.current;
     if (!stream || recorderRef.current) return;
-    stopListeningLoop();
+    cancelLongSpeechCue();
+    stopPhoneAudio();
     chunksRef.current = [];
+    utteranceStartedAtRef.current = Date.now();
     const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
       ? "audio/webm;codecs=opus"
       : "audio/webm";
@@ -184,9 +207,12 @@ export function NyxPhoneCall({
       recorder.start(250);
       setMode("user_speaking");
       setStatusLine("jij spreekt…");
+      // Soft "mm" only once he keeps talking past the short-line threshold.
+      longSpeechCueStopRef.current = armLongSpeechListeningCue(LONG_SPEECH_CUE_MS);
     } catch {
       toast("Opname kon niet starten.");
-      startListeningLoop();
+      utteranceStartedAtRef.current = null;
+      cancelLongSpeechCue();
     }
   }
 
@@ -194,9 +220,16 @@ export function NyxPhoneCall({
     const recorder = recorderRef.current;
     if (!recorder || submittingRef.current) return;
     submittingRef.current = true;
+    const spokeMs = utteranceStartedAtRef.current
+      ? Date.now() - utteranceStartedAtRef.current
+      : 0;
+    const wasLong = spokeMs >= LONG_SPEECH_CUE_MS;
+    cancelLongSpeechCue();
+    utteranceStartedAtRef.current = null;
     setMode("processing");
     setStatusLine("nyx luistert…");
-    startListeningCue();
+    // Waiting cue only after a longer turn — short "ja / oké" stays silent.
+    if (wasLong) startListeningCue();
 
     const blob: Blob = await new Promise((resolve) => {
       recorder.onstop = () => {
@@ -215,71 +248,136 @@ export function NyxPhoneCall({
       submittingRef.current = false;
       setMode("idle");
       setStatusLine("nyx luistert…");
-      startListeningLoop();
       return;
     }
 
-    // One soft cue while waiting — not a loop (loop was drowning / racing Nyx TTS).
-    startListeningCue();
+    const queue = createPhoneAudioQueue();
+    let heardAudio = false;
+    let userCaption: string | null = null;
+    let nyxCaption: string | null = null;
+    let failed = false;
 
     try {
       const body = new FormData();
       body.set("callId", callId);
       body.set("audio", blob, "turn.webm");
       const response = await fetch("/api/nyx/phone/turn", { method: "POST", body });
-      const data = (await response.json()) as {
-        ok: boolean;
-        userText?: string;
-        nyxText?: string;
-        audioBase64?: string;
-        error?: string;
-        creditEmpty?: boolean;
-      };
-
-      if (!response.ok || !data.ok || !data.audioBase64) {
-        if (data.creditEmpty) {
-          setCallPhase("missed");
-          setStatusLine("geen gehoor");
-          toast(data.error ?? "Stemtegoed is op.");
-          callIdRef.current = null;
-          teardownLiveMic();
-          return;
-        }
-        toast(data.error ?? "Beurt mislukt.");
+      if (!response.ok || !response.body) {
+        toast("Beurt mislukt.");
         setMode("idle");
         setStatusLine("nyx luistert…");
-        startListeningLoop();
         return;
       }
 
-      stopListeningLoop();
-      setCaptions((prev) => [
-        ...prev.slice(-4),
-        ...(data.userText ? [{ role: "me" as const, text: data.userText }] : []),
-        ...(data.nyxText ? [{ role: "nyx" as const, text: data.nyxText }] : []),
-      ]);
-      setMode("nyx_speaking");
-      setStatusLine("nyx spreekt…");
-      try {
-        await playPhoneBase64Mp3(data.audioBase64);
-      } catch {
-        toast("Nyx’ stem kon niet afspelen — check geluid / browser-autoplay.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pending = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        pending += decoder.decode(value, { stream: true });
+        const lines = pending.split("\n");
+        pending = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          let event: PhoneStreamEvent;
+          try {
+            event = JSON.parse(trimmed) as PhoneStreamEvent;
+          } catch {
+            continue;
+          }
+
+          if (event.type === "error") {
+            failed = true;
+            if (event.creditEmpty) {
+              setCallPhase("missed");
+              setStatusLine("geen gehoor");
+              toast(event.error || "Stemtegoed is op.");
+              callIdRef.current = null;
+              queue.stop();
+              teardownLiveMic();
+              return;
+            }
+            toast(event.error || "Beurt mislukt.");
+            break;
+          }
+
+          if (event.type === "user") {
+            userCaption = event.text;
+            setCaptions((prev) => [...prev.slice(-3), { role: "me", text: event.text }]);
+            continue;
+          }
+
+          if (event.type === "nyx_partial") {
+            nyxCaption = event.text;
+            setCaptions((prev) => {
+              const head = prev.filter((c) => c.role === "me").slice(-1);
+              return [...head, { role: "nyx", text: event.text }];
+            });
+            continue;
+          }
+
+          if (event.type === "audio") {
+            if (closedRef.current) {
+              queue.stop();
+              break;
+            }
+            if (!heardAudio) {
+              heardAudio = true;
+              stopPhoneAudio();
+              void resumePhoneAudio();
+              setMode("nyx_speaking");
+              setStatusLine("nyx spreekt…");
+            }
+            queue.enqueue(event.audioBase64);
+            continue;
+          }
+
+          if (event.type === "done") {
+            nyxCaption = event.nyxText || nyxCaption;
+            if (nyxCaption) {
+              setCaptions((prev) => {
+                const head = userCaption
+                  ? [{ role: "me" as const, text: userCaption }]
+                  : prev.filter((c) => c.role === "me").slice(-1);
+                return [...head, { role: "nyx", text: nyxCaption! }];
+              });
+            }
+          }
+        }
+        if (failed) break;
       }
+
+      try {
+        await queue.drain();
+      } catch {
+        toast("Nyx’ stem speelde niet — tik opnieuw op bel en zet de belstand / mute uit.");
+      }
+
       if (closedRef.current || phaseRef.current !== "connected") return;
+      if (failed || !heardAudio) {
+        setMode("idle");
+        setStatusLine("nyx luistert…");
+        return;
+      }
       setMode("idle");
       setStatusLine("nyx luistert…");
-      startListeningLoop();
     } catch {
+      queue.stop();
       toast("Verbinding verbroken.");
       setMode("idle");
       setStatusLine("nyx luistert…");
-      startListeningLoop();
     } finally {
       submittingRef.current = false;
     }
   }
 
   async function startCall() {
+    // Re-assert unlock if Sheet tap already ran; harmless if gesture is gone.
+    unlockPhoneAudio();
     setCallPhase("dialing");
     setStatusLine("bellen…");
     try {
