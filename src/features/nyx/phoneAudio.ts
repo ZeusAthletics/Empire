@@ -120,7 +120,9 @@ async function playViaWebAudio(bytes: Uint8Array): Promise<void> {
   }
   stopCurrentSource();
 
-  const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  // Copy into a real ArrayBuffer — TS rejects ArrayBufferLike / SharedArrayBuffer here.
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
   const audioBuffer = await ctx.decodeAudioData(copy);
 
   await new Promise<void>((resolve, reject) => {
