@@ -34,6 +34,13 @@ function stopCurrentSource() {
   }
 }
 
+/** Concrete ArrayBuffer copy — avoids TS ArrayBufferLike / SharedArrayBuffer build errors. */
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return copy;
+}
+
 function ensureHtmlFallback() {
   if (htmlFallback) return htmlFallback;
   const audio = new Audio();
@@ -120,10 +127,7 @@ async function playViaWebAudio(bytes: Uint8Array): Promise<void> {
   }
   stopCurrentSource();
 
-  // Copy into a real ArrayBuffer — TS rejects ArrayBufferLike / SharedArrayBuffer here.
-  const copy = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(copy).set(bytes);
-  const audioBuffer = await ctx.decodeAudioData(copy);
+  const audioBuffer = await ctx.decodeAudioData(toArrayBuffer(bytes));
 
   await new Promise<void>((resolve, reject) => {
     const source = ctx.createBufferSource();
@@ -149,7 +153,7 @@ async function playViaHtmlElement(bytes: Uint8Array): Promise<void> {
     URL.revokeObjectURL(currentObjectUrl);
     currentObjectUrl = null;
   }
-  const blob = new Blob([bytes], { type: "audio/mpeg" });
+  const blob = new Blob([toArrayBuffer(bytes)], { type: "audio/mpeg" });
   const objectUrl = URL.createObjectURL(blob);
   currentObjectUrl = objectUrl;
 
