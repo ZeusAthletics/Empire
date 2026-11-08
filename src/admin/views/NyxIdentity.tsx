@@ -72,6 +72,29 @@ export function NyxIdentityView({
     setPending(false);
   }
 
+  async function promoteGalleryStill(id: string) {
+    if (!window.confirm("Deze foto als VARIANT_OK in de identity vault zetten?")) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/nyx-identity/promote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId: id }),
+      });
+      const payload = (await response.json()) as { ok: boolean; error?: string };
+      if (!response.ok || !payload.ok) {
+        setError(payload.error ?? "Promoveren mislukt.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Geen verbinding.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function removeGalleryItem(id: string) {
     if (!window.confirm("Verwijderen uit galerij en Nyx-chat? Dit kan niet ongedaan.")) return;
     setPending(true);
@@ -202,6 +225,24 @@ export function NyxIdentityView({
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
+        <div className="eyebrow">Identity checklist (OpenAI edit lock)</div>
+        <ol className="muted" style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: 12.5, lineHeight: 1.55 }}>
+          <li>
+            Upload één sterke close-up als <b>FACE</b> (verplicht).
+          </li>
+          <li>
+            Voeg reference sheet / 3/4 / full body toe als <b>BODY</b> en outfit als <b>SIGNATURE_OUTFIT</b>.
+          </li>
+          <li>
+            Vul hieronder de <b>canon face prompt</b> in (concreet: ogen, kaak, haar, ketting).
+          </li>
+          <li>
+            Houd productie op <b>GPT Image 1</b> · force test · goede outputs → <b>Promote VARIANT_OK</b> in galerij.
+          </li>
+        </ol>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
         <div className="eyebrow">Canon face prompt (tekst)</div>
         <p className="muted" style={{ margin: "8px 0 10px", fontSize: 12.5 }}>
           Plak hier je gedetailleerde gezichtsbeschrijving (leeftijd, ogen, neus, kaak, huid, haar, sieraden). Wordt
@@ -258,7 +299,8 @@ export function NyxIdentityView({
         <div className="drop">
           <div className="eyebrow">Upload</div>
           <p className="muted" style={{ margin: "8px 0 12px" }}>
-            6–12 stills: face close-up, 3/4, full body, gold latex + zwart leer.
+            Reference sheet: crop ook een tight FACE + upload het volledige sheet als BODY of VARIANT_OK. Chat/outreach
+            sturen tot 4 refs (FACE + BODY + outfit + variant) naar OpenAI — niet alleen face.
           </p>
           <button
             className="btn gold sm"
@@ -314,8 +356,8 @@ export function NyxIdentityView({
       <div className="card" style={{ marginTop: 14 }}>
         <div className="eyebrow">Test outreach</div>
         <p className="muted" style={{ margin: "8px 0 12px", fontSize: 12.5 }}>
-          Eén poging ({imageEditModel}, face-ref alleen, vision gate) — houd het scherm open 30–90s. Bij 504: kies GPT
-          Image 1 of Vercel Pro voor langere timeouts. Telt niet mee als echte outreach.
+          Snelle check: FACE-ref alleen (productie gebruikt multi-ref + vision gate, tot 3 pogingen). Houd 30–90s open.
+          Bij 504: GPT Image 1 of Vercel Pro.
         </p>
         <button
           className="btn sm"
@@ -378,7 +420,17 @@ export function NyxIdentityView({
             </div>
             <div className="ab">
               <div className="td-sub mono">{relTime(item.createdAt)}</div>
-              <div style={{ marginTop: 10 }}>
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {!item.isVideo ? (
+                  <button
+                    className="btn gold sm"
+                    type="button"
+                    disabled={pending}
+                    onClick={() => void promoteGalleryStill(item.id)}
+                  >
+                    Promote VARIANT_OK
+                  </button>
+                ) : null}
                 <button
                   className="btn sm"
                   type="button"

@@ -65,6 +65,35 @@ export async function listNyxGallery(playerId: string): Promise<NyxGalleryItem[]
   });
 }
 
+export async function downloadNyxGalleryAssetBytes(
+  playerId: string,
+  mediaId: string,
+): Promise<{ bytes: ArrayBuffer; contentType: string; filename: string }> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("media_assets")
+    .select("storage_path, kind, player_id")
+    .eq("id", mediaId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Galerij-item niet gevonden.");
+  if (data.player_id !== playerId) throw new Error("Geen toegang tot dit item.");
+  if (data.kind !== "NYX_GALLERY") throw new Error("Alleen Nyx-galerij-items.");
+  const path = String(data.storage_path ?? "");
+  if (!path || path === "pending") throw new Error("Geen opslag voor dit item.");
+
+  const { data: blob, error: dlError } = await admin.storage.from(MEDIA_BUCKET).download(path);
+  if (dlError || !blob) throw dlError ?? new Error("Download mislukt.");
+  const lower = path.toLowerCase();
+  const contentType = lower.endsWith(".png")
+    ? "image/png"
+    : lower.endsWith(".webp")
+      ? "image/webp"
+      : "image/jpeg";
+  const filename = path.split("/").pop() ?? "nyx-still.jpg";
+  return { bytes: await blob.arrayBuffer(), contentType, filename };
+}
+
 export async function deleteNyxGalleryItem(playerId: string, mediaId: string): Promise<void> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin

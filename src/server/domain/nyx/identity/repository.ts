@@ -160,16 +160,17 @@ export async function deleteIdentityRef(id: string): Promise<void> {
   if (delError) throw delError;
 }
 
-export async function pickRefsForGeneration(limit = 3): Promise<NyxIdentityRef[]> {
+/** Up to 4 refs for images.edit — FACE first, then body/outfit/approved variants. */
+export async function pickRefsForGeneration(limit = 4): Promise<NyxIdentityRef[]> {
   const all = await listIdentityRefs();
   if (!all.length) return [];
-  const order: NyxIdentityRefRole[] = ["FACE", "SIGNATURE_OUTFIT", "BODY", "VARIANT_OK"];
+  const order: NyxIdentityRefRole[] = ["FACE", "BODY", "SIGNATURE_OUTFIT", "VARIANT_OK"];
   const picked: NyxIdentityRef[] = [];
   for (const role of order) {
     const match = all.find((ref) => ref.role === role);
     if (match) picked.push(match);
     if (picked.length >= limit) break;
   }
-  if (!picked.length) return all.slice(0, limit);
+  if (!picked.some((ref) => ref.role === "FACE")) return [];
   return picked;
 }

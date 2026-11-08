@@ -6,7 +6,7 @@ import {
   downloadIdentityRefBytes,
   getCanonicalFacePrompt,
   getNyxImageEditModel,
-  listIdentityRefs,
+  pickRefsForGeneration,
   type NyxIdentityRef,
 } from "@/server/domain/nyx/identity/repository";
 
@@ -45,12 +45,13 @@ export type GenerateNyxStillOptions = {
 };
 
 async function refsForEdit(options?: GenerateNyxStillOptions): Promise<NyxIdentityRef[]> {
-  const all = await listIdentityRefs();
-  const face = all.find((ref) => ref.role === "FACE");
-  if (!face) return [];
-  if (options?.faceRefOnly) return [face];
-  const rest = all.filter((ref) => ref.id !== face.id).slice(0, 3);
-  return [face, ...rest];
+  const all = await pickRefsForGeneration(4);
+  if (!all.length) return [];
+  if (options?.faceRefOnly) {
+    const face = all.find((ref) => ref.role === "FACE");
+    return face ? [face] : [];
+  }
+  return all;
 }
 
 export type GenerateNyxStillResult = {
@@ -78,7 +79,7 @@ export async function generateNyxStill(
   }
 
   const [facePrompt, model] = await Promise.all([getCanonicalFacePrompt(), getNyxImageEditModel()]);
-  const prompt = buildNyxEditPrompt(scene, facePrompt || undefined);
+  const prompt = buildNyxEditPrompt(scene, facePrompt || undefined, refs.map((ref) => ref.role));
   const client = getOpenAIClient();
 
   const imageFiles = await Promise.all(

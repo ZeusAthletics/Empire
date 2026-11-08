@@ -138,8 +138,7 @@ async function deliverGenerateFallback(input: {
     wantVideo: input.wantVideo,
     runId: input.runId,
     conversationId: input.conversationId,
-    maxAttempts: 1,
-    faceRefOnly: true,
+    maxAttempts: 3,
   });
   if (!delivered.ok || delivered.action === "SILENCE" || delivered.action === "TEXT") return null;
   return {
@@ -226,8 +225,7 @@ ${input.recentChat.join("\n")}`;
       intimacyTier,
       runId,
       conversationId: input.conversationId,
-      maxGenerateAttempts: 1,
-      faceRefOnly: true,
+      maxGenerateAttempts: 3,
     });
 
     if (delivered.ok && (delivered.action === "PHOTO" || delivered.action === "VIDEO")) {

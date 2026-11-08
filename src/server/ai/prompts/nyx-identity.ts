@@ -13,10 +13,24 @@ You MAY change only: facial expression and emotion, subtle head tilt, body pose,
     "different person, new face, face morph, doppelganger, blonde, red hair, cartoon, illustration, watermark",
 };
 
-export function buildNyxEditPrompt(scene: string, canonicalFacePrompt?: string): string {
+import type { NyxIdentityRefRole } from "@/server/domain/nyx/identity/repository";
+
+function multiRefGuide(roles: NyxIdentityRefRole[]): string | null {
+  if (roles.length <= 1) return null;
+  const support = roles.slice(1).join(", ");
+  return `Reference image order: Image 1 = canonical FACE (identity anchor — match this face exactly). Images 2–${roles.length} = the SAME woman (${support}) — use for body proportions, outfit, sheet angles, and likeness; do not invent a new person.`;
+}
+
+export function buildNyxEditPrompt(
+  scene: string,
+  canonicalFacePrompt?: string,
+  refRoles?: NyxIdentityRefRole[],
+): string {
   const faceCanon = canonicalFacePrompt?.trim();
+  const roles = refRoles?.length ? refRoles : (["FACE"] as NyxIdentityRefRole[]);
   return [
     NYX_IDENTITY.editPromptPrefix,
+    multiRefGuide(roles),
     faceCanon
       ? `Canonical face description (must match reference image exactly — do not invent different features):\n${faceCanon}`
       : null,
